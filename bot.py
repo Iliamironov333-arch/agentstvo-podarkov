@@ -618,7 +618,9 @@ def validate_init_data(init_data: str) -> dict[str, Any]:
 
     upsert_user(user_id, user.get("username"), user.get("first_name"))
     return {"user_id": user_id, "user": user}
-  @api.get("/health")
+
+
+@api.get("/health")
 async def health():
     return {
         "ok": True,
