@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Агентство подарков</title>
+<style>
+:root{--bg:#fff4e5;--paper:#fffaf3;--ink:#4c2415;--red:#a43c1d;--orange:#ef7137;--line:#efd6bf;--muted:#8d6b56}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#f5c58c,#fff5e9 650px);color:var(--ink);font-family:"Trebuchet MS",Arial,sans-serif}
+button,input{font:inherit}button{cursor:pointer}
+.wrap{max-width:1100px;margin:auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{background:linear-gradient(135deg,#ffc76e,#913619);border-radius:17px;padding:12px;font-size:29px}
+h1{font-size:clamp(21px,4vw,32px);margin:0;font-weight:800}
+.subtitle{color:var(--muted);font-size:12px;margin-top:5px}
+.balance{background:#fff9ef;border:1px solid var(--line);border-radius:16px;padding:10px;color:var(--ink)}
+.hero{border-radius:25px;padding:clamp(24px,5vw,48px);min-height:255px;display:flex;align-items:center;color:white;background:linear-gradient(90deg,#32170ef2,#552511ce 48%,#55251116),url("osennij-maket.png") center/cover;box-shadow:0 12px 30px #71371920}
+.hero-copy{max-width:470px}
+.eyebrow{font-size:11px;letter-spacing:2px;font-weight:bold;color:#ffd39a}
+.hero h2{font-size:clamp(30px,5vw,46px);line-height:1.08;margin:12px 0;font-weight:800}
+.hero p{line-height:1.5}
+.primary{background:linear-gradient(120deg,var(--orange),var(--red));color:white;border:0;border-radius:14px;padding:13px 18px;font-weight:bold}
+.heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:27px 2px 14px}
+.heading h2,.page h2{font-size:25px;margin:0;font-weight:800}
+.search{width:100%;padding:13px;border:1px solid var(--line);border-radius:14px;background:#fffdf8;color:var(--ink);margin-bottom:15px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.product{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 5px 15px #71371910;transition:.2s}
+.product:hover{transform:translateY(-3px)}
+.art{height:145px;display:grid;place-items:center;font-size:65px;background:linear-gradient(145deg,#f7ddbb,#fff3e2,#e9bd91);position:relative}
+.fav{position:absolute;right:8px;top:8px;border:0;border-radius:50%;width:34px;height:34px;background:#fff8ef;color:#a43c1d;font-size:21px}
+.info{padding:11px;display:flex;flex-direction:column;gap:8px;flex:1}
+.info h3{font-size:14px;margin:0;line-height:1.35}
+.price{font-size:14px;font-weight:bold;color:var(--red)}
+.buy{margin-top:auto;background:#913719;color:white;border:0;border-radius:11px;padding:10px 5px;font-weight:bold}
+.promos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:23px 0}
+.promo{padding:19px;border-radius:22px;background:linear-gradient(120deg,#51210f,#a44220);color:#fff7ed;min-height:160px}
+.promo.discount{background:linear-gradient(135deg,#ffe2b9,#f3bb79);color:#622b15}
+.promo h3{font-size:21px;margin:8px 0;font-weight:800}
+.promo p{font-size:13px;line-height:1.45}
+.page{display:none}.page.active{display:block}
+.page h2{margin:12px 0 20px}
+.empty{background:var(--paper);border:1px dashed #d9b59a;border-radius:18px;padding:28px;text-align:center;color:var(--muted)}
+.cartrow{display:flex;align-items:center;gap:10px;padding:12px;margin:9px 0;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.cartrow .details{flex:1}
+.cartrow button{border:1px solid var(--line);background:#fff4e5;border-radius:9px;padding:7px 12px;color:var(--ink)}
+.bottom{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:10;width:min(640px,calc(100% - 16px));display:flex;gap:3px;padding:7px;background:#fff8eaf2;backdrop-filter:blur(12px);border:1px solid white;border-radius:20px;box-shadow:0 8px 28px #52210f30}
+.bottom button{flex:1;background:transparent;border:0;border-radius:13px;padding:8px 2px;color:var(--ink);font-size:11px}
+.bottom button.active{background:#f5ddc2;font-weight:bold}
+.bottom span{display:block;font-size:20px;margin-bottom:3px}
+.footer{text-align:center;color:var(--muted);font-size:12px;padding:24px 8px 95px}
+.leaf{position:fixed;top:-35px;z-index:5;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translate(var(--drift),110vh) rotate(700deg);opacity:.1}}
+.toast{position:fixed;z-index:30;bottom:85px;left:50%;transform:translateX(-50%);background:#482012;color:white;padding:12px 17px;border-radius:13px;max-width:90%;text-align:center}
+@media(max-width:800px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.wrap{padding:11px}.hero{min-height:250px;padding:22px;background-position:60%}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.art{height:120px;font-size:55px}.info{padding:9px}.info h3{font-size:13px}.promos{gap:8px}.promo{padding:13px;min-height:175px}.promo h3{font-size:18px}.bottom button{font-size:10px}.bottom span{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+ <div class="brand"><div class="logo">🎁</div><div><h1>Агентство подарков</h1><div class="subtitle">Искусство, которое дарит эмоции</div></div></div>
+ <button class="balance" onclick="topUp()">⭐ <b id="balance">0</b> <small>баллов　＋</small></button>
+</header>
+
+<section id="catalogPage" class="page active">
+ <div class="hero"><div class="hero-copy">
+  <div class="eyebrow">ОСЕННЯЯ КОЛЛЕКЦИЯ</div>
+  <h2>Уникальные подарки с душой</h2>
+  <p>Поделки, которые создают особое настроение и дарят эмоции.</p>
+  <button class="primary" onclick="document.getElementById('catalogTitle').scrollIntoView({behavior:'smooth'})">Перейти в каталог →</button>
+ </div></div>
+ <div class="heading" id="catalogTitle"><h2>🍁 Каталог подарков</h2><span id="count"></span></div>
+ <input class="search" id="search" placeholder="⌕ Найти поделку…" aria-label="Поиск товаров">
+ <div class="grid" id="products"></div>
+ <div class="promos">
+  <div class="promo"><div style="font-size:28px">🎁 🍂</div><h3>Кейсы с сюрпризами</h3><p>Открой кейс и найди необычный подарок!</p><button class="primary" onclick="show('cases')">Открыть кейсы →</button></div>
+  <div class="promo discount"><div style="font-size:28px">✨ 🧡</div><h3>Скидка −10%</h3><p>Осенняя акция на все подарки! Условия скидки подтвердим при подключении оформления заказов.</p><button class="primary" onclick="toast('Акция −10%: расчёт подключим к оформлению заказов')">Подробнее →</button></div>
+ </div>
+</section>
+
+<section id="favoritesPage" class="page"><h2>♡ Избранное</h2><div class="grid" id="favorites"></div></section>
+<section id="cartPage" class="page"><h2>🛒 Корзина</h2><div id="cart"></div><h3 id="total"></h3><button class="primary" onclick="checkout()">Перейти к заказу →</button></section>
+<section id="casesPage" class="page"><h2>🎁 Кейсы с сюрпризами</h2><div class="promo"><div style="font-size:42px">🎁 🍁 ✨</div><h3>Осенний кейс</h3><p>Открытие стоит 100 баллов. Сначала подключим реальный баланс и выдачу призов, чтобы результаты сохранялись и не терялись.</p><button class="primary" onclick="openCase()">Открыть кейс за 100 баллов</button><p id="caseResult"></p></div></section>
+<section id="profilePage" class="page"><h2>Профиль</h2><div class="empty">После подключения Telegram здесь появятся твои заказы, баланс и история покупок.</div></section>
+<div class="footer">Агентство подарков · Сделано с теплом 🍂</div>
+</div>
+
+<nav class="bottom">
+ <button class="active" data-page="catalog"><span>⌂</span>Главная</button>
+ <button data-page="catalog" onclick="document.getElementById('catalogTitle').scrollIntoView({behavior:'smooth'})"><span>▦</span>Каталог</button>
+ <button data-page="cases"><span>♧</span>Кейсы</button>
+ <button data-page="favorites"><span>♡</span>Избранное</button>
+ <button data-page="cart"><span>🛒</span>Корзина <b id="cartCount"></b></button>
+</nav>
+
+<script>
+const data=[
+["Зима в горах",200,"🏔️"],["Тёплая зима",90,"⛄"],["Новогодний ананас",260,"🍍"],["Тыква",50,"🎃"],
+["Мышь на лыжах",150,"🐭"],["Белая башня",200,"🏰"],["Довольная собака",400,"🐶"],["Пляжная картина",70,"🏖️"],
+["Татошка",400,"🧸"],["Летнее здание",400,"🏡"],["Сомы в пруду",400,"🐟"],["Доисторическое искусство",680,"🦕"],
+["Попугай",250,"🦜"],["Александр Сергеевич Пушкин",400,"📜"],["Здание в перспективе",500,"🏛️"],["Тропический дракон",600,"🐉"],
+["Картина в перспективе",560,"🖼️"],["Кит",200,"🐋"],["Арбузный дом",200,"🍉"],["Ротонда",280,"🏛️"],
+["Ночной маяк",210,"🗼"],["Арбузный лес",170,"🌳"],["Гусь в поле",220,"🪿"],["Ночной цветок",180,"🌺"],
+["Редкая птица",230,"🦚"],["Сахарница с чайником",250,"🫖"],["Петушок",300,"🐓"],["Голубь",180,"🕊️"],
+["Жаворонок",200,"🐦"],["Ворона индеец",190,"🐦‍⬛"],["Город у моря",210,"🌆"],["Ёлочное украшение",90,"🔔"],
+["Довольный морж",260,"🦭"],["Фермерский дом",140,"🏠"],["Новогодняя снежинка",90,"❄️"],["Новогодний фонарь",240,"🏮"],
+["Дом на холмах",220,"⛰️"],["Морской отдых",150,"🌊"],["Мальчик в деревне",230,"🧑‍🌾"],["Торговый центр рыба",190,"🐠"],
+["Большой новогодний шар",150,"🔮"],["Таинственный лес",200,"🌲"],["Сырная планета",200,"🧀"]
+].map((x,id)=>({id,name:x[0],price:x[1],emoji:x[2]}));
+
+let fav=new Set(),cart=new Map(),balance=0;
+const $=id=>document.getElementById(id);
+function toast(t){let e=document.createElement('div');e.className='toast';e.textContent=t;document.body.append(e);setTimeout(()=>e.remove(),2600)}
+function card(p){return `<article class="product"><div class="art">${p.emoji}<button class="fav" onclick="toggleFav(${p.id})">${fav.has(p.id)?'♥':'♡'}</button></div><div class="info"><h3>${p.name}</h3><div class="price">${p.price} XTR</div><button class="buy" onclick="add(${p.id})">✦　В корзину</button></div></article>`}
+function render(){let q=$('search').value.toLowerCase();let a=data.filter(p=>p.name.toLowerCase().includes(q));$('products').innerHTML=a.map(card).join('');$('count').textContent=a.length+' товаров';renderFav()}
+function renderFav(){let a=data.filter(p=>fav.has(p.id));$('favorites').innerHTML=a.length?a.map(card).join(''):'<div class="empty" style="grid-column:1/-1">Здесь появятся любимые подарки ♡</div>'}
+function toggleFav(id){fav.has(id)?fav.delete(id):fav.add(id);render()}
+function add(id){cart.set(id,(cart.get(id)||0)+1);renderCart();toast('Добавлено: '+data[id].name+' 🍁')}
+function renderCart(){let rows=[...cart.entries()];$('cartCount').textContent=rows.reduce((s,x)=>s+x[1],0)||'';$('cart').innerHTML=rows.length?rows.map(([id,n])=>`<div class="cartrow"><span style="font-size:29px">${data[id].emoji}</span><div class="details"><b>${data[id].name}</b><div>${n} × ${data[id].price} XTR</div></div><button onclick="change(${id},-1)">−</button><button onclick="change(${id},1)">+</button></div>`).join(''):'<div class="empty">Корзина пока пуста 🎁</div>';$('total').textContent=rows.length?'Итого: '+rows.reduce((s,[id,n])=>s+data[id].price*n,0)+' XTR':''}
+function change(id,n){let v=(cart.get(id)||0)+n;if(v<=0)cart.delete(id);else cart.set(id,v);renderCart()}
+function show(name){document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));$(name+'Page').classList.add('active');document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===name));if(name==='favorites')renderFav();if(name==='cart')renderCart();scrollTo({top:0,behavior:'smooth'})}
+document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
+function topUp(){toast('Для настоящего пополнения подключим сервер и Telegram Stars. Баланс не изменён.')}
+function checkout(){toast('Заказы и оплата ещё не подключены — сначала настроим сервер Telegram.')}
+function openCase(){ $('caseResult').textContent='Кейсы пока ждут подключения реального баланса и системы выдачи призов.'; }
+$('search').addEventListener('input',render);
+function leaf(){let e=document.createElement('div');e.className='leaf';e.textContent=['🍂','🍁','🍃'][Math.floor(Math.random()*3)];e.style.left=Math.random()*100+'vw';e.style.fontSize=(15+Math.random()*17)+'px';e.style.setProperty('--drift',(Math.random()*180-90)+'px');e.style.animationDuration=(7+Math.random()*7)+'s';document.body.append(e);setTimeout(()=>e.remove(),15000)}
+render();renderCart();setInterval(leaf,900);
+</script>
+</body>
+</html>
