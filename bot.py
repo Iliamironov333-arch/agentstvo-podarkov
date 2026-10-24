@@ -332,7 +332,7 @@ async def pick(callback: CallbackQuery):
         reply_markup=inline_webapp_button()
     )
     await callback.answer()
-  @router.message(F.text == "💬 Поддержка")
+@router.message(F.text == "💬 Поддержка")
 async def support(message: Message):
     await message.answer(
         f"💬 Поддержка Агентства подарков\n\n"
