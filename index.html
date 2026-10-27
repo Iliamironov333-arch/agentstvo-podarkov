@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fff8ed">
+<meta name="description" content="Авторские подарки, поделки и рисунки от Агентства подарков">
+<title>Агентство подарков</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#17130f;--panel:#241d16;--panel2:#30261c;--gold:#f3bd57;--gold2:#ffe3a0;--text:#fff7e8;--muted:#c4b49b;--line:#4b3a27;--green:#6dd6a3;--red:#ff8b7b}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#3a2818 0,#17130f 52%);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:0 0 90px}
+header{padding:22px 17px 16px;position:sticky;top:0;background:#17130ff2;backdrop-filter:blur(14px);z-index:4;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:48px;height:48px;border-radius:16px;background:linear-gradient(145deg,#ffe6a4,#d78c2e);display:grid;place-items:center;font-size:27px;box-shadow:0 6px 20px #0005}
+.brand h1{font-size:19px;margin:0}
+.brand p{font-size:12px;color:var(--muted);margin:3px 0 0}
+.balancebar{margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(100deg,#392a18,#251c14);border:1px solid #6a4b27;border-radius:15px;padding:12px 14px}
+.balancebar b{color:var(--gold2)}
+.pill{background:#5a3d1c;color:var(--gold2);padding:6px 9px;border-radius:99px;font-size:12px;white-space:nowrap}
+nav{display:none;gap:8px;overflow:auto;padding:14px 15px 4px;scrollbar-width:none}
+nav button{white-space:nowrap;background:#2a2118;border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:9px 13px;font-size:13px}
+nav button.active{background:var(--gold);color:#21170c;border-color:var(--gold);font-weight:700}
+main{padding:12px 15px}
+.hero{background:linear-gradient(125deg,#493019,#2b2117 70%);border:1px solid #75512c;border-radius:20px;padding:18px;margin:4px 0 18px;position:relative;overflow:hidden}
+.hero:after{content:"🎁";position:absolute;right:10px;bottom:-10px;font-size:74px;opacity:.17}
+.hero small{color:var(--gold2);letter-spacing:.08em;text-transform:uppercase}
+.hero h2{font-size:22px;line-height:1.18;margin:8px 0}
+.hero p{font-size:13px;color:#e1d1b7;max-width:76%;line-height:1.45;margin:0}
+.sectionhead{display:flex;align-items:end;justify-content:space-between;margin:20px 1px 12px}
+.sectionhead h2{font-size:18px;margin:0}
+.sectionhead span{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.product{background:linear-gradient(155deg,#30251b,#211a14);border:1px solid var(--line);border-radius:17px;overflow:hidden;min-width:0}
+.art{height:112px;display:grid;place-items:center;background:radial-gradient(circle,#594027,#2c2117 72%);font-size:53px;position:relative}
+.fav{position:absolute;right:8px;top:8px;background:#17130fba;border:1px solid #80633f;border-radius:50%;width:31px;height:31px;color:white;font-size:17px}
+.productbody{padding:11px}
+.product h3{font-size:13px;line-height:1.35;margin:0 0 8px;min-height:35px}
+.price{font-weight:800;color:var(--gold2);font-size:15px}
+.price small{font-size:10px;color:var(--muted);font-weight:500}
+.add{width:100%;border:0;border-radius:10px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#27190b;font-weight:800;padding:10px;margin-top:10px}
+.add.added{background:#315640;color:#c7ffe0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:15px;margin:12px 0}
+.panel h3{margin:0 0 8px;font-size:16px}
+.muted{color:var(--muted);font-size:13px;line-height:1.45}
+.lineitem{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.lineitem:last-child{border:0}
+.primary{width:100%;padding:13px;border:0;border-radius:12px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#25180b;font-weight:800;font-size:14px;margin-top:10px}
+.secondary{padding:10px 12px;background:#34271a;color:var(--gold2);border:1px solid #6b4a25;border-radius:10px}
+.bottom{position:fixed;bottom:0;left:0;right:0;background:#17130ff5;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:9px 5px calc(9px + env(safe-area-inset-bottom));z-index:5;backdrop-filter:blur(12px)}
+.bottom button{border:0;background:none;color:var(--muted);font-size:11px;padding:5px 0}
+.bottom button strong{display:block;font-size:20px;margin-bottom:3px}
+.bottom button.active{color:var(--gold2)}
+.menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.menu-card{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:14px;text-align:left;color:var(--text);min-height:88px}
+.menu-card:first-child{grid-column:1/-1;background:linear-gradient(120deg,#493019,#2b2117);min-height:72px}
+.menu-card strong{display:block;font-size:14px;margin-bottom:5px}
+.menu-card span{font-size:12px;color:var(--muted);line-height:1.4}
+.leaf-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:8;opacity:.5}
+.leaf{position:absolute;top:-40px;font-size:20px;animation:leafFall linear infinite;filter:drop-shadow(0 2px 3px #0004)}
+.leaf:nth-child(1){left:8%;animation-duration:17s}
+.leaf:nth-child(2){left:27%;animation-duration:22s;animation-delay:-8s;font-size:15px}
+.leaf:nth-child(3){left:48%;animation-duration:19s;animation-delay:-4s}
+.leaf:nth-child(4){left:70%;animation-duration:24s;animation-delay:-12s;font-size:24px}
+.leaf:nth-child(5){left:91%;animation-duration:20s;animation-delay:-5s;font-size:16px}
+@keyframes leafFall{0%{transform:translateY(-5vh) rotate(0deg)}50%{transform:translate(35px,55vh) rotate(180deg)}100%{transform:translate(-20px,110vh) rotate(360deg)}}
+.toast{position:fixed;left:14px;right:14px;bottom:86px;background:#3a2b1d;border:1px solid #886031;padding:12px 14px;border-radius:13px;z-index:10;display:none;font-size:13px;box-shadow:0 8px 30px #0008}
+.hidden{display:none!important}
+.casebox{background:linear-gradient(140deg,#483018,#211911);border:1px solid #8a612e;border-radius:18px;padding:18px;text-align:center}
+.caseemoji{font-size:66px}
+.casebox h3{margin:6px 0}
+.casebox button{max-width:270px}
+.notice{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.45}
+@media(min-width:600px){main{max-width:780px;margin:auto}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}header{padding-left:max(17px,calc((100vw - 780px)/2));padding-right:max(17px,calc((100vw - 780px)/2))}.art{height:140px}}
+/* Светлая осенняя тема по умолчанию */
+body.light-theme{--bg:#fff8ed;--panel:#ffffff;--panel2:#fff0d9;--gold:#d88a20;--gold2:#8a4b08;--text:#382819;--muted:#8a7560;--line:#ead7bc;--green:#24764c;--red:#b43c2c;background:radial-gradient(ellipse at top,#fff0d6 0,#fffaf3 58%);color:var(--text)}
+body.light-theme header{background:#fffaf3ed;border-bottom-color:var(--line)}
+body.light-theme .logo{box-shadow:0 6px 20px #a66c241a}
+.headrow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.headtools{display:flex;align-items:center;gap:6px}
+.headchip,.theme-toggle{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);padding:8px 9px;font-size:12px;white-space:nowrap}
+.theme-toggle{font-size:16px;min-width:38px}
+.promo-line{margin-top:12px;font-size:11px;color:var(--muted);line-height:1.4}
+body.light-theme nav button{background:#fff;border-color:var(--line);color:var(--muted)}
+body.light-theme nav button.active{background:#f2b64f;color:#42280c;border-color:#e3a43a}
+body.light-theme .hero{background:linear-gradient(125deg,#ffedc9,#fffaf1 72%);border-color:#ebc987}
+body.light-theme .hero small{color:#9c5a13}
+body.light-theme .hero p{color:#79634d}
+body.light-theme .product{background:#fff;border-color:var(--line);box-shadow:0 3px 12px #6b45100b}
+body.light-theme .art{background:radial-gradient(circle,#fff0d6,#fffaf3 72%)}
+body.light-theme .fav{background:#ffffffdf;border-color:#e4c99f;color:#8a4b08}
+body.light-theme .panel{background:#fff;border-color:var(--line)}
+body.light-theme .secondary{background:#fff3df;color:#75420e;border-color:#e7c99a}
+body.light-theme .bottom{background:#fffaf3f5;border-color:var(--line)}
+body.light-theme .bottom button{color:#8a7560}
+body.light-theme .bottom button.active{color:#a85c0a}
+body.light-theme .menu-card{background:linear-gradient(145deg,#fff,#fff5e6);border-color:var(--line);color:var(--text)}
+body.light-theme .menu-card:first-child{background:linear-gradient(120deg,#ffedc9,#fff7e9)}
+body.light-theme .menu-card span{color:var(--muted)}
+body.light-theme .casebox{background:linear-gradient(140deg,#fff0d6,#fffaf3);border-color:#e6c185}
+body.light-theme .toast{background:#fff;border-color:#e0b66f;color:#382819;box-shadow:0 8px 30px #6040141f}
+body.light-theme .leaf-layer{opacity:.38}
+.menu-card.about-card{grid-column:1/-1}
+@media(max-width:420px){.brand{gap:8px}.logo{width:40px;height:40px;font-size:23px}.brand h1{font-size:16px}.brand p{font-size:10px}.headtools{gap:4px}.headchip{padding:7px 6px;font-size:11px}.theme-toggle{min-width:32px;padding:7px}}
+</style>
+</head>
+<body>
+<header>
+ <div class="headrow">
+  <div class="brand"><div class="logo">🎁</div><div><h1>Агентство подарков</h1><p>Авторские подарки • с теплом</p></div></div>
+  <div class="headtools">
+   <button class="headchip" onclick="showView('balanceView')">⭐ <b id="points">—</b></button>
+   <button class="headchip" onclick="showView('profileView')">👤 Профиль</button>
+   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Переключить тему">🌙</button>
+  </div>
+ </div>
+ <div class="promo-line">🍂 Осенняя скидка 10% — цены в каталоге уже указаны со скидкой</div>
+</header>
+<nav id="filters">
+ <button class="active" data-filter="all">Все подарки</button>
+ <button data-filter="winter">Зима и Новый год</button>
+ <button data-filter="art">Картины</button>
+ <button data-filter="animals">Животные</button>
+ <button data-filter="home">Дома и здания</button>
+</nav>
+<main>
+<section id="menuView">
+ <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p></div>
+ <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
+ <div class="menu-grid">
+  <button class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
+  <button class="menu-card" onclick="openBot('custom')"><strong>🎨 Создать своё</strong><span>Заказ по твоей идее — в боте</span></button>
+  <button class="menu-card" onclick="showView('vipView')"><strong>👑 VIP-подписка</strong><span>VIP-поддержка и ассистент</span></button>
+  <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
+  <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
+  <button class="menu-card" onclick="openBot('topup')"><strong>💳 Пополнить баланс</strong><span>Оплата через Telegram-бота</span></button>
+  <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
+  <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
+  <button class="menu-card" onclick="showView('favoritesView')"><strong>❤️ Избранное</strong><span>Сохранённые товары</span></button>
+  <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card" onclick="showView('casesView')"><strong>🎁 Сюрприз-кейс</strong><span>Игровые бонусы</span></button>
+ </div>
+</section>
+<section id="catalogView" class="hidden">
+ <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
+ <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
+ <div class="grid" id="products"></div>
+</section>
+<section id="cartView" class="hidden">
+ <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
+ <div class="panel" id="cartItems"></div>
+ <div class="panel">
+  <div class="lineitem"><span>Сумма</span><b id="subtotal">0 ₽</b></div>
+  <div class="lineitem"><span>Осенняя скидка 10%</span><b id="discount">Уже учтена</b></div>
+  <div class="lineitem"><span>К оплате</span><b id="total">0 ₽</b></div>
+  <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
+  <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
+ </div>
+</section>
+<section id="casesView" class="hidden">
+ <div class="sectionhead"><h2>🎁 Сюрприз-кейс</h2><span>игровой бонус</span></div>
+ <div class="casebox"><div class="caseemoji">🎁</div><h3>Открой за 100 баллов</h3><p class="muted">Баллы списываются и результат сохраняется на сервере. В демо-версии кейс выдаёт фиксированный бонус-купон, без случайных платных призов.</p><button class="primary" onclick="openCase()">Открыть кейс — 100 ⭐</button><p id="caseResult" class="notice"></p></div>
+ <div class="panel"><h3>Как это работает</h3><p class="muted">Баланс и история операций сохраняются в базе. Если Mini App не открыт через Telegram, сервер не примет запрос.</p></div>
+</section>
+<section id="ordersView" class="hidden">
+ <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
+ <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
+</section>
+<section id="profileView" class="hidden">
+ <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
+ <div class="panel"><h3 id="profileName">Пользователь Telegram</h3><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
+</section>
+<section id="vipView" class="hidden">
+ <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка открывает VIP-поддержку и VIP-ассистента по подбору подарков.</p></div>
+ <div class="panel"><h3>✨ VIP на месяц</h3><div class="price">40 баллов <small>или 40 Telegram Stars напрямую</small></div><p class="muted">Продление на выбор: вручную или автоматически после явного согласия. Если период закончился и средств не хватает, VIP приостанавливается.</p><button class="primary" onclick="openBot('vip_monthly')">Оформить месячный VIP в боте</button></div>
+ <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">400 баллов <small>или 400 Telegram Stars напрямую</small></div><p class="muted">Постоянный доступ к VIP-поддержке, VIP-ассистенту и будущим VIP-функциям. При переходе с месячного тарифа остаток месяца сгорает, возврата нет.</p><button class="primary" onclick="openBot('vip_lifetime')">Купить VIP навсегда в боте</button></div>
+ <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ VIP-ассистент общается и помогает подобрать подарок. Базовая ИИ-поддержка остаётся бесплатной.</p><p class="notice">Первый заказ с VIP-ассистентом — бесплатная проба. Детали пробного заказа и продления будут обработаны ботом после подключения.</p></div>
+</section>
+<section id="supportView" class="hidden">
+ <div class="sectionhead"><h2>💬 Поддержка</h2></div>
+ <div class="panel"><h3>🤖 Базовая ИИ-поддержка</h3><p class="muted">Ответы на основные вопросы доступны бесплатно.</p><button class="primary" onclick="openBot('support')">Задать вопрос в боте</button></div>
+ <div class="panel"><h3>👑 Полноценная VIP-поддержка</h3><p class="muted">ИИ старается глубже разобраться в проблеме. Если понадобится, передаст вопрос владельцу вместе с историей обращения.</p><button class="primary" onclick="openBot('vip_support')">Открыть поддержку в боте</button></div>
+</section>
+<section id="balanceView" class="hidden">
+ <div class="sectionhead"><h2>⭐ Мой баланс</h2></div>
+ <div class="panel"><div class="lineitem"><span>Внутренний баланс</span><b id="balancePoints">— баллов</b></div><p class="muted">1 Telegram Star = 1 балл. Баланс и история операций загружаются из бота после подключения серверного API.</p><button class="primary" onclick="openBot('topup')">Пополнить баланс в боте</button></div>
+</section>
+<section id="favoritesView" class="hidden">
+ <div class="sectionhead"><h2>❤️ Избранное</h2><span>сохранённые товары</span></div>
+ <div class="grid" id="favoriteProducts"></div>
+</section>
+<section id="dealsView" class="hidden">
+ <div class="hero"><small>Осенняя акция</small><h2>🍂 Скидка 10% на всё</h2><p>Выбирай авторские подарки из каталога. Скидка будет подтверждена при оформлении заказа в боте.</p><button class="primary" onclick="showView('catalogView')">Перейти в магазин</button></div>
+</section>
+<section id="aboutView" class="hidden">
+ <div class="sectionhead"><h2>ℹ️ О проекте</h2></div>
+ <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span>Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="openBot('about')">Подробнее и правила в боте</button><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+</section>
+</main>
+<div class="bottom">
+ <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
+ <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
+ <button data-view="favoritesView"><strong>❤️</strong>Избранное</button>
+ <button data-view="ordersView"><strong>📦</strong>Заказы</button>
+</div>
+<div class="toast" id="toast"></div>
+<div class="leaf-layer" aria-hidden="true"><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span></div>
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+
+const API_BASE = (new URLSearchParams(location.search).get('api') || (location.protocol.startsWith('http') ? location.origin : '')).replace(/\/+$/,'');
+const initData = tg?.initData || '';
+
+const products = [
+[0,"Зима в горах",200,"🏔️","winter"],
+[1,"Тёплая зима",90,"⛄","winter"],
+[2,"Новогодний ананас",260,"🍍","winter"],
+[3,"Тыква",50,"🎃","art"],
+[4,"Мышь на лыжах",150,"🐭","animals"],
+[5,"Белая башня",200,"🏰","home"],
+[6,"Довольная собака",400,"🐶","animals"],
+[7,"Пляжная картина",70,"🏖️","art"],
+[8,"Татошка",400,"🧸","animals"],
+[9,"Летнее здание",400,"🏡","home"],
+[10,"Сомы в пруду",400,"🐟","animals"],
+[11,"Доисторическое искусство",680,"🦕","art"],
+[12,"Попугай",250,"🦜","animals"],
+[13,"Александр Сергеевич Пушкин",400,"📜","art"],
+[14,"Здание в перспективе",500,"🏛️","home"],
+[15,"Тропический дракон",600,"🐉","animals"],
+[16,"Картина в перспективе",560,"🖼️","art"],
+[17,"Кит",200,"🐋","animals"],
+[18,"Арбузный дом",200,"🍉","home"],
+[19,"Ротонда",280,"🏛️","home"],
+[20,"Ночной маяк",210,"🗼","home"],
+[21,"Арбузный лес",170,"🌳","home"],
+[22,"Гусь в поле",220,"🪿","animals"],
+[23,"Ночной цветок",180,"🌺","art"],
+[24,"Редкая птица",230,"🦚","animals"],
+[25,"Сахарница с чайником",250,"🫖","art"],
+[26,"Петушок",300,"🐓","animals"],
+[27,"Голубь",180,"🕊️","animals"],
+[28,"Жаворонок",200,"🐦","animals"],
+[29,"Ворона индеец",190,"🐦‍⬛","animals"],
+[30,"Город у моря",210,"🌆","home"],
+[31,"Ёлочное украшение",90,"🔔","winter"],
+[32,"Довольный морж",260,"🦭","animals"],
+[33,"Фермерский дом",140,"🏠","home"],
+[34,"Новогодняя снежинка",90,"❄️","winter"],
+[35,"Новогодний фонарь",240,"🏮","winter"],
+[36,"Дом на холмах",220,"⛰️","home"],
+[37,"Морской отдых",150,"🌊","art"],
+[38,"Мальчик в деревне",230,"🧑‍🌾","art"],
+[39,"Торговый центр рыба",190,"🐠","animals"],
+[40,"Большой новогодний шар",150,"🔮","winter"],
+[41,"Таинственный лес",200,"🌲","winter"],
+[42,"Сырная планета",200,"🧀","art"]
+];
+
+let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
+let favorites = new Set(JSON.parse(localStorage.getItem('gift-favs') || '[]'));
+let activeFilter = 'all';
+
+const allViews = ['menuView','catalogView','cartView','casesView','ordersView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
+
+function showView(id) {
+ allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
+ document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
+ document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
+ if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
+ if (id === 'favoritesView') drawFavorites();
+}
+
+function openBot(action) {
+ const bot = 'https://t.me/Agentstvo_podarkov_bot';
+ const url = bot + '?start=' + encodeURIComponent('miniapp_' + action);
+ if (tg?.openTelegramLink) tg.openTelegramLink(url);
+ else window.open(url,'_blank');
+ toast('Открываем Telegram-бота для продолжения…');
+}
+
+function money(n) {
+ return n == null ? 'Цена уточняется' : `${Number(n).toLocaleString('ru-RU')} ₽`;
+}
+
+function toggleTheme() {
+ const dark = document.body.classList.toggle('dark-theme');
+ document.body.classList.toggle('light-theme',!dark);
+ localStorage.setItem('gift-theme',dark?'dark':'light');
+ document.getElementById('themeToggle').textContent = dark ? '☀️' : '🌙';
+ document.querySelector('meta[name="theme-color"]').content = dark ? '#17130f' : '#fff8ed';
+}
+
+(function initTheme() {
+ const dark = localStorage.getItem('gift-theme') === 'dark';
+ document.body.classList.toggle('dark-theme',dark);
+ document.body.classList.toggle('light-theme',!dark);
+ const b = document.getElementById('themeToggle');
+ if (b) b.textContent = dark ? '☀️' : '🌙';
+})();
+
+function toast(s) {
+ const t = document.getElementById('toast');
+ t.textContent = s;
+ t.style.display = 'block';
+ clearTimeout(window._toastTimer);
+ window._toastTimer = setTimeout(() => t.style.display = 'none',3300);
+}
+
+function persistCart() {
+ localStorage.setItem('gift-cart',JSON.stringify(cart));
+}
+
+function drawProducts() {
+ const root = document.getElementById('products');
+ root.innerHTML = '';
+ const shown = products.filter(p => activeFilter === 'all' || p[4] === activeFilter);
+ document.getElementById('count').textContent = `${shown.length} работ`;
+
+ shown.forEach(p => {
+  const qty = Number(cart[p[0]] || 0);
+  const fav = favorites.has(p[0]);
+  const el = document.createElement('article');
+  el.className = 'product';
+  el.innerHTML = `<div class="art"><span>${p[3]}</span><button class="fav" aria-label="Избранное">${fav?'♥':'♡'}</button></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+
+  el.querySelector('.fav').onclick = () => {
+   favorites.has(p[0]) ? favorites.delete(p[0]) : favorites.add(p[0]);
+   localStorage.setItem('gift-favs',JSON.stringify([...favorites]));
+   drawProducts();
+  };
+
+  el.querySelector('.add').onclick = () => {
+   if (qty) {
+    cart[p[0]] = Math.max(0,qty-1);
+    if (!cart[p[0]]) delete cart[p[0]];
+   } else {
+    cart[p[0]] = 1;
+   }
+   persistCart();
+   drawProducts();
+   drawCart();
+  };
+
+  root.appendChild(el);
+ });
+}
+
+function drawCart() {
+ const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
+ const root = document.getElementById('cartItems');
+
+ if (!entries.length) {
+  root.innerHTML = '<p class="muted">Корзина пока пустая. Выбери подарок в каталоге 🎁</p>';
+ } else {
+  root.innerHTML = entries.map(p => `<div class="lineitem"><span>${p[3]} ${p[1]} × ${cart[p[0]]}<br><button class="secondary" onclick="changeQty(${p[0]},-1)">−</button> <button class="secondary" onclick="changeQty(${p[0]},1)">＋</button></span><b>${money(p[2]*cart[p[0]])}</b></div>`).join('');
+ }
+
+ const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
+ const total = subtotal;
+
+ document.getElementById('subtotal').textContent = money(subtotal);
+ document.getElementById('discount').textContent = 'Уже учтена';
+ document.getElementById('total').textContent = money(total);
+ document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
+ document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
+ document.getElementById('checkoutBtn').disabled = !entries.length;
+}
+
+function changeQty(id,d) {
+ cart[id] = Math.max(0,Number(cart[id] || 0) + d);
+ if (!cart[id]) delete cart[id];
+ persistCart();
+ drawProducts();
+ drawCart();
+}
+
+async function apiFetch(path,options={}) {
+ if (!API_BASE) throw new Error('API пока не настроен. Нужен публичный HTTPS-адрес сервера в параметре ?api=...');
+ if (!initData) throw new Error('Открой каталог кнопкой внутри Telegram, чтобы проверить пользователя.');
+
+ const response = await fetch(API_BASE + path,{
+  ...options,
+  headers:{
+   'Content-Type':'application/json',
+   'X-Telegram-Init-Data':initData,
+   ...(options.headers || {})
+  }
+ });
+
+ const data = await response.json().catch(() => ({detail:'Сервер вернул некорректный ответ'}));
+ if (!response.ok) throw new Error(data.detail || `Ошибка сервера ${response.status}`);
+ return data;
+}
+
+async function checkout() {
+ const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
+ if (!entries.length) return toast('Корзина пустая.');
+ if (entries.some(p => p[2] == null)) return toast('У одной из работ ещё не указана цена.');
+
+ const btn = document.getElementById('checkoutBtn');
+ btn.disabled = true;
+ btn.textContent = 'Создаём счёт…';
+
+ try {
+  const data = await apiFetch('/api/orders',{
+   method:'POST',
+   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])}))})
+  });
+
+  if (!data.invoice_url) throw new Error('Сервер не вернул ссылку на счёт.');
+
+  if (tg?.openInvoice) {
+   tg.openInvoice(data.invoice_url,(status) => {
+    if (status === 'paid') {
+     cart = {};
+     persistCart();
+     drawProducts();
+     drawCart();
+     loadMe();
+     toast('Оплата подтверждена! Заказ оформлен 🎁');
+    } else if (status === 'pending') {
+     toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');
+     loadMe();
+    } else if (status === 'failed') {
+     toast('Оплата не прошла. Попробуй ещё раз.');
+    } else {
+     toast('Оплата отменена. Корзина сохранена.');
+    }
+   });
+  } else if (tg?.openTelegramLink) {
+   tg.openTelegramLink(data.invoice_url);
+  } else {
+   window.open(data.invoice_url,'_blank');
+  }
+ } catch(e) {
+  toast(e.message || 'Не удалось создать счёт.');
+ } finally {
+  btn.disabled = false;
+  btn.textContent = 'Оплатить через Telegram 🎁';
+ }
+}
+
+async function loadMe() {
+ try {
+  const me = await apiFetch('/api/me');
+  document.getElementById('points').textContent = me.points;
+
+  const bp = document.getElementById('balancePoints');
+  if (bp) bp.textContent = me.points + ' баллов';
+
+  const pn = document.getElementById('profileName');
+  if (pn) pn.textContent = me.first_name || 'Пользователь Telegram';
+
+  const pp = document.getElementById('profilePoints');
+  if (pp) pp.textContent = me.points + ' баллов';
+
+  const pc = document.getElementById('profileOrderCount');
+  if (pc) pc.textContent = me.orders.length;
+
+  const root = document.getElementById('ordersList');
+  if (root) {
+   root.innerHTML = me.orders.length ? me.orders.map(o => `<div class="lineitem"><span>${o.order_id}<br><small>${new Date(o.created_at*1000).toLocaleString('ru-RU')}</small></span><b>${o.currency === 'RUB' ? (o.amount+' ₽') : (o.amount+' XTR')}<br><small>${o.status === 'paid' ? 'Оплачен' : o.status === 'pending' ? 'Ожидает оплаты' : o.status}</small></b></div>`).join('') : '<p class="muted">Пока заказов нет.</p>';
+  }
+ } catch(e) {
+  if (initData) console.warn(e);
+ }
+}
+
+async function openCase() {
+ const result = document.getElementById('caseResult');
+ result.textContent = 'Проверяем баланс…';
+
+ try {
+  const data = await apiFetch('/api/case/open',{
+   method:'POST',
+   body:JSON.stringify({request_id:crypto.randomUUID()})
+  });
+  document.getElementById('points').textContent = data.points;
+  result.textContent = data.message + ' Баланс: ' + data.points + ' баллов.';
+  loadMe();
+ } catch(e) {
+  result.textContent = e.message;
+ }
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+ document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active',x === b));
+ activeFilter = b.dataset.filter;
+ showView('catalogView');
+ drawProducts();
+});
+
+document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
+
+function drawFavorites() {
+ const root = document.getElementById('favoriteProducts');
+ const list = products.filter(p => favorites.has(p[0]));
+ root.innerHTML = list.length ? list.map(p => `<article class="product"><div class="art">${p[3]}</div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])}</div><button class="add" onclick="addFavoriteToCart(${p[0]})">＋ В корзину</button></div></article>`).join('') : '<p class="muted">Пока нет избранных товаров. Нажми ♡ на карточке в каталоге.</p>';
+}
+
+function addFavoriteToCart(id) {
+ const p = products.find(x => x[0] === id);
+ if (!p || p[2] == null) return toast('Цена этой работы пока уточняется.');
+ cart[id] = Number(cart[id] || 0) + 1;
+ persistCart();
+ drawProducts();
+ drawCart();
+ toast('Добавлено в корзину 🎁');
+}
+
+drawProducts();
+drawCart();
+loadMe();
+showView('menuView');
+</script>
+</body>
+</html>
