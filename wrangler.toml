@@ -1,0 +1,8 @@
+name = "agentstvo-podarkov-api"
+main = "worker.js"
+compatibility_date = "2026-10-27"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agentstvo-podarkov"
+database_id = "077f0476-4ec0-4ddb-8236-be3575182b0a"
