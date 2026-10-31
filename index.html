@@ -410,7 +410,7 @@ function openInvoice(url, callback) {
 function formatDate(value) {
  if (!value) return 'Дата не указана';
  const raw = String(value);
- const date = /^\\d+$/.test(raw) ? new Date(Number(raw) * 1000) : new Date(raw.includes('T') ? raw : raw.replace(' ','T') + 'Z');
+ const date = /^\d+$/.test(raw) ? new Date(Number(raw) * 1000) : new Date(raw.includes('T') ? raw : raw.replace(' ','T') + 'Z');
  return Number.isNaN(date.getTime()) ? raw : date.toLocaleString('ru-RU');
 }
 
