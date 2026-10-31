@@ -101,6 +101,8 @@ body.light-theme .menu-card span{color:var(--muted)}
 body.light-theme .casebox{background:linear-gradient(140deg,#fff0d6,#fffaf3);border-color:#e6c185}
 body.light-theme .toast{background:#fff;border-color:#e0b66f;color:#382819;box-shadow:0 8px 30px #6040141f}
 body.light-theme .leaf-layer{opacity:.38}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.row-actions .secondary{flex:1 1 68px}
 .menu-card.about-card{grid-column:1/-1}
 @media(max-width:420px){.brand{gap:8px}.logo{width:40px;height:40px;font-size:23px}.brand h1{font-size:16px}.brand p{font-size:10px}.headtools{gap:4px}.headchip{padding:7px 6px;font-size:11px}.theme-toggle{min-width:32px;padding:7px}}
 </style>
@@ -115,7 +117,7 @@ body.light-theme .leaf-layer{opacity:.38}
    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Переключить тему">🌙</button>
   </div>
  </div>
- <div class="promo-line">🍂 Осенняя скидка 10% — цены в каталоге уже указаны со скидкой</div>
+ <div class="promo-line">🍂 Скидка 10% на всё — сервер применяет её при создании счёта</div>
 </header>
 <nav id="filters">
  <button class="active" data-filter="all">Все подарки</button>
@@ -134,7 +136,7 @@ body.light-theme .leaf-layer{opacity:.38}
   <button class="menu-card" onclick="showView('vipView')"><strong>👑 VIP-подписка</strong><span>VIP-поддержка и ассистент</span></button>
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
-  <button class="menu-card" onclick="openBot('topup')"><strong>💳 Пополнить баланс</strong><span>Оплата через Telegram-бота</span></button>
+  <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
   <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('favoritesView')"><strong>❤️ Избранное</strong><span>Сохранённые товары</span></button>
@@ -151,16 +153,16 @@ body.light-theme .leaf-layer{opacity:.38}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
-  <div class="lineitem"><span>Сумма</span><b id="subtotal">0 ₽</b></div>
-  <div class="lineitem"><span>Осенняя скидка 10%</span><b id="discount">Уже учтена</b></div>
-  <div class="lineitem"><span>К оплате</span><b id="total">0 ₽</b></div>
+  <div class="lineitem"><span>Сумма до скидки</span><b id="subtotal">0 ⭐</b></div>
+  <div class="lineitem"><span>Скидка 10%</span><b id="discount">—</b></div>
+  <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
   <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
  </div>
 </section>
 <section id="casesView" class="hidden">
  <div class="sectionhead"><h2>🎁 Сюрприз-кейс</h2><span>игровой бонус</span></div>
- <div class="casebox"><div class="caseemoji">🎁</div><h3>Открой за 100 баллов</h3><p class="muted">Баллы списываются и результат сохраняется на сервере. В демо-версии кейс выдаёт фиксированный бонус-купон, без случайных платных призов.</p><button class="primary" onclick="openCase()">Открыть кейс — 100 ⭐</button><p id="caseResult" class="notice"></p></div>
+ <div class="casebox"><div class="caseemoji">🎁</div><h3>Открой за 100 баллов</h3><p class="muted">Списание и результат обрабатываются сервером. Награда и операция записываются в историю баланса.</p><button class="primary" onclick="openCase()">Открыть кейс — 100 ⭐</button><p id="caseResult" class="notice"></p></div>
  <div class="panel"><h3>Как это работает</h3><p class="muted">Баланс и история операций сохраняются в базе. Если Mini App не открыт через Telegram, сервер не примет запрос.</p></div>
 </section>
 <section id="ordersView" class="hidden">
@@ -173,18 +175,18 @@ body.light-theme .leaf-layer{opacity:.38}
 </section>
 <section id="vipView" class="hidden">
  <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка открывает VIP-поддержку и VIP-ассистента по подбору подарков.</p></div>
- <div class="panel"><h3>✨ VIP на месяц</h3><div class="price">40 баллов <small>или 40 Telegram Stars напрямую</small></div><p class="muted">Продление на выбор: вручную или автоматически после явного согласия. Если период закончился и средств не хватает, VIP приостанавливается.</p><button class="primary" onclick="openBot('vip_monthly')">Оформить месячный VIP в боте</button></div>
- <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">400 баллов <small>или 400 Telegram Stars напрямую</small></div><p class="muted">Постоянный доступ к VIP-поддержке, VIP-ассистенту и будущим VIP-функциям. При переходе с месячного тарифа остаток месяца сгорает, возврата нет.</p><button class="primary" onclick="openBot('vip_lifetime')">Купить VIP навсегда в боте</button></div>
- <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ VIP-ассистент общается и помогает подобрать подарок. Базовая ИИ-поддержка остаётся бесплатной.</p><p class="notice">Первый заказ с VIP-ассистентом — бесплатная проба. Детали пробного заказа и продления будут обработаны ботом после подключения.</p></div>
+ <div class="panel"><h3>✨ VIP на месяц</h3><div class="price">500 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Доступ на 30 дней. Подписка активируется после подтверждения оплаты Telegram.</p><button class="primary" onclick="subscribeVip('subscription')">Оформить VIP на месяц</button></div>
+ <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">2 000 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Постоянный VIP-доступ. Статус фиксируется в серверной базе после подтверждения платежа.</p><button class="primary" onclick="subscribeVip('lifetime')">Купить VIP навсегда</button></div>
+ <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ VIP-ассистент общается и помогает подобрать подарок. Базовая ИИ-поддержка остаётся бесплатной.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>💬 Поддержка</h2></div>
- <div class="panel"><h3>🤖 Базовая ИИ-поддержка</h3><p class="muted">Ответы на основные вопросы доступны бесплатно.</p><button class="primary" onclick="openBot('support')">Задать вопрос в боте</button></div>
- <div class="panel"><h3>👑 Полноценная VIP-поддержка</h3><p class="muted">ИИ старается глубже разобраться в проблеме. Если понадобится, передаст вопрос владельцу вместе с историей обращения.</p><button class="primary" onclick="openBot('vip_support')">Открыть поддержку в боте</button></div>
+ <div class="panel"><h3>Написать владельцу</h3><p class="muted">Обращение сохранится в базе, а владелец получит уведомление в Telegram.</p><textarea id="supportMessage" rows="5" maxlength="2000" placeholder="Опиши вопрос по заказу, оплате или товару..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" onclick="sendSupport()">Отправить обращение</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
 </section>
 <section id="balanceView" class="hidden">
- <div class="sectionhead"><h2>⭐ Мой баланс</h2></div>
- <div class="panel"><div class="lineitem"><span>Внутренний баланс</span><b id="balancePoints">— баллов</b></div><p class="muted">1 Telegram Star = 1 балл. Баланс и история операций загружаются из бота после подключения серверного API.</p><button class="primary" onclick="openBot('topup')">Пополнить баланс в боте</button></div>
+ <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
+ <div class="panel"><div class="lineitem"><span>Баланс</span><b id="balancePoints">— ⭐</b></div><p class="muted">1 Telegram Star = 1 балл. Все операции фиксируются в базе Агентства.</p><div class="sectionhead"><h3>Пополнить</h3><span>выбери сумму</span></div><div class="row-actions"><button class="secondary" onclick="topUp(25)">25 ⭐</button><button class="secondary" onclick="topUp(50)">50 ⭐</button><button class="secondary" onclick="topUp(100)">100 ⭐</button><button class="secondary" onclick="topUp(250)">250 ⭐</button><button class="secondary" onclick="topUp(500)">500 ⭐</button></div></div>
+ <div class="panel"><h3>История операций</h3><div id="balanceHistory"><p class="muted">Загружаем операции…</p></div></div>
 </section>
 <section id="favoritesView" class="hidden">
  <div class="sectionhead"><h2>❤️ Избранное</h2><span>сохранённые товары</span></div>
@@ -211,7 +213,7 @@ const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
 
-const API_BASE = (new URLSearchParams(location.search).get('api') || (location.protocol.startsWith('http') ? location.origin : '')).replace(/\/+$/,'');
+const API_BASE = (new URLSearchParams(location.search).get('api') || 'https://agentstvo-podarkov.iliamironov333.workers.dev').replace(/\/+$/,'');
 const initData = tg?.initData || '';
 
 const products = [
@@ -271,7 +273,9 @@ function showView(id) {
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
- if (id === 'favoritesView') drawFavorites();
+ if (id === 'favoritesView') { loadFavorites(); drawFavorites(); }
+ if (id === 'balanceView') loadBalance();
+ if (id === 'vipView') loadVip();
 }
 
 function openBot(action) {
@@ -283,7 +287,7 @@ function openBot(action) {
 }
 
 function money(n) {
- return n == null ? 'Цена уточняется' : `${Number(n).toLocaleString('ru-RU')} ₽`;
+ return n == null ? 'Цена уточняется' : `${Number(n).toLocaleString('ru-RU')} ⭐`;
 }
 
 function toggleTheme() {
@@ -328,9 +332,7 @@ function drawProducts() {
   el.innerHTML = `<div class="art"><span>${p[3]}</span><button class="fav" aria-label="Избранное">${fav?'♥':'♡'}</button></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
 
   el.querySelector('.fav').onclick = () => {
-   favorites.has(p[0]) ? favorites.delete(p[0]) : favorites.add(p[0]);
-   localStorage.setItem('gift-favs',JSON.stringify([...favorites]));
-   drawProducts();
+   toggleFavorite(p[0]);
   };
 
   el.querySelector('.add').onclick = () => {
@@ -360,10 +362,11 @@ function drawCart() {
  }
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
- const total = subtotal;
+ const discountAmount = Math.floor(subtotal * 0.10);
+ const total = Math.max(0,subtotal - discountAmount);
 
  document.getElementById('subtotal').textContent = money(subtotal);
- document.getElementById('discount').textContent = 'Уже учтена';
+ document.getElementById('discount').textContent = '−' + money(discountAmount);
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
@@ -371,7 +374,9 @@ function drawCart() {
 }
 
 function changeQty(id,d) {
- cart[id] = Math.max(0,Number(cart[id] || 0) + d);
+ const next = Number(cart[id] || 0) + d;
+ if (next > 10) { toast('Максимум 10 штук одного товара.'); return; }
+ cart[id] = Math.max(0,next);
  if (!cart[id]) delete cart[id];
  persistCart();
  drawProducts();
@@ -392,12 +397,78 @@ async function apiFetch(path,options={}) {
  });
 
  const data = await response.json().catch(() => ({detail:'Сервер вернул некорректный ответ'}));
- if (!response.ok) throw new Error(data.detail || `Ошибка сервера ${response.status}`);
+ if (!response.ok) throw new Error(data.error || data.detail || data.message || `Ошибка сервера ${response.status}`);
  return data;
+}
+
+function openInvoice(url, callback) {
+ if (tg?.openInvoice) tg.openInvoice(url, callback || (() => {}));
+ else if (tg?.openTelegramLink) tg.openTelegramLink(url);
+ else window.open(url,'_blank','noopener');
+}
+
+function formatDate(value) {
+ if (!value) return 'Дата не указана';
+ const raw = String(value);
+ const date = /^\\d+$/.test(raw) ? new Date(Number(raw) * 1000) : new Date(raw.includes('T') ? raw : raw.replace(' ','T') + 'Z');
+ return Number.isNaN(date.getTime()) ? raw : date.toLocaleString('ru-RU');
+}
+
+async function loadFavorites() {
+ if (!initData) return;
+ try { const data = await apiFetch('/api/favorites'); favorites = new Set((data.favorites || []).map(x => Number(x.product_id))); localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); if (!document.getElementById('favoritesView').classList.contains('hidden')) drawFavorites(); }
+ catch(e) { console.warn('Не удалось загрузить избранное:',e); }
+}
+
+async function toggleFavorite(id) {
+ const wasSaved = favorites.has(id);
+ if (wasSaved) favorites.delete(id); else favorites.add(id);
+ localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); drawFavorites();
+ if (!initData) { toast('Сохранено на этом устройстве. Для синхронизации открой приложение в Telegram.'); return; }
+ try { await apiFetch('/api/favorites',{method:'POST',body:JSON.stringify({product_id:String(id),action:wasSaved?'remove':'add'})}); }
+ catch(e) { if (wasSaved) favorites.add(id); else favorites.delete(id); localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); drawFavorites(); toast('Не удалось сохранить избранное: '+e.message); }
+}
+
+async function loadBalance() {
+ if (!initData) return;
+ const root = document.getElementById('balanceHistory');
+ try { const data = await apiFetch('/api/balance'); const balance = Number(data.balance_stars || 0);
+  document.getElementById('balancePoints').textContent = balance.toLocaleString('ru-RU') + ' ⭐';
+  const profile = document.getElementById('profilePoints'); if (profile) profile.textContent = balance.toLocaleString('ru-RU') + ' баллов';
+  const rows = data.transactions || [];
+  root.innerHTML = rows.length ? rows.map(t => `<div class="lineitem"><span>${t.description || t.operation_type}<br><small>${formatDate(t.created_at)}</small></span><b>${Number(t.amount_stars)>0?'+':''}${Number(t.amount_stars)} ⭐</b></div>`).join('') : '<p class="muted">Операций пока нет.</p>';
+ } catch(e) { root.innerHTML = `<p class="muted">${e.message}</p>`; }
+}
+
+async function topUp(amount) {
+ try { const data = await apiFetch('/api/balance/topup',{method:'POST',body:JSON.stringify({amount_stars:amount})}); if (!data.invoice_url) throw new Error('Сервер не вернул счёт на оплату.');
+  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Пополнение подтверждено!'); loadBalance(); loadMe(); } else if(status==='pending') toast('Платёж обрабатывается. Баланс обновится после подтверждения.'); else if(status==='failed') toast('Не удалось провести оплату.'); });
+ } catch(e) { toast(e.message || 'Не удалось создать счёт.'); }
+}
+
+async function subscribeVip(planType) {
+ try { const data = await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})}); if (!data.invoice_url) throw new Error('Сервер не вернул счёт VIP.');
+  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Оплата VIP подтверждена!'); loadVip(); } else if(status==='pending') toast('Платёж VIP обрабатывается.'); else if(status==='failed') toast('Не удалось провести оплату VIP.'); });
+ } catch(e) { toast(e.message || 'Не удалось оформить VIP.'); }
+}
+
+async function loadVip() {
+ const el = document.getElementById('vipStatus'); if (!el || !initData) return;
+ try { const data = await apiFetch('/api/vip'); const vip = data.vip; el.textContent = vip && vip.status === 'active' ? `VIP активен: ${vip.plan_type === 'lifetime' ? 'навсегда' : 'подписка'}${vip.expires_at ? ' · до '+formatDate(vip.expires_at) : ''}.` : 'Активной VIP-подписки пока нет.'; }
+ catch(e) { el.textContent = 'Не удалось загрузить статус VIP: '+e.message; }
+}
+
+async function sendSupport() {
+ const input = document.getElementById('supportMessage'), result = document.getElementById('supportResult'); const message = input.value.trim();
+ if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
+ result.textContent = 'Отправляем…';
+ try { const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})}); result.textContent = data.reply || 'Обращение отправлено.'; input.value = ''; }
+ catch(e) { result.textContent = e.message || 'Не удалось отправить обращение.'; }
 }
 
 async function checkout() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
+ if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
  if (!entries.length) return toast('Корзина пустая.');
  if (entries.some(p => p[2] == null)) return toast('У одной из работ ещё не указана цена.');
 
@@ -413,29 +484,12 @@ async function checkout() {
 
   if (!data.invoice_url) throw new Error('Сервер не вернул ссылку на счёт.');
 
-  if (tg?.openInvoice) {
-   tg.openInvoice(data.invoice_url,(status) => {
-    if (status === 'paid') {
-     cart = {};
-     persistCart();
-     drawProducts();
-     drawCart();
-     loadMe();
-     toast('Оплата подтверждена! Заказ оформлен 🎁');
-    } else if (status === 'pending') {
-     toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');
-     loadMe();
-    } else if (status === 'failed') {
-     toast('Оплата не прошла. Попробуй ещё раз.');
-    } else {
-     toast('Оплата отменена. Корзина сохранена.');
-    }
-   });
-  } else if (tg?.openTelegramLink) {
-   tg.openTelegramLink(data.invoice_url);
-  } else {
-   window.open(data.invoice_url,'_blank');
-  }
+  openInvoice(data.invoice_url,status => {
+   if (status === 'paid') { cart = {}; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
+   else if (status === 'pending') { toast('Платёж ещё обрабатывается. Проверь «Мои заказы».'); loadMe(); }
+   else if (status === 'failed') toast('Оплата не прошла. Попробуй ещё раз.');
+   else toast('Оплата отменена. Корзина сохранена.');
+  });
  } catch(e) {
   toast(e.message || 'Не удалось создать счёт.');
  } finally {
@@ -445,31 +499,15 @@ async function checkout() {
 }
 
 async function loadMe() {
- try {
-  const me = await apiFetch('/api/me');
-  document.getElementById('points').textContent = me.points;
-
-  const bp = document.getElementById('balancePoints');
-  if (bp) bp.textContent = me.points + ' баллов';
-
-  const pn = document.getElementById('profileName');
-  if (pn) pn.textContent = me.first_name || 'Пользователь Telegram';
-
-  const pp = document.getElementById('profilePoints');
-  if (pp) pp.textContent = me.points + ' баллов';
-
-  const pc = document.getElementById('profileOrderCount');
-  if (pc) pc.textContent = me.orders.length;
-
-  const root = document.getElementById('ordersList');
-  if (root) {
-   root.innerHTML = me.orders.length ? me.orders.map(o => `<div class="lineitem"><span>${o.order_id}<br><small>${new Date(o.created_at*1000).toLocaleString('ru-RU')}</small></span><b>${o.currency === 'RUB' ? (o.amount+' ₽') : (o.amount+' XTR')}<br><small>${o.status === 'paid' ? 'Оплачен' : o.status === 'pending' ? 'Ожидает оплаты' : o.status}</small></b></div>`).join('') : '<p class="muted">Пока заказов нет.</p>';
-  }
- } catch(e) {
-  if (initData) console.warn(e);
- }
+ try { const me = await apiFetch('/api/me'); const points = Number(me.points ?? me.balance_stars ?? 0);
+  document.getElementById('points').textContent = points.toLocaleString('ru-RU');
+  const bp = document.getElementById('balancePoints'); if (bp) bp.textContent = points.toLocaleString('ru-RU') + ' ⭐';
+  const pn = document.getElementById('profileName'); if (pn) pn.textContent = me.first_name || (me.username ? '@'+me.username : 'Пользователь Telegram');
+  const pp = document.getElementById('profilePoints'); if (pp) pp.textContent = points.toLocaleString('ru-RU') + ' баллов';
+  const orders = Array.isArray(me.orders) ? me.orders : []; const pc = document.getElementById('profileOrderCount'); if (pc) pc.textContent = orders.length;
+  const root = document.getElementById('ordersList'); if (root) root.innerHTML = orders.length ? orders.map(o => `<div class="lineitem"><span>${o.order_id}<br><small>${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${o.status === 'paid' ? 'Оплачен' : o.status === 'pending' ? 'Ожидает оплаты' : o.status}</small></b></div>`).join('') : '<p class="muted">Пока заказов нет.</p>';
+ } catch(e) { if (initData) console.warn('Не удалось загрузить профиль:',e); }
 }
-
 async function openCase() {
  const result = document.getElementById('caseResult');
  result.textContent = 'Проверяем баланс…';
@@ -497,11 +535,13 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
 function drawFavorites() {
- const root = document.getElementById('favoriteProducts');
- const list = products.filter(p => favorites.has(p[0]));
- root.innerHTML = list.length ? list.map(p => `<article class="product"><div class="art">${p[3]}</div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])}</div><button class="add" onclick="addFavoriteToCart(${p[0]})">＋ В корзину</button></div></article>`).join('') : '<p class="muted">Пока нет избранных товаров. Нажми ♡ на карточке в каталоге.</p>';
+ const root = document.getElementById('favoriteProducts'); const list = products.filter(p => favorites.has(p[0])); root.innerHTML = '';
+ if (!list.length) { root.innerHTML = '<p class="muted">Пока нет избранных товаров. Нажми ♡ на карточке в каталоге.</p>'; return; }
+ list.forEach(p => { const el = document.createElement('article'); el.className = 'product';
+  el.innerHTML = `<div class="art">${p[3]}</div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])}</div><button class="add">＋ В корзину</button><button class="secondary remove-fav" style="width:100%;margin-top:7px">Убрать из избранного</button></div>`;
+  el.querySelector('.add').onclick = () => addFavoriteToCart(p[0]); el.querySelector('.remove-fav').onclick = () => toggleFavorite(p[0]); root.appendChild(el);
+ });
 }
-
 function addFavoriteToCart(id) {
  const p = products.find(x => x[0] === id);
  if (!p || p[2] == null) return toast('Цена этой работы пока уточняется.');
@@ -515,6 +555,7 @@ function addFavoriteToCart(id) {
 drawProducts();
 drawCart();
 loadMe();
+loadFavorites();
 showView('menuView');
 </script>
 </body>
