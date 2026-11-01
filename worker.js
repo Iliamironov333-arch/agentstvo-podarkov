@@ -607,12 +607,18 @@ export default {
             env.DB.prepare(`
               INSERT INTO balance_transactions
                 (telegram_id, amount_stars, operation_type, description, idempotency_key)
-              VALUES (?, ?, 'case_open', ?, ?)
+              SELECT ?, ?, 'case_open', ?, ?
+              WHERE EXISTS (
+                SELECT 1 FROM users
+                WHERE telegram_id = ? AND balance_stars >= ?
+              )
             `).bind(
               telegramId,
               -CASE_COST,
               `Открытие кейса; награда ${reward} баллов`,
-              idempotencyKey
+              idempotencyKey,
+              telegramId,
+              CASE_COST
             ),
             env.DB.prepare(`
               UPDATE users
