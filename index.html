@@ -652,6 +652,7 @@ async function openAdminOrder(orderId,orderType) {
    const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
    line.append(strong,span);box.append(line);
   };
+  const statusLabels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
   addLine('Покупатель',order.first_name||order.username||order.telegram_id);
   addLine('Telegram ID',order.telegram_id);
   addLine('Дата',order.created_at);
@@ -667,10 +668,66 @@ async function openAdminOrder(orderId,orderType) {
    items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
   }else{
    addLine('Тема',order.subject);
-   addLine('Статус',order.status);
+   addLine('Статус заявки',order.status);
    let answers=order.answers_json||'';
    try{answers=JSON.stringify(JSON.parse(answers),null,2);}catch(e){}
    addLine('Ответы и пожелания',answers);
+  }
+  const section=document.createElement('div');section.className='admin-order-actions';
+  const heading=document.createElement('h4');heading.textContent='Управление заказом';section.append(heading);
+  const statusLabel=document.createElement('label');statusLabel.textContent='Статус';
+  const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','Новый статус заказа');
+  const currentStatus=data.admin_status||'new';
+  const isUnpaid=orderType==='product'&&order.payment_status!=='paid';
+  if(isUnpaid){
+   const opt=document.createElement('option');opt.value='unpaid';opt.textContent='Не оплачен — ожидает оплаты';statusSelect.append(opt);
+   statusSelect.value='unpaid';statusSelect.disabled=true;
+  }else{
+   Object.entries(statusLabels).filter(([key])=>key!=='unpaid').forEach(([key,label])=>{
+    const opt=document.createElement('option');opt.value=key;opt.textContent=label;statusSelect.append(opt);
+   });
+   statusSelect.value=statusLabels[currentStatus]?currentStatus:'new';
+  }
+  statusLabel.append(statusSelect);section.append(statusLabel);
+  const commentLabel=document.createElement('label');commentLabel.textContent='Комментарий владельца';
+  const commentField=document.createElement('textarea');commentField.rows=3;commentField.maxLength=1000;commentField.placeholder='Напишите заметку по заказу (необязательно)';
+  commentLabel.append(commentField);section.append(commentLabel);
+  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Сохранить изменения';
+  save.disabled=!!data.migrations_pending;
+  save.addEventListener('click',async()=>{
+   const comment=commentField.value.trim();
+   const changed=!statusSelect.disabled&&statusSelect.value!==currentStatus;
+   if(!changed&&!comment){toast('Нет изменений для сохранения');return;}
+   if(changed&&statusSelect.value==='cancelled'&&!confirm('Отменить этот заказ? Это действие будет записано в журнал.'))return;
+   const payload={order_id:String(order.id),order_type:orderType,comment};
+   if(changed)payload.status=statusSelect.value;
+   save.disabled=true;save.textContent='Сохраняем…';
+   try{
+    await apiFetch('/api/admin/order-update',{method:'POST',body:JSON.stringify(payload)});
+    toast('Изменения сохранены');
+    await openAdminOrder(orderId,orderType);
+    await loadAdminOrders();
+   }catch(error){toast(error.message||'Не удалось сохранить изменения');save.disabled=false;save.textContent='Сохранить изменения';}
+  });
+  section.append(save);
+  if(data.migrations_pending){
+   const warning=document.createElement('p');warning.className='notice';warning.textContent='Для изменения статуса и комментариев требуется миграция 0006_admin_action_log.sql.';section.append(warning);
+  }
+  box.append(section);
+  const historyTitle=document.createElement('h4');historyTitle.textContent='История изменений';box.append(historyTitle);
+  const history=Array.isArray(data.history)?data.history:[];
+  if(!history.length){
+   const empty=document.createElement('p');empty.className='muted';empty.textContent='Записей пока нет.';box.append(empty);
+  }else{
+   history.forEach(event=>{
+    const row=document.createElement('div');row.className='admin-detail-line';
+    const detail=event.details||{};
+    const textNode=document.createElement('span');
+    if(event.action_type==='order_comment')textNode.textContent='💬 '+(detail.comment||'Комментарий');
+    else textNode.textContent='Статус: '+(statusLabels[detail.previous_status]||detail.previous_status||'—')+' → '+(statusLabels[detail.status]||detail.status||'—');
+    const date=document.createElement('small');date.textContent=' · '+formatDate(event.created_at);
+    row.append(textNode,date);box.append(row);
+   });
   }
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть подробности';
   close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
