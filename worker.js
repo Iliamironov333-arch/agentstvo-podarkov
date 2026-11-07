@@ -700,12 +700,13 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
-          const [profile, messages] = await Promise.all([
+          const [profile, messages, control] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,first_name,username,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
-            env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId).all()
+            env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId).all(),
+            env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first()
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, messages: (messages.results || []).reverse() }, 200, origin);
+          return json({ ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null, messages: (messages.results || []).reverse() }, 200, origin);
         }
         if (path === "/api/admin/support/tickets" && method === "GET") {
           const status = ["all","open","in_progress","closed"].includes(new URL(request.url).searchParams.get("status")) ? new URL(request.url).searchParams.get("status") : "all";
@@ -713,6 +714,39 @@ export default {
             "SELECT s.id,s.telegram_id,s.message,s.status,s.created_at,u.first_name,u.username FROM support_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='all' OR s.status=?) ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,s.id DESC LIMIT 100"
           ).bind(status,status).all();
           return json({ ok: true, tickets: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/support/conversation-mode" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const mode = body.mode === "human" ? "human" : body.mode === "ai" ? "ai" : "";
+          if (!targetId || !mode) return json({ error: "Укажите пользователя и режим диалога." }, 400, origin);
+          const exists = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!exists) return json({ error: "Пользователь не найден." }, 404, origin);
+          await env.DB.prepare("INSERT INTO support_conversation_controls (telegram_id,mode,updated_by) VALUES (?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET mode=excluded.mode,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
+            .bind(targetId,mode,telegramId).run();
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+              .bind(telegramId,targetId,"support_mode_changed",JSON.stringify({mode})).run();
+          }
+          return json({ ok: true, telegram_id: targetId, mode }, 200, origin);
+        }
+        if (path === "/api/admin/support/reply" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const message = typeof body.message === "string" ? body.message.trim().slice(0,4000) : "";
+          if (!targetId || !message) return json({ error: "Укажите пользователя и текст сообщения." }, 400, origin);
+          const control = await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first();
+          if (control?.mode !== "human") return json({ error: "Сначала включите режим владельца для этого диалога." }, 409, origin);
+          const user = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!user) return json({ error: "Пользователь не найден." }, 404, origin);
+          await telegram(env,"sendMessage",{chat_id:targetId,text:message});
+          await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'human')")
+            .bind(targetId,message).run();
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+              .bind(telegramId,targetId,"support_human_reply",JSON.stringify({length:message.length})).run();
+          }
+          return json({ ok: true, sent: true }, 200, origin);
         }
         if (path === "/api/admin/support/ticket-status" && method === "POST") {
           const body = await readJson(request);
@@ -901,7 +935,13 @@ export default {
         if (!env.OPENAI_API_KEY) return json({ error: "ИИ-помощник ещё не подключён. Владелец должен добавить OPENAI_API_KEY в Cloudflare." }, 503, origin);
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content) VALUES (?,'user',?)")
+        const conversationControl = await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'user',?,'buyer')")
+          .bind(telegramId, message).run();
+        if (conversationControl?.mode === "human") {
+          await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
+          return json({ ok: true, reply: "Сообщение передано владельцу. ИИ-помощник временно приостановлен.", vip: !!vip, saved: true, handoff: true }, 200, origin);
+        }
           .bind(telegramId, message).run();
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 12")
           .bind(telegramId).all();
@@ -913,7 +953,7 @@ export default {
           console.error("Support assistant failed:", String(error));
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
         }
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content) VALUES (?,'assistant',?)")
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'ai')")
           .bind(telegramId, reply).run();
         const ownerRequested = /(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message);
         if (ownerRequested) {
