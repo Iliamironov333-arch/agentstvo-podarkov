@@ -298,7 +298,7 @@ function showView(id) {
 }
 
 function openBot(action) {
- const bot = 'https://t.me/Agentstvo_podarkov_bot';
+ const bot = 'https://t.me/Agentstvo_podarkov_original_bot';
  const url = bot + '?start=' + encodeURIComponent('miniapp_' + action);
  if (tg?.openTelegramLink) tg.openTelegramLink(url);
  else window.open(url,'_blank');
