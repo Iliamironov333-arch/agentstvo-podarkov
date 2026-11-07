@@ -839,18 +839,29 @@ async function loadAdminSupportTickets() {
   rows.forEach(ticket=>{
    const row=document.createElement('div');row.className='admin-order-actions';
    const heading=document.createElement('h4');heading.textContent=(ticket.first_name||ticket.username||'Покупатель')+' · '+labels[ticket.status];
-   const meta=document.createElement('small');meta.textContent='ID '+ticket.telegram_id+' · '+ticket.created_at;
+   const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at;
    const message=document.createElement('p');message.textContent=ticket.message||'';
-   const select=document.createElement('select');
+   const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответить покупателю в Telegram';reply.setAttribute('aria-label','Ответ на обращение №'+ticket.id);
+   reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+   const actions=document.createElement('div');actions.className='row-actions';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в Telegram';
+   send.addEventListener('click',async()=>{
+    const text=reply.value.trim();if(!text){toast('Напишите ответ покупателю.');return;}
+    if(!confirm('Отправить этот ответ покупателю в Telegram?'))return;
+    send.disabled=true;send.textContent='Отправляем…';
+    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ отправлен. Обращение переведено в работу.');await loadAdminSupportTickets();}
+    catch(e){toast(e.message||'Не удалось отправить ответ.');}
+    finally{send.disabled=false;send.textContent='Ответить в Telegram';}
+   });
+   const select=document.createElement('select');select.setAttribute('aria-label','Статус обращения');
    Object.entries(labels).forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);});
    select.value=ticket.status;
    const save=document.createElement('button');save.type='button';save.className='secondary';save.textContent='Сохранить статус';
    save.addEventListener('click',async()=>{save.disabled=true;try{await apiFetch('/api/admin/support/ticket-status',{method:'POST',body:JSON.stringify({id:ticket.id,status:select.value})});toast('Статус обращения обновлён.');await loadAdminSupportTickets();}catch(e){toast(e.message||'Не удалось обновить обращение.');}finally{save.disabled=false;}});
-   row.append(heading,meta,message,select,save);root.append(row);
+   actions.append(send,save);row.append(heading,meta,message,reply,actions,select);root.append(row);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';}
 }
-
 
 
 async function openAdminCampaignReport(id){
