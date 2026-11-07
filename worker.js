@@ -1,9 +1,7 @@
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
-const CASE_COST = 100;
-const CASE_REWARDS = [0, 10, 25, 50, 100, 200];
 const VIP_PRICES = { subscription: 500, lifetime: 2000 };
-const TOPUP_AMOUNTS = [25, 50, 100, 250, 500, 750, 1000];
+const TOPUP_AMOUNTS = [50, 100, 250, 500, 750, 1000];
 const PRODUCT_META = [
   ["0","Зима в горах","🏔️","winter"],["1","Тёплая зима","⛄","winter"],
   ["2","Новогодний ананас","🍍","winter"],["3","Тыква","🎃","art"],
