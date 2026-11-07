@@ -111,6 +111,17 @@ body.light-theme .leaf-layer{opacity:.38}
 .admin-metric strong{display:block;color:var(--gold2);font-size:25px;margin-top:8px;overflow-wrap:anywhere}
 body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 @media(min-width:600px){.admin-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.admin-search{display:flex;gap:8px;align-items:center}
+.admin-search input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px;color:var(--text);font:inherit}
+.admin-user-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.admin-user-row:last-child{border-bottom:0}
+.admin-user-row strong,.admin-user-row small{display:block;overflow-wrap:anywhere}
+.admin-user-row small{color:var(--muted);font-size:11px;margin-top:4px}
+.admin-user-row button{flex-shrink:0}
+.admin-user-detail{margin-top:14px;padding:13px;background:var(--panel2);border:1px solid var(--line);border-radius:13px}
+.admin-detail-line{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;overflow-wrap:anywhere}
+.admin-detail-line:last-child{border:0}
+.admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -162,6 +173,13 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  </div>
  <p class="notice" id="adminUpdatedAt">Показатели загружаются из D1 через защищённый Worker.</p>
  <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
+ <div class="panel">
+  <h3>👥 Пользователи</h3>
+  <div class="admin-search"><input id="adminUserSearch" type="search" maxlength="64" placeholder="Telegram ID, имя или username"><button class="secondary" type="button" onclick="loadAdminUsers()">Найти</button></div>
+  <div id="adminUsersStatus" class="notice" aria-live="polite">Загрузка списка пользователей…</div>
+  <div id="adminUsersList"></div>
+  <div id="adminUserDetail" class="admin-user-detail hidden"></div>
+ </div>
  <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
@@ -317,7 +335,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') loadAdminDashboard();
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); }
 }
 
 function openBot(action) {
@@ -422,6 +440,54 @@ function changeQty(id,d) {
  persistCart();
  drawProducts();
  drawCart();
+}
+
+async function loadAdminUsers() {
+ const status=document.getElementById('adminUsersStatus'),root=document.getElementById('adminUsersList'),detail=document.getElementById('adminUserDetail');
+ if(!status||!root)return;
+ status.textContent='Загружаем пользователей…';root.replaceChildren();detail?.classList.add('hidden');
+ try{
+  const q=document.getElementById('adminUserSearch')?.value.trim()||'';
+  const data=await apiFetch('/api/admin/users?q='+encodeURIComponent(q));
+  const users=Array.isArray(data.users)?data.users:[];
+  status.textContent=users.length?'Найдено: '+users.length:'Пользователи не найдены.';
+  users.forEach(u=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=u.first_name||u.username||'Пользователь';
+   const meta=document.createElement('small');meta.textContent='ID: '+u.telegram_id+' · Баланс: '+Number(u.balance_stars||0).toLocaleString('ru-RU');
+   info.append(name,meta);
+   const btn=document.createElement('button');btn.className='secondary';btn.type='button';btn.textContent='Профиль';btn.addEventListener('click',()=>openAdminUser(u.telegram_id));
+   row.append(info,btn);root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить пользователей.';}
+}
+async function openAdminUser(telegramId) {
+ const box=document.getElementById('adminUserDetail');if(!box)return;
+ box.classList.remove('hidden');box.textContent='Загружаем профиль…';
+ try{
+  const data=await apiFetch('/api/admin/user?telegram_id='+encodeURIComponent(telegramId));
+  box.replaceChildren();
+  const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Профиль пользователя';
+  box.append(title);
+  const addLine=(label,value)=>{
+   const line=document.createElement('div');line.className='admin-detail-line';
+   const b=document.createElement('b');b.textContent=label+': ';
+   const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
+   line.append(b,span);box.append(line);
+  };
+  const u=data.user||{};
+  addLine('Имя',u.first_name);addLine('Username',u.username?'@'+u.username:'—');
+  addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
+  addLine('Баланс',Number(u.balance_stars||0)+' баллов');
+  const orders=Array.isArray(data.orders)?data.orders:[];
+  addLine('Заказов',orders.length);
+  orders.forEach(o=>addLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
+  const history=Array.isArray(data.balance_history)?data.balance_history:[];
+  addLine('Операций с балансом',history.length);
+  history.forEach(t=>addLine('Баланс · '+t.created_at,(Number(t.amount_stars)>0?'+':'')+t.amount_stars+' · '+(t.operation_type||'')+' · '+(t.description||'')));
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+ }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
 }
 
 async function loadAdminDashboard() {
