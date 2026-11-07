@@ -384,7 +384,10 @@ export default {
         // Never charge for a digital product until its original delivery file is configured.
         const missingDeliveryFiles = items.filter(item => {
           if (!item.image_url || !/^https:\/\//i.test(item.image_url)) return true;
-          try { return /(^|\\.)placehold\\.co$/i.test(new URL(item.image_url).hostname); }
+          try {
+            const host = new URL(item.image_url).hostname.toLowerCase();
+            return host === "placehold.co" || host.endsWith(".placehold.co");
+          }
           catch { return true; }
         });
         if (missingDeliveryFiles.length) {
