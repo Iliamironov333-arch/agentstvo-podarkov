@@ -381,6 +381,18 @@ export default {
           const product = catalog.find(p => String(p.id) === id);
           return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
+        // Never charge for a digital product until its original delivery file is configured.
+        const missingDeliveryFiles = items.filter(item => {
+          if (!item.image_url || !/^https:\/\//i.test(item.image_url)) return true;
+          try { return /(^|\\.)placehold\\.co$/i.test(new URL(item.image_url).hostname); }
+          catch { return true; }
+        });
+        if (missingDeliveryFiles.length) {
+          return json({
+            error: "Оформление пока недоступно: для выбранных работ ещё не загружены оригинальные цифровые файлы. Оплата не списана.",
+            missing_products: missingDeliveryFiles.map(item => item.title)
+          }, 409, origin);
+        }
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const discount = Math.floor(subtotal * DISCOUNT_PERCENT / 100);
