@@ -687,6 +687,47 @@ export default {
             updated_at: new Date().toISOString()
           }, 200, origin);
         }
+        if (path === "/api/admin/support/conversations" && method === "GET") {
+          const url = new URL(request.url);
+          const term = (url.searchParams.get("q") || "").trim().slice(0,64);
+          const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
+          const rows = await env.DB.prepare(
+            "SELECT s.telegram_id,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_role FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id ORDER BY last_message_at DESC LIMIT ?"
+          ).bind(term, "%" + term + "%", "%" + term.replace(/^@/, "") + "%", "%" + term + "%", limit).all();
+          return json({ ok: true, conversations: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/support/conversation" && method === "GET") {
+          const url = new URL(request.url);
+          const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
+          if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
+          const [profile, messages] = await Promise.all([
+            env.DB.prepare("SELECT telegram_id,first_name,username,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
+            env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId).all()
+          ]);
+          if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
+          return json({ ok: true, user: profile, messages: (messages.results || []).reverse() }, 200, origin);
+        }
+        if (path === "/api/admin/support/tickets" && method === "GET") {
+          const status = ["all","open","in_progress","closed"].includes(new URL(request.url).searchParams.get("status")) ? new URL(request.url).searchParams.get("status") : "all";
+          const rows = await env.DB.prepare(
+            "SELECT s.id,s.telegram_id,s.message,s.status,s.created_at,u.first_name,u.username FROM support_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='all' OR s.status=?) ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,s.id DESC LIMIT 100"
+          ).bind(status,status).all();
+          return json({ ok: true, tickets: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/support/ticket-status" && method === "POST") {
+          const body = await readJson(request);
+          const id = Number(body.id);
+          const status = ["open","in_progress","closed"].includes(body.status) ? body.status : "";
+          if (!Number.isSafeInteger(id) || id < 1 || !status) return json({ error: "Некорректный номер обращения или статус." }, 400, origin);
+          const ticket = await env.DB.prepare("SELECT id,telegram_id,status FROM support_messages WHERE id=?").bind(id).first();
+          if (!ticket) return json({ error: "Обращение не найдено." }, 404, origin);
+          await env.DB.prepare("UPDATE support_messages SET status=? WHERE id=?").bind(status,id).run();
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+              .bind(telegramId,String(ticket.telegram_id),"support_ticket_status_changed",JSON.stringify({ticket_id:id,from:ticket.status,to:status})).run();
+          }
+          return json({ ok: true, id, status }, 200, origin);
+        }
         return json({ error: "Admin route not found." }, 404, origin);
       }
 
