@@ -61,6 +61,30 @@ async function tableExists(env, tableName) {
   try { await env.DB.prepare("SELECT 1 FROM " + tableName + " LIMIT 1").first(); return true; }
   catch (error) { if (isMissingTableError(error, tableName)) return false; throw error; }
 }
+async function getAdminOrderMeta(env, orderType, order) {
+  const result = await optionalTableRows(
+    env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND action_type IN ('order_status_changed','order_comment') ORDER BY id DESC LIMIT 100")
+      .bind(String(order.telegram_id)),
+    "admin_action_log"
+  );
+  const history = [];
+  for (const row of result.results || []) {
+    let details = {};
+    try { details = JSON.parse(row.details || "{}"); } catch { continue; }
+    if (String(details.order_id) !== String(order.id) || details.order_type !== orderType) continue;
+    history.push({ actor_telegram_id: row.actor_telegram_id, action_type: row.action_type, details, created_at: row.created_at });
+  }
+  const latestStatus = history.find(item => item.action_type === "order_status_changed");
+  let fallbackStatus = "new";
+  if (orderType === "product") {
+    if (order.payment_status === "pending") fallbackStatus = "unpaid";
+    else if (order.payment_status === "cancelled" || order.fulfillment_status === "cancelled") fallbackStatus = "cancelled";
+    else if (order.fulfillment_status === "delivered") fallbackStatus = "ready";
+  } else if (["cancelled","canceled"].includes(order.status)) fallbackStatus = "cancelled";
+  else if (["ready","completed","done"].includes(order.status)) fallbackStatus = "ready";
+  else if (["in_progress","processing","work"].includes(order.status)) fallbackStatus = "in_progress";
+  return { admin_status: latestStatus?.details?.status || fallbackStatus, history, migrations_pending: !!result.migration_pending };
+}
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   let diff = 0;
@@ -483,6 +507,42 @@ export default {
           }
           return json({ ok: true, telegram_id: targetId }, 200, origin);
         }
+        if (path === "/api/admin/order-update" && method === "POST") {
+          if (!(await tableExists(env, "admin_action_log"))) return json({ error: "Требуется применить миграцию 0006_admin_action_log.sql перед управлением заказами." }, 503, origin);
+          const body = await readJson(request);
+          const orderId = typeof body.order_id === "string" ? body.order_id.trim().slice(0,100) : "";
+          const orderType = body.order_type;
+          const status = body.status;
+          const comment = typeof body.comment === "string" ? body.comment.trim().slice(0,1000) : "";
+          if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
+          if (!["new","in_progress","ready","cancelled"].includes(status)) return json({ error: "Выберите корректный статус заказа." }, 400, origin);
+          if (comment && comment.length < 3) return json({ error: "Комментарий должен содержать не менее 3 символов." }, 400, origin);
+          const order = orderType === "product"
+            ? await env.DB.prepare("SELECT id,telegram_id,payment_status,fulfillment_status FROM orders WHERE id=?").bind(orderId).first()
+            : await env.DB.prepare("SELECT id,telegram_id,status FROM custom_orders WHERE id=?").bind(orderId).first();
+          if (!order) return json({ error: "Заказ не найден." }, 404, origin);
+          if (orderType === "product" && status === "cancelled" && order.payment_status === "paid") {
+            return json({ error: "Оплаченный заказ нельзя отменить без подтверждённого возврата Telegram Stars. Сначала требуется отдельная процедура возврата." }, 409, origin);
+          }
+          if (orderType === "product" && order.payment_status !== "paid" && !["new","cancelled"].includes(status)) {
+            return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в работу или готовые." }, 409, origin);
+          }
+          const previous = await getAdminOrderMeta(env, orderType, order);
+          const details = JSON.stringify({ order_type: orderType, order_id: orderId, status, previous_status: previous.admin_status });
+          const statements = [];
+          if (orderType === "product" && status === "cancelled") {
+            statements.push(env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId));
+            statements.push(env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId));
+          } else if (orderType === "custom") {
+            statements.push(env.DB.prepare("UPDATE custom_orders SET status=? WHERE id=?").bind(status, orderId));
+          }
+          statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_status_changed', ?)").bind(telegramId, String(order.telegram_id), details));
+          if (comment) {
+            statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_comment', ?)").bind(telegramId, String(order.telegram_id), JSON.stringify({ order_type: orderType, order_id: orderId, comment }));
+          }
+          await env.DB.batch(statements);
+          return json({ ok: true, order_id: orderId, order_type: orderType, status, comment_saved: !!comment }, 200, origin);
+        }
         if (path === "/api/admin/order" && method === "GET") {
           const url = new URL(request.url);
           const orderId = (url.searchParams.get("order_id") || "").trim().slice(0,100);
@@ -495,11 +555,13 @@ export default {
               env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first()
             ]);
             if (!order) return json({ error: "Заказ не найден." }, 404, origin);
-            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null }, 200, origin);
+            const meta = await getAdminOrderMeta(env, orderType, order);
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
           }
           const order = await env.DB.prepare("SELECT * FROM custom_orders WHERE id=?").bind(orderId).first();
           if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
-          return json({ ok: true, order_type: orderType, order, items: [], payment: null }, 200, origin);
+          const meta = await getAdminOrderMeta(env, orderType, order);
+          return json({ ok: true, order_type: orderType, order, items: [], payment: null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
         }
         if (path === "/api/admin/orders" && method === "GET") {
           const url = new URL(request.url);
@@ -508,8 +570,11 @@ export default {
           const status = ["all","unpaid","new","in_progress","ready","cancelled"].includes(url.searchParams.get("status")) ? url.searchParams.get("status") : "all";
           const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
           const like = "%" + term + "%";
-          const productStatus = "CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END";
-          const customStatus = "CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END";
+          const hasOrderAudit = await tableExists(env, "admin_action_log");
+          const productOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=o.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=o.id AND json_extract(a.details,'$.order_type')='product' ORDER BY a.id DESC LIMIT 1)" : "NULL";
+          const customOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=c.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=c.id AND json_extract(a.details,'$.order_type')='custom' ORDER BY a.id DESC LIMIT 1)" : "NULL";
+          const productStatus = "COALESCE(" + productOverride + ",CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END)";
+          const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
               "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
