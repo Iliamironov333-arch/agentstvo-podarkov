@@ -1075,8 +1075,10 @@ async function openAdminOrder(orderId,orderType) {
    if(changed)payload.status=statusSelect.value;
    save.disabled=true;save.textContent='Сохраняем…';
    try{
-    await apiFetch('/api/admin/order-update',{method:'POST',body:JSON.stringify(payload)});
-    toast('Изменения сохранены');
+    const result=await apiFetch('/api/admin/order-update',{method:'POST',body:JSON.stringify(payload)});
+    toast(result.notification?.attempted&&!result.notification?.sent
+      ? 'Статус сохранён, но уведомление покупателю не доставлено'
+      : 'Изменения сохранены'+(result.notification?.sent?' · покупатель уведомлён':''));
     await openAdminOrder(orderId,orderType);
     await loadAdminOrders();
    }catch(error){toast(error.message||'Не удалось сохранить изменения');save.disabled=false;save.textContent='Сохранить изменения';}
