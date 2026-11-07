@@ -683,9 +683,20 @@ async function openAdminConversation(telegramId) {
   const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId));
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
+  const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
+  const controls=document.createElement('div');controls.className='row-actions';
+  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';
+  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
+  controls.append(modeButton);box.append(controls);
+  if(data.mode==='human'){
+   const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   box.append(reply,send);
+  }
   (data.messages||[]).forEach(message=>{
    const item=document.createElement('div');item.className='admin-detail-line';
-   const head=document.createElement('b');head.textContent=(message.role==='assistant'?'🤖 ИИ-помощник':'👤 Покупатель')+' · '+(message.created_at||'');
+   const head=document.createElement('b');head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':'🤖 ИИ-помощник'):'👤 Покупатель')+' · '+(message.created_at||'');
    const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
    item.append(head,body);box.append(item);
   });
