@@ -512,36 +512,40 @@ export default {
           const body = await readJson(request);
           const orderId = typeof body.order_id === "string" ? body.order_id.trim().slice(0,100) : "";
           const orderType = body.order_type;
-          const status = body.status;
+          const status = typeof body.status === "string" ? body.status : "";
+          const hasStatus = ["new","in_progress","ready","cancelled"].includes(status);
           const comment = typeof body.comment === "string" ? body.comment.trim().slice(0,1000) : "";
           if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
-          if (!["new","in_progress","ready","cancelled"].includes(status)) return json({ error: "Выберите корректный статус заказа." }, 400, origin);
+          if (status && !hasStatus) return json({ error: "Выберите корректный статус заказа." }, 400, origin);
+          if (!hasStatus && !comment) return json({ error: "Укажите новый статус или комментарий." }, 400, origin);
           if (comment && comment.length < 3) return json({ error: "Комментарий должен содержать не менее 3 символов." }, 400, origin);
           const order = orderType === "product"
             ? await env.DB.prepare("SELECT id,telegram_id,payment_status,fulfillment_status FROM orders WHERE id=?").bind(orderId).first()
             : await env.DB.prepare("SELECT id,telegram_id,status FROM custom_orders WHERE id=?").bind(orderId).first();
           if (!order) return json({ error: "Заказ не найден." }, 404, origin);
-          if (orderType === "product" && status === "cancelled" && order.payment_status === "paid") {
+          if (hasStatus && orderType === "product" && status === "cancelled" && order.payment_status === "paid") {
             return json({ error: "Оплаченный заказ нельзя отменить без подтверждённого возврата Telegram Stars. Сначала требуется отдельная процедура возврата." }, 409, origin);
           }
-          if (orderType === "product" && order.payment_status !== "paid" && !["new","cancelled"].includes(status)) {
+          if (hasStatus && orderType === "product" && order.payment_status !== "paid" && !["new","cancelled"].includes(status)) {
             return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в работу или готовые." }, 409, origin);
           }
           const previous = await getAdminOrderMeta(env, orderType, order);
-          const details = JSON.stringify({ order_type: orderType, order_id: orderId, status, previous_status: previous.admin_status });
           const statements = [];
-          if (orderType === "product" && status === "cancelled") {
-            statements.push(env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId));
-            statements.push(env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId));
-          } else if (orderType === "custom") {
-            statements.push(env.DB.prepare("UPDATE custom_orders SET status=? WHERE id=?").bind(status, orderId));
+          if (hasStatus) {
+            const details = JSON.stringify({ order_type: orderType, order_id: orderId, status, previous_status: previous.admin_status });
+            if (orderType === "product" && status === "cancelled") {
+              statements.push(env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId));
+              statements.push(env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId));
+            } else if (orderType === "custom") {
+              statements.push(env.DB.prepare("UPDATE custom_orders SET status=? WHERE id=?").bind(status, orderId));
+            }
+            statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_status_changed', ?)").bind(telegramId, String(order.telegram_id), details));
           }
-          statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_status_changed', ?)").bind(telegramId, String(order.telegram_id), details));
           if (comment) {
             statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_comment', ?)").bind(telegramId, String(order.telegram_id), JSON.stringify({ order_type: orderType, order_id: orderId, comment })));
           }
           await env.DB.batch(statements);
-          return json({ ok: true, order_id: orderId, order_type: orderType, status, comment_saved: !!comment }, 200, origin);
+          return json({ ok: true, order_id: orderId, order_type: orderType, status: hasStatus ? status : previous.admin_status, comment_saved: !!comment }, 200, origin);
         }
         if (path === "/api/admin/order" && method === "GET") {
           const url = new URL(request.url);
