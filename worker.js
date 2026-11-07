@@ -375,7 +375,48 @@ async function handleWebhook(request, env) {
   return json({ ok: true });
 }
 
+
+async function processCampaignBatch(env, limit = 15) {
+  if (!env.DB || !env.BOT_TOKEN) return { processed: 0, skipped: true };
+  const rows = await env.DB.prepare(
+    "SELECT r.id AS recipient_id,r.telegram_id,r.attempts,c.id AS campaign_id,c.body,c.media_url,c.button_text,c.button_url FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='pending' AND c.status IN ('queued','sending') ORDER BY c.id,r.id LIMIT ?"
+  ).bind(Math.min(25, Math.max(1, Number(limit) || 15))).all();
+  let processed = 0;
+  for (const row of rows.results || []) {
+    const claim = await env.DB.prepare("UPDATE campaign_recipients SET status='sending',attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+      .bind(row.recipient_id).run();
+    if (!claim.meta || claim.meta.changes !== 1) continue;
+    try {
+      const replyMarkup = row.button_text && row.button_url
+        ? { inline_keyboard: [[{ text: row.button_text, url: row.button_url }]] } : undefined;
+      if (row.media_url) {
+        const payload = { chat_id: String(row.telegram_id), photo: row.media_url, caption: row.body };
+        if (replyMarkup) payload.reply_markup = replyMarkup;
+        await telegram(env, "sendPhoto", payload);
+      } else {
+        const payload = { chat_id: String(row.telegram_id), text: row.body };
+        if (replyMarkup) payload.reply_markup = replyMarkup;
+        await telegram(env, "sendMessage", payload);
+      }
+      await env.DB.prepare("UPDATE campaign_recipients SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='sending'")
+        .bind(row.recipient_id).run();
+    } catch (error) {
+      const safeError = String(error?.message || error).replace(/bot\d+:[^\s]+/gi, "[скрыто]").slice(0, 300);
+      await env.DB.prepare("UPDATE campaign_recipients SET status='failed',last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='sending'")
+        .bind(safeError, row.recipient_id).run();
+    }
+    processed++;
+  }
+  await env.DB.prepare(
+    "UPDATE campaigns SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('pending','sending')) THEN 'sending' WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status='failed') THEN 'partial' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued','sending')"
+  ).run();
+  return { processed };
+}
+
 export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(processCampaignBatch(env, 15));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -792,6 +833,86 @@ export default {
               .bind(telegramId,String(ticket.telegram_id),"support_ticket_status_changed",JSON.stringify({ticket_id:id,from:ticket.status,to:status})).run();
           }
           return json({ ok: true, id, status }, 200, origin);
+        }
+
+        if (path === "/api/admin/campaigns" && method === "GET") {
+          if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return json({error:"Требуется миграция 0011_mass_mailing.sql."},503,origin);
+          const rows = await env.DB.prepare("SELECT c.id,c.title,c.body,c.audience_type,c.audience_ids,c.media_url,c.button_text,c.button_url,c.status,c.created_at,c.updated_at,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id) AS total,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent') AS sent,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed') AS failed,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('pending','sending')) AS pending FROM campaigns c ORDER BY c.id DESC LIMIT 100").all();
+          return json({ok:true,campaigns:rows.results||[]},200,origin);
+        }
+        if (path === "/api/admin/campaign-preview" && method === "POST") {
+          const body=await readJson(request), audienceType=["all","buyers","inactive","selected"].includes(body.audience_type)?body.audience_type:"";
+          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500):[];
+          if(!audienceType)return json({error:"Выберите аудиторию."},400,origin);
+          if(audienceType==="selected"&&!ids.length)return json({error:"Укажите Telegram ID получателей."},400,origin);
+          let sql="SELECT COUNT(*) AS total FROM users u",bind=[];
+          if(audienceType==="buyers")sql+=" WHERE EXISTS (SELECT 1 FROM orders o WHERE o.telegram_id=u.telegram_id AND o.payment_status='paid')";
+          else if(audienceType==="inactive")sql+=" WHERE COALESCE(u.updated_at,u.created_at)<=datetime('now','-30 days')";
+          else if(audienceType==="selected"){sql+=" WHERE u.telegram_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))";bind.push(JSON.stringify(ids));}
+          const row=await env.DB.prepare(sql).bind(...bind).first();
+          return json({ok:true,recipient_count:Number(row?.total||0),unknown_ids:audienceType==="selected"?ids.length-Number(row?.total||0):0,audience_type:audienceType},200,origin);
+        }
+        if (path === "/api/admin/campaign-save" && method === "POST") {
+          if (!(await tableExists(env,"campaigns"))) return json({error:"Требуется миграция 0011_mass_mailing.sql."},503,origin);
+          const body=await readJson(request),id=Number(body.id||0);
+          const title=typeof body.title==="string"?body.title.trim().slice(0,100):"";
+          const content=typeof body.body==="string"?body.body.trim().slice(0,4000):"";
+          const audienceType=["all","buyers","inactive","selected"].includes(body.audience_type)?body.audience_type:"";
+          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500):[];
+          const mediaUrl=typeof body.media_url==="string"?body.media_url.trim().slice(0,1000):"";
+          const buttonText=typeof body.button_text==="string"?body.button_text.trim().slice(0,40):"";
+          const buttonUrl=typeof body.button_url==="string"?body.button_url.trim().slice(0,500):"";
+          if(title.length<2||content.length<1)return json({error:"Заполните название и текст рассылки."},400,origin);
+          if(!audienceType||(audienceType==="selected"&&!ids.length))return json({error:"Проверьте выбранную аудиторию и Telegram ID."},400,origin);
+          if(mediaUrl){try{const u=new URL(mediaUrl);if(u.protocol!=="https:")throw new Error("protocol");}catch{return json({error:"Медиа должно быть доступно по HTTPS-ссылке."},400,origin);}}
+          if((buttonText&&!buttonUrl)||(!buttonText&&buttonUrl))return json({error:"Для кнопки заполните и подпись, и ссылку."},400,origin);
+          if(buttonUrl){try{const u=new URL(buttonUrl);if(!["https:","http:"].includes(u.protocol))throw new Error("protocol");}catch{return json({error:"Ссылка кнопки должна быть корректным HTTP(S)-адресом."},400,origin);}}
+          if(mediaUrl&&content.length>1000)return json({error:"Для рассылки с фотографией текст подписи ограничен 1000 символами."},400,origin);
+          if(id>0){
+            const existing=await env.DB.prepare("SELECT id,status FROM campaigns WHERE id=?").bind(id).first();
+            if(!existing)return json({error:"Черновик рассылки не найден."},404,origin);
+            if(existing.status!=="draft")return json({error:"Изменять можно только черновик. Запущенную рассылку редактировать нельзя."},409,origin);
+            await env.DB.prepare("UPDATE campaigns SET title=?,body=?,audience_type=?,audience_ids=?,media_url=?,button_text=?,button_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'")
+              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,id).run();
+          }else{
+            const result=await env.DB.prepare("INSERT INTO campaigns (title,body,audience_type,audience_ids,media_url,button_text,button_url,status,created_by) VALUES (?,?,?,?,?,?,?,'draft',?)")
+              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,telegramId).run();
+            return json({ok:true,id:result.meta?.last_row_id||null},201,origin);
+          }
+          return json({ok:true,id},200,origin);
+        }
+        if (path === "/api/admin/campaign-queue" && method === "POST") {
+          if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return json({error:"Требуется миграция 0011_mass_mailing.sql."},503,origin);
+          const body=await readJson(request),id=Number(body.id);
+          if(body.confirm!==true)return json({error:"Требуется явное подтверждение запуска рассылки."},400,origin);
+          if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите черновик рассылки."},400,origin);
+          const campaign=await env.DB.prepare("SELECT id,audience_type,audience_ids,status FROM campaigns WHERE id=?").bind(id).first();
+          if(!campaign)return json({error:"Рассылка не найдена."},404,origin);
+          if(campaign.status!=="draft")return json({error:"Эту рассылку уже запускали или она не является черновиком."},409,origin);
+          const insert="INSERT INTO campaign_recipients (campaign_id,telegram_id,status) SELECT ?,u.telegram_id,'pending' FROM users u ";
+          let audienceSql="",audienceBinds=[id];
+          if(campaign.audience_type==="buyers")audienceSql="WHERE EXISTS (SELECT 1 FROM orders o WHERE o.telegram_id=u.telegram_id AND o.payment_status='paid')";
+          else if(campaign.audience_type==="inactive")audienceSql="WHERE COALESCE(u.updated_at,u.created_at)<=datetime('now','-30 days')";
+          else if(campaign.audience_type==="selected") {audienceSql="WHERE u.telegram_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))";audienceBinds.push(campaign.audience_ids||"[]");}
+          const batch=await env.DB.batch([
+            env.DB.prepare(insert+audienceSql).bind(...audienceBinds),
+            env.DB.prepare("UPDATE campaigns SET status=CASE WHEN (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id=?)=0 THEN 'completed' ELSE 'queued' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'").bind(id,id),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) SELECT ?, 'campaign_queued', ? WHERE EXISTS (SELECT 1 FROM campaigns WHERE id=? AND status IN ('queued','completed'))")
+              .bind(telegramId,JSON.stringify({campaign_id:id}),id)
+          ]);
+          const total=await env.DB.prepare("SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?").bind(id).first();
+          return json({ok:true,id,recipient_count:Number(total?.total||0),status:Number(total?.total||0)?"queued":"completed"},200,origin);
+        }
+        if (path === "/api/admin/campaign-retry" && method === "POST") {
+          const body=await readJson(request),id=Number(body.id);
+          if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите рассылку."},400,origin);
+          const campaign=await env.DB.prepare("SELECT id,status FROM campaigns WHERE id=?").bind(id).first();
+          if(!campaign)return json({error:"Рассылка не найдена."},404,origin);
+          if(!["partial","completed"].includes(campaign.status))return json({error:"Повторить можно только завершённую рассылку с ошибками."},409,origin);
+          const reset=await env.DB.prepare("UPDATE campaign_recipients SET status='pending',last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE campaign_id=? AND status='failed'").bind(id).run();
+          if(!reset.meta||reset.meta.changes<1)return json({error:"Неудачных доставок для повтора нет."},404,origin);
+          await env.DB.prepare("UPDATE campaigns SET status='queued',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(id).run();
+          return json({ok:true,requeued:reset.meta.changes},200,origin);
         }
         if (path === "/api/admin/announcements" && method === "GET") {
           const rows = await env.DB.prepare("SELECT id,title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_at,updated_at FROM announcements ORDER BY id DESC LIMIT 100").all();
