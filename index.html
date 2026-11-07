@@ -300,7 +300,16 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div class="divider"></div>
    <div class="sectionhead"><h4>Журнал ошибок</h4><button class="secondary" type="button" onclick="loadAdminErrorLog()">↻ Обновить</button></div>
    <p id="adminErrorLogStatus" class="notice" aria-live="polite">Загружаем журнал…</p><div id="adminErrorLogList"></div>
-   <p class="notice">Секреты Telegram и API-ключи не должны попадать в журнал. Резервное копирование и восстановление будут подключены отдельным безопасным модулем после настройки внешнего хранилища.</p>
+
+   <div class="divider"></div>
+   <div class="sectionhead"><h4>🗄️ Резервное копирование D1</h4><button class="secondary" type="button" onclick="loadAdminBackups()">↻ Обновить</button></div>
+   <p id="adminBackupStatus" class="notice" aria-live="polite">Проверяем хранилище…</p>
+   <div class="row-actions"><button class="primary" type="button" onclick="createAdminBackup()">Создать копию сейчас</button></div>
+   <div id="adminBackupList"></div>
+   <div id="adminRestorePanel" class="notice hidden"></div>
+   <p class="muted">Автоматическая копия планируется на 1-е число каждого месяца в 03:00 UTC. Хранятся две последние обычные копии; страховочные копии перед восстановлением выделены отдельно.</p>
+
+   <p class="notice">Секреты Telegram и API-ключи не должны попадать в журнал. Резервное копирование выполняется через защищённое R2-хранилище.</p>
   </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
@@ -723,6 +732,36 @@ const adminFeatureDefinitions=[
  {key:'feature_support',title:'Поддержка',description:'Отправка сообщений ИИ-помощнику и владельцу'},
  {key:'feature_vip',title:'VIP-подписка',description:'Создание новых VIP-счетов'}
 ];
+
+async function loadAdminBackups(){
+ const status=document.getElementById('adminBackupStatus'),list=document.getElementById('adminBackupList'),restore=document.getElementById('adminRestorePanel');if(!status||!list)return;
+ status.textContent='Загружаем список копий…';list.replaceChildren();restore?.classList.add('hidden');
+ try{
+  const d=await apiFetch('/api/admin/backups');
+  if(!d.configured){status.textContent='R2 пока не подключено. Хранилище резервных копий недоступно.';return;}
+  if(!d.token_configured){status.textContent='R2 подключено, но не настроен секрет CLOUDFLARE_API_TOKEN.';return;}
+  if(d.active){status.textContent=d.active.kind==='restore'?'Выполняется восстановление базы…':'Резервная копия выполняется: '+(d.active.stage==='exporting'?'экспорт D1':'подготовка');}
+  else if(d.last_job?.status==='error')status.textContent='Последняя операция завершилась ошибкой: '+d.last_job.error;
+  else status.textContent='Хранилище подключено · обычных копий: '+d.backups.length+' · страховочных: '+d.safety_backups.length;
+  (d.backups||[]).forEach(item=>{
+   const row=document.createElement('div');row.className='admin-detail-line';const head=document.createElement('b');head.textContent=item.name;const meta=document.createElement('small');meta.textContent=formatDate(item.uploaded)+' · '+(item.size_bytes/1024/1024).toFixed(2)+' МБ';
+   const actions=document.createElement('div');actions.className='row-actions';
+   const download=document.createElement('button');download.type='button';download.className='secondary';download.textContent='Скачать SQL';download.addEventListener('click',()=>{window.open('/api/admin/backup-download?key='+encodeURIComponent(item.key),'_blank','noopener');});
+   const prepare=document.createElement('button');prepare.type='button';prepare.className='secondary';prepare.textContent='Подготовить восстановление';prepare.disabled=!!d.active;prepare.addEventListener('click',async()=>{if(!confirm('Сначала будет создана отдельная страховочная копия текущей базы. Во время экспорта D1 может временно не отвечать. Продолжить?'))return;prepare.disabled=true;try{await apiFetch('/api/admin/backup-restore-prepare',{method:'POST',body:JSON.stringify({key:item.key})});toast('Страховочная копия поставлена в очередь. Дождитесь её готовности.');await loadAdminBackups();}catch(e){toast(e.message||'Не удалось подготовить восстановление.');prepare.disabled=false;}});
+   actions.append(download,prepare);row.append(head,meta,actions);list.append(row);
+  });
+  if(d.preparation?.status==='ready'){
+   const box=document.createElement('div');box.className='notice';const text=document.createElement('p');text.textContent='Страховочная копия готова. Можно восстановить выбранную версию: '+d.preparation.target_key+'. Это заменит текущее содержимое базы.';const run=document.createElement('button');run.type='button';run.className='danger';run.textContent='Подтвердить восстановление';run.addEventListener('click',async()=>{if(!confirm('ПОСЛЕДНЕЕ ПОДТВЕРЖДЕНИЕ. Текущие данные D1 будут заменены выбранной копией. Страховочная копия уже сохранена отдельно. Начать восстановление?'))return;run.disabled=true;try{await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({key:d.preparation.target_key,confirm:true})});toast('Восстановление запущено. Не закрывайте проект и дождитесь завершения.');await loadAdminBackups();}catch(e){toast(e.message||'Не удалось запустить восстановление.');run.disabled=false;}});box.append(text,run);restore?.replaceChildren(box);restore?.classList.remove('hidden');
+  }
+  if(d.active){setTimeout(()=>loadAdminBackups(),65000);}
+ }catch(e){status.textContent=e.message||'Не удалось загрузить резервные копии.';}
+}
+async function createAdminBackup(){
+ if(!confirm('Создать полную SQL-копию базы D1? Во время экспорта база может временно не отвечать на запросы. Продолжить?'))return;
+ try{await apiFetch('/api/admin/backup-create',{method:'POST',body:JSON.stringify({confirm:true})});toast('Экспорт D1 запущен. Ход операции появится в этом разделе.');await loadAdminBackups();}
+ catch(e){toast(e.message||'Не удалось запустить резервное копирование.');}
+}
+
 async function loadAdminTechnicalCenter(){
  const status=document.getElementById('adminTechnicalStatus');if(!status)return;status.textContent='Проверяем базу и компоненты…';
  try{
@@ -732,7 +771,7 @@ async function loadAdminTechnicalCenter(){
   const tables=document.getElementById('adminTechnicalTables');tables.replaceChildren();
   const integrations=document.createElement('div');integrations.className='notice';const integrationLabels={telegram_bot:'Telegram Bot API',telegram_webhook:'Webhook Telegram',openai:'OpenAI API',backup_storage:'Хранилище резервных копий'};Object.entries(d.integrations||{}).forEach(([key,ready])=>{const line=document.createElement('div');line.textContent=integrationLabels[key]+': '+(ready?'настроено':(key==='backup_storage'?'не подключено':'не настроено'));integrations.append(line);});tables.append(integrations);
   Object.entries(d.tables||{}).forEach(([name,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=name;const right=document.createElement('b');right.textContent=ready?'Подключена':'Нужна миграция';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
-  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog()]);
+  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminBackups()]);
  }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
 }
 async function loadAdminFeatureFlags(){
