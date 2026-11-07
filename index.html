@@ -789,6 +789,7 @@ async function loadAdminSupport() {
    row.append(info,button);root.append(row);
   });
   await loadAdminSupportTickets();
+ }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
 }
 async function openAdminConversation(telegramId) {
  const box=document.getElementById('adminConversationDetail');if(!box)return;
