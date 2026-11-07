@@ -286,6 +286,22 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <p id="adminCampaignPreview" class="notice" aria-live="polite">Перед запуском проверьте количество получателей.</p>
    <div id="adminCampaignLivePreview" class="notice hidden"></div>
   </div>
+
+  <div class="panel" id="adminTechnicalCenterPanel">
+   <div class="sectionhead"><h3>🖥️ Технический центр</h3><button class="secondary" type="button" onclick="loadAdminTechnicalCenter()">↻ Проверить систему</button></div>
+   <p class="muted">Состояние базы и основных компонентов. Проверки выполняются безопасными запросами чтения; данные покупателей и заказы не изменяются.</p>
+   <p id="adminTechnicalStatus" class="notice" aria-live="polite">Проверяем подключение…</p>
+   <div class="admin-metrics" id="adminTechnicalMetrics"></div>
+   <h4>Компоненты базы данных</h4><div id="adminTechnicalTables"></div>
+   <div class="divider"></div>
+   <h4>Переключатели функций</h4>
+   <p class="muted">Отключение блокирует новые запросы соответствующей функции на сервере. Уже созданные заказы и подтверждённые платежи не затрагиваются.</p>
+   <div id="adminFeatureFlags"><p class="muted">Загрузка переключателей…</p></div>
+   <div class="divider"></div>
+   <div class="sectionhead"><h4>Журнал ошибок</h4><button class="secondary" type="button" onclick="loadAdminErrorLog()">↻ Обновить</button></div>
+   <p id="adminErrorLogStatus" class="notice" aria-live="polite">Загружаем журнал…</p><div id="adminErrorLogList"></div>
+   <p class="notice">Секреты Telegram и API-ключи не должны попадать в журнал. Резервное копирование и восстановление будут подключены отдельным безопасным модулем после настройки внешнего хранилища.</p>
+  </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
@@ -441,7 +457,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminAnnouncements(); loadAdminCampaigns(); }
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminAnnouncements(); loadAdminCampaigns(); }
  if (id === 'menuView') loadAnnouncements();
 }
 
@@ -699,6 +715,33 @@ async function adminAdjustBalance(telegramId) {
 }
 
 let adminSalesPaused=false;
+
+const adminFeatureDefinitions=[
+ {key:'feature_product_orders',title:'Заказы из каталога',description:'Создание новых заказов на товары'},
+ {key:'feature_custom_orders',title:'Индивидуальные заказы',description:'Отправка заявок на авторские работы'},
+ {key:'feature_points_topup',title:'Пополнение баланса',description:'Создание счёта на пополнение баллов'},
+ {key:'feature_support',title:'Поддержка',description:'Отправка сообщений ИИ-помощнику и владельцу'},
+ {key:'feature_vip',title:'VIP-подписка',description:'Создание новых VIP-счетов'}
+];
+async function loadAdminTechnicalCenter(){
+ const status=document.getElementById('adminTechnicalStatus');if(!status)return;status.textContent='Проверяем базу и компоненты…';
+ try{
+  const d=await apiFetch('/api/admin/technical-status');status.textContent='База данных: подключена · Проверено: '+formatDate(d.checked_at);
+  const metrics=document.getElementById('adminTechnicalMetrics');metrics.replaceChildren();
+  [['Пользователи',d.counts.users],['Товары',d.counts.products],['Заказы',d.counts.orders],['Ожидают оплаты',d.counts.pending_payments],['Новые ошибки',d.new_errors==null?'Миграция не применена':d.new_errors]].forEach(([label,value])=>{const card=document.createElement('div');card.className='admin-metric';const span=document.createElement('span');span.textContent=label;const strong=document.createElement('strong');strong.textContent=Number.isFinite(value)?Number(value).toLocaleString('ru-RU'):String(value);card.append(span,strong);metrics.append(card);});
+  const tables=document.getElementById('adminTechnicalTables');tables.replaceChildren();
+  Object.entries(d.tables||{}).forEach(([name,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=name;const right=document.createElement('b');right.textContent=ready?'Подключена':'Нужна миграция';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
+  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog()]);
+ }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
+}
+async function loadAdminFeatureFlags(){
+ const root=document.getElementById('adminFeatureFlags');if(!root)return;root.replaceChildren();
+ try{const d=await apiFetch('/api/admin/feature-flags');adminFeatureDefinitions.forEach(item=>{const row=document.createElement('div');row.className='lineitem';const info=document.createElement('span');const title=document.createElement('b');title.textContent=item.title;const desc=document.createElement('small');desc.textContent=item.description;info.append(title,document.createElement('br'),desc);const button=document.createElement('button');button.type='button';const enabled=d.flags[item.key]!==false;button.className=enabled?'primary':'secondary';button.textContent=enabled?'Включено':'Отключено';button.addEventListener('click',async()=>{const next=!enabled;if(!confirm((next?'Включить':'Отключить')+' функцию «'+item.title+'»?'))return;button.disabled=true;try{await apiFetch('/api/admin/feature-flags',{method:'POST',body:JSON.stringify({key:item.key,enabled:next})});toast(next?'Функция включена.':'Функция отключена.');await loadAdminFeatureFlags();}catch(e){toast(e.message||'Не удалось изменить функцию.');button.disabled=false;}});row.append(info,button);root.append(row);});}catch(e){root.textContent=e.message||'Не удалось загрузить переключатели.';}
+}
+async function loadAdminErrorLog(){
+ const root=document.getElementById('adminErrorLogList'),status=document.getElementById('adminErrorLogStatus');if(!root||!status)return;root.replaceChildren();
+ try{const d=await apiFetch('/api/admin/error-log');if(d.migration_pending){status.textContent='Журнал пока недоступен: требуется миграция 0012.';return;}const rows=d.errors||[];status.textContent='Записей: '+rows.length+' · новые: '+rows.filter(x=>x.status==='new').length;if(!rows.length){root.textContent='Ошибок пока нет.';return;}rows.forEach(item=>{const row=document.createElement('div');row.className='admin-detail-line';const head=document.createElement('b');head.textContent='№'+item.id+' · '+item.severity+' · '+(item.status==='new'?'Новая':'Решена');const meta=document.createElement('small');meta.textContent=formatDate(item.created_at)+' · '+item.source;const message=document.createElement('p');message.textContent=item.message;if(item.status==='new'){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Отметить решённой';button.addEventListener('click',async()=>{button.disabled=true;try{await apiFetch('/api/admin/error-resolve',{method:'POST',body:JSON.stringify({id:item.id})});await loadAdminErrorLog();}catch(e){toast(e.message||'Не удалось обновить запись.');button.disabled=false;}});row.append(head,meta,message,button);}else row.append(head,meta,message);root.append(row);});}catch(e){status.textContent=e.message||'Не удалось загрузить журнал.';}
+}
 async function loadAdminSystemControls(){
  const status=document.getElementById('adminSalesPauseStatus'),button=document.getElementById('adminSalesPauseButton');
  if(!status||!button)return;
