@@ -718,6 +718,17 @@ async function openAdminOrder(orderId,orderType) {
    }catch(error){toast(error.message||'Не удалось сохранить изменения');save.disabled=false;save.textContent='Сохранить изменения';}
   });
   section.append(save);
+  const notify=document.createElement('button');notify.type='button';notify.className='secondary';notify.textContent='📨 Повторить уведомление покупателю';
+  notify.addEventListener('click',async()=>{
+   if(!confirm('Отправить покупателю сообщение о текущем статусе заказа в Telegram?'))return;
+   notify.disabled=true;notify.textContent='Отправляем…';
+   try{
+    await apiFetch('/api/admin/order-notify',{method:'POST',body:JSON.stringify({order_id:String(order.id),order_type:orderType})});
+    toast('Уведомление отправлено');
+   }catch(error){toast(error.message||'Не удалось отправить уведомление');}
+   finally{notify.disabled=false;notify.textContent='📨 Повторить уведомление покупателю';}
+  });
+  section.append(notify);
   if(data.migrations_pending){
    const warning=document.createElement('p');warning.className='notice';warning.textContent='Для изменения статуса и комментариев требуется миграция 0006_admin_action_log.sql.';section.append(warning);
   }
