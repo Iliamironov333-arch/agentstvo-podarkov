@@ -168,6 +168,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 <main>
 <section id="menuView">
  <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p></div>
+ <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
  <div class="menu-grid">
   <button class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
@@ -248,6 +249,25 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <h4>Обращения владельцу</h4>
    <div class="admin-search"><select id="adminTicketFilter" onchange="loadAdminSupportTickets()"><option value="all">Все обращения</option><option value="open">Новые</option><option value="in_progress">В работе</option><option value="closed">Закрытые</option></select></div>
    <p id="adminTicketsStatus" class="notice" aria-live="polite">Обращения загружаются…</p><div id="adminTicketsList"></div>
+  </div>
+  <div class="panel" id="adminAnnouncementsPanel">
+   <div class="sectionhead"><h3>📢 Объявления</h3><button class="secondary" type="button" onclick="loadAdminAnnouncements()">↻ Обновить</button></div>
+   <p class="muted">Сообщения на главной странице Mini App. Можно выбрать всех покупателей или конкретные Telegram ID, задать период показа и сначала сохранить черновик.</p>
+   <div id="adminAnnouncementsStatus" class="notice" aria-live="polite">Загружаем объявления…</div>
+   <div id="adminAnnouncementsList"></div>
+   <div class="divider"></div>
+   <h4 id="adminAnnouncementEditorTitle">Новое объявление</h4>
+   <input type="hidden" id="adminAnnouncementId">
+   <label>Заголовок<input id="adminAnnouncementTitle" maxlength="100" placeholder="Например: Новая коллекция уже в каталоге"></label>
+   <label>Текст объявления<textarea id="adminAnnouncementBody" rows="4" maxlength="3000" placeholder="Что важно сообщить покупателям?"></textarea></label>
+   <label>Ссылка (необязательно)<input id="adminAnnouncementLink" type="url" maxlength="500" placeholder="https://…"></label>
+   <label>Аудитория<select id="adminAnnouncementAudience" onchange="updateAnnouncementAudienceUi()"><option value="all">Все пользователи Mini App</option><option value="selected">Выбранные Telegram ID</option></select></label>
+   <label id="adminAnnouncementIdsWrap" class="hidden">Telegram ID (через запятую или с новой строки)<textarea id="adminAnnouncementIds" rows="3" placeholder="123456789, 987654321"></textarea></label>
+   <div class="admin-search"><label>Начало показа<input id="adminAnnouncementStart" type="datetime-local"></label><label>Окончание показа<input id="adminAnnouncementEnd" type="datetime-local"></label></div>
+   <label>Статус<select id="adminAnnouncementStatus"><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="archived">В архиве</option></select></label>
+   <div class="admin-product-actions"><button class="secondary" type="button" onclick="previewAnnouncementAudience()">Проверить аудиторию</button><button class="primary" type="button" onclick="saveAdminAnnouncement()">Сохранить объявление</button><button class="secondary" type="button" onclick="resetAdminAnnouncementForm()">Очистить</button></div>
+   <p id="adminAnnouncementPreview" class="notice" aria-live="polite">Перед публикацией проверь аудиторию и предпросмотр.</p>
+   <div id="adminAnnouncementLivePreview" class="notice hidden"></div>
   </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
@@ -405,6 +425,7 @@ function showView(id) {
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
  if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); }
+ if (id === 'menuView') loadAnnouncements();
 }
 
 function openBot(action) {
@@ -762,6 +783,101 @@ async function loadAdminSupportTickets() {
    row.append(heading,meta,message,select,save);root.append(row);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';}
+}
+
+function announcementLocalInput(value) {
+ if(!value)return '';
+ const date=new Date(value);if(Number.isNaN(date.getTime()))return '';
+ const pad=n=>String(n).padStart(2,'0');
+ return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes());
+}
+function announcementIso(value) {
+ if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();
+}
+function updateAnnouncementAudienceUi() {
+ const selected=document.getElementById('adminAnnouncementAudience')?.value==='selected';
+ document.getElementById('adminAnnouncementIdsWrap')?.classList.toggle('hidden',!selected);
+}
+function parseAnnouncementIds() {
+ return [...new Set((document.getElementById('adminAnnouncementIds')?.value||'').split(/[\\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);
+}
+function announcementFormData() {
+ return {
+  id:document.getElementById('adminAnnouncementId').value,
+  title:document.getElementById('adminAnnouncementTitle').value.trim(),
+  body:document.getElementById('adminAnnouncementBody').value.trim(),
+  link_url:document.getElementById('adminAnnouncementLink').value.trim(),
+  audience_type:document.getElementById('adminAnnouncementAudience').value,
+  audience_ids:parseAnnouncementIds(),
+  starts_at:announcementIso(document.getElementById('adminAnnouncementStart').value),
+  ends_at:announcementIso(document.getElementById('adminAnnouncementEnd').value),
+  status:document.getElementById('adminAnnouncementStatus').value
+ };
+}
+function resetAdminAnnouncementForm() {
+ ['adminAnnouncementId','adminAnnouncementTitle','adminAnnouncementBody','adminAnnouncementLink','adminAnnouncementIds','adminAnnouncementStart','adminAnnouncementEnd'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ document.getElementById('adminAnnouncementAudience').value='all';
+ document.getElementById('adminAnnouncementStatus').value='draft';
+ document.getElementById('adminAnnouncementEditorTitle').textContent='Новое объявление';
+ document.getElementById('adminAnnouncementPreview').textContent='Перед публикацией проверь аудиторию и предпросмотр.';
+ document.getElementById('adminAnnouncementLivePreview').classList.add('hidden');
+ updateAnnouncementAudienceUi();
+}
+async function previewAnnouncementAudience() {
+ const status=document.getElementById('adminAnnouncementPreview');
+ try {
+  const data=announcementFormData();
+  if(data.audience_type==='selected'&&!data.audience_ids.length)throw new Error('Добавьте Telegram ID выбранных получателей.');
+  const result=await apiFetch('/api/admin/announcement-preview',{method:'POST',body:JSON.stringify({audience_type:data.audience_type,audience_ids:data.audience_ids})});
+  status.textContent='Получателей: '+Number(result.recipient_count).toLocaleString('ru-RU')+(result.unknown_ids?' · ID не найдены: '+result.unknown_ids:'')+'.';
+  const preview=document.getElementById('adminAnnouncementLivePreview');
+  preview.replaceChildren();const title=document.createElement('b');title.textContent=data.title||'Заголовок объявления';const body=document.createElement('p');body.textContent=data.body||'Текст объявления';preview.append(title,body);
+  if(data.link_url){const link=document.createElement('p');link.textContent='Ссылка: '+data.link_url;preview.append(link);}
+  preview.classList.remove('hidden');
+ } catch(e){status.textContent=e.message||'Не удалось проверить аудиторию.';}
+}
+async function loadAdminAnnouncements() {
+ const root=document.getElementById('adminAnnouncementsList'),status=document.getElementById('adminAnnouncementsStatus');
+ if(!root||!status)return;root.replaceChildren();status.textContent='Загружаем объявления…';
+ try {
+  const data=await apiFetch('/api/admin/announcements');const rows=data.announcements||[];
+  status.textContent='Объявлений: '+rows.length;
+  const labels={draft:'Черновик',published:'Опубликовано',archived:'Архив'};
+  rows.forEach(item=>{
+   const card=document.createElement('div');card.className='admin-detail-line';
+   const title=document.createElement('b');title.textContent=item.title+' · '+(labels[item.status]||item.status);
+   const body=document.createElement('p');body.textContent=item.body;
+   const meta=document.createElement('small');meta.textContent='Аудитория: '+(item.audience_type==='all'?'все':'выбранные ID')+' · '+(item.starts_at||'сразу')+' — '+(item.ends_at||'без даты окончания');
+   const actions=document.createElement('div');actions.className='row-actions';
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';
+   edit.addEventListener('click',()=>{document.getElementById('adminAnnouncementId').value=item.id;document.getElementById('adminAnnouncementTitle').value=item.title;document.getElementById('adminAnnouncementBody').value=item.body;document.getElementById('adminAnnouncementLink').value=item.link_url||'';document.getElementById('adminAnnouncementAudience').value=item.audience_type;let ids=[];try{ids=JSON.parse(item.audience_ids||'[]')}catch{}document.getElementById('adminAnnouncementIds').value=ids.join(', ');document.getElementById('adminAnnouncementStart').value=announcementLocalInput(item.starts_at);document.getElementById('adminAnnouncementEnd').value=announcementLocalInput(item.ends_at);document.getElementById('adminAnnouncementStatus').value=item.status;document.getElementById('adminAnnouncementEditorTitle').textContent='Редактирование объявления №'+item.id;updateAnnouncementAudienceUi();document.getElementById('adminAnnouncementEditorTitle').scrollIntoView({behavior:'smooth',block:'center'});});
+   const toggle=document.createElement('button');toggle.type='button';toggle.className='secondary';toggle.textContent=item.status==='published'?'Снять с публикации':item.status==='archived'?'Вернуть в черновики':'Опубликовать';
+   toggle.addEventListener('click',async()=>{const next=item.status==='published'?'archived':'published';if(!confirm(next==='published'?'Опубликовать объявление?':'Снять объявление с публикации?'))return;toggle.disabled=true;try{await apiFetch('/api/admin/announcement-status',{method:'POST',body:JSON.stringify({id:item.id,status:next})});toast('Статус объявления изменён.');await loadAdminAnnouncements();}catch(e){toast(e.message||'Не удалось изменить статус.');}finally{toggle.disabled=false;}});
+   actions.append(edit,toggle);card.append(title,body,meta,actions);root.append(card);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить объявления.';}
+}
+async function saveAdminAnnouncement() {
+ const data=announcementFormData();
+ if(data.title.length<2||!data.body){toast('Заполните заголовок и текст.');return;}
+ if(data.audience_type==='selected'&&!data.audience_ids.length){toast('Укажите Telegram ID получателей.');return;}
+ try {await apiFetch('/api/admin/announcement-save',{method:'POST',body:JSON.stringify(data)});toast('Объявление сохранено.');resetAdminAnnouncementForm();await loadAdminAnnouncements();}
+ catch(e){toast(e.message||'Не удалось сохранить объявление.');}
+}
+async function loadAnnouncements() {
+ const root=document.getElementById('customerAnnouncements');if(!root||!initData)return;
+ root.replaceChildren();
+ try {
+  const data=await apiFetch('/api/announcements');
+  (data.announcements||[]).forEach(item=>{
+   const card=document.createElement('article');card.className='panel announcement-card';
+   const title=document.createElement('h3');title.textContent='📢 '+item.title;
+   const body=document.createElement('p');body.style.whiteSpace='pre-wrap';body.textContent=item.body;
+   card.append(title,body);
+   if(item.link_url){const link=document.createElement('a');link.href=item.link_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Подробнее ↗';card.append(link);}
+   root.append(card);
+  });
+ }catch(error){console.warn('Announcements unavailable:',error);}
 }
 
 async function loadAdminDashboard() {
