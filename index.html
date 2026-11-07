@@ -217,6 +217,20 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminOrdersList"></div>
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
+  <div class="panel" id="adminPromosPanel">
+   <div class="sectionhead"><h3>🏷️ Промокоды и акции</h3><button class="secondary" type="button" onclick="loadAdminPromos()">↻ Обновить</button></div>
+   <p class="muted">Дополнительная скидка применяется только по введённому коду. Итоговую цену всегда рассчитывает Worker.</p>
+   <div class="admin-user-detail">
+    <label>Код<input id="adminPromoCode" maxlength="32" placeholder="Например, AUTUMN10"></label>
+    <label>Скидка, %<input id="adminPromoPercent" type="number" min="1" max="90" step="1" value="10"></label>
+    <label>Лимит использований (пусто — без лимита)<input id="adminPromoMaxUses" type="number" min="1" step="1" placeholder="Без лимита"></label>
+    <label>Начало действия<input id="adminPromoStarts" type="datetime-local"></label>
+    <label>Окончание действия<input id="adminPromoEnds" type="datetime-local"></label>
+    <label>Состояние<select id="adminPromoActive"><option value="1">Активен</option><option value="0">Отключён</option></select></label>
+    <button class="primary" type="button" onclick="saveAdminPromo()">Сохранить промокод</button>
+   </div>
+   <p id="adminPromosStatus" class="notice" aria-live="polite">Список промокодов загружается…</p><div id="adminPromosList"></div>
+  </div>
   <div class="panel" id="adminCatalogPanel">
    <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div>
    <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
@@ -324,6 +338,9 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
+  <label>Промокод<input id="promoCodeInput" maxlength="32" autocomplete="off" placeholder="Введите код"></label>
+  <button class="secondary" id="applyPromoButton" type="button" onclick="applyPromoCode()">Применить промокод</button>
+  <p class="notice" id="promoStatus" aria-live="polite">Скидка по каталогу уже учтена. Промокод — дополнительная акция.</p>
   <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
   <div class="lineitem"><span>Скидка</span><b id="discount">Уже учтена в каталоге</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
@@ -453,6 +470,7 @@ async function loadProducts() {
  }
 }
 let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
+let activePromo = null;
 let vipActive = false;
 let activeFilter = 'all';
 
@@ -550,11 +568,11 @@ function drawCart() {
  }
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
- const discountAmount = 0;
- const total = subtotal;
+ const discountAmount = activePromo ? Number(activePromo.discount_stars||0) : 0;
+ const total = Math.max(0,subtotal-discountAmount);
 
  document.getElementById('subtotal').textContent = money(subtotal);
- document.getElementById('discount').textContent = 'Уже учтена в каталоге';
+ document.getElementById('discount').textContent = discountAmount ? '-'+money(discountAmount)+' ('+activePromo.code+')' : 'Уже учтена в каталоге';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
@@ -569,6 +587,7 @@ function changeQty(id,d) {
  const next = Number(cart[id] || 0) + d;
  if (next > 10) { toast('Максимум 10 штук одного товара.'); return; }
  cart[id] = Math.max(0,next);
+ activePromo = null;
  if (!cart[id]) delete cart[id];
  persistCart();
  drawProducts();
@@ -771,6 +790,20 @@ async function toggleAdminSalesPause(){
  const button=document.getElementById('adminSalesPauseButton');if(button)button.disabled=true;
  try{await apiFetch('/api/admin/system-controls',{method:'POST',body:JSON.stringify({sales_paused:next})});toast(next?'Новые продажи приостановлены.':'Продажи возобновлены.');await loadAdminSystemControls();}
  catch(e){toast(e.message||'Не удалось изменить режим продаж.');if(button)button.disabled=false;}
+}
+async function loadAdminPromos(){
+ const status=document.getElementById('adminPromosStatus'),root=document.getElementById('adminPromosList');if(!status||!root)return;
+ status.textContent='Загружаем промокоды…';root.replaceChildren();
+ try{const data=await apiFetch('/api/admin/promos');if(data.migration_pending){status.textContent='Для промокодов требуется миграция 0013_promo_codes.sql.';return;}
+ const rows=data.promos||[];status.textContent='Промокодов: '+rows.length;
+ rows.forEach(p=>{const item=document.createElement('div');item.className='admin-user-row';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=p.code+' · '+p.discount_percent+'%';const meta=document.createElement('small');meta.textContent=(p.is_active?'Активен':'Отключён')+' · оплачено '+Number(p.redeemed_count||0)+' · резерв '+Number(p.reserved_count||0)+' · лимит '+(p.max_uses??'без лимита');const dates=document.createElement('small');dates.textContent=(p.starts_at||'Сразу')+' — '+(p.ends_at||'Без окончания');info.append(title,meta,dates);const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>{document.getElementById('adminPromoCode').value=p.code;document.getElementById('adminPromoPercent').value=p.discount_percent;document.getElementById('adminPromoMaxUses').value=p.max_uses??'';document.getElementById('adminPromoStarts').value=p.starts_at?String(p.starts_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoEnds').value=p.ends_at?String(p.ends_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoActive').value=String(p.is_active);});item.append(info,edit);root.append(item);});
+ }catch(e){status.textContent=e.message||'Не удалось загрузить промокоды.';}
+}
+async function saveAdminPromo(){
+ const button=document.querySelector('#adminPromosPanel button.primary');if(button)button.disabled=true;
+ const value=id=>document.getElementById(id)?.value||'';
+ try{await apiFetch('/api/admin/promo-save',{method:'POST',body:JSON.stringify({code:value('adminPromoCode'),discount_percent:Number(value('adminPromoPercent')),max_uses:value('adminPromoMaxUses'),starts_at:value('adminPromoStarts'),ends_at:value('adminPromoEnds'),is_active:value('adminPromoActive')==='1'})});toast('Промокод сохранён.');await loadAdminPromos();}
+ catch(e){toast(e.message||'Не удалось сохранить промокод.');}finally{if(button)button.disabled=false;}
 }
 async function loadAdminAnalytics(){
  const summary=document.getElementById('adminAnalyticsSummary'),daily=document.getElementById('adminAnalyticsDaily');if(!summary||!daily)return;
@@ -1022,6 +1055,7 @@ async function loadAnnouncements() {
 }
 
 async function loadAdminDashboard() {
+ loadAdminPromos();
  const status = document.getElementById('adminDashboardStatus');
  const button = document.getElementById('adminRefreshBtn');
  if (!status) return;
@@ -1415,6 +1449,16 @@ function renderCustomStep(){const s=customSteps[customStep],n=customStep+1;docum
 function customPrev(){if(customStep>0){customStep--;renderCustomStep();}}
 async function customNext(){const s=customSteps[customStep],v=customAnswers[s.key];if(s.key==='subject'&&(!v||v.trim().length<3)){toast('Пожалуйста, укажите, что необходимо изобразить.');return;}if(s.options&&(!v||(Array.isArray(v)&&!v.length))){toast('Пожалуйста, выберите вариант, чтобы продолжить.');return;}if(customStep<7){customStep++;renderCustomStep();return;}const b=document.getElementById('customNext');b.disabled=true;b.textContent='Отправляем…';try{const r=await apiFetch('/api/custom-orders',{method:'POST',body:JSON.stringify({answers:customAnswers})});toast('Заказ отправлен! Цена: '+r.total_stars+' ⭐');showView('ordersView');await loadMe();}catch(e){toast(e.message||'Не удалось отправить заказ.');}finally{b.disabled=false;b.textContent='Отправить заказ';}}
 
+async function applyPromoCode(){
+ const input=document.getElementById('promoCodeInput'),status=document.getElementById('promoStatus'),button=document.getElementById('applyPromoButton');
+ const code=(input?.value||'').trim().toUpperCase(),entries=products.filter(p=>Number(cart[p[0]]||0)>0);
+ if(!code){toast('Введите промокод.');return;}if(!entries.length){toast('Сначала добавьте товары в корзину.');return;}
+ button.disabled=true;status.textContent='Проверяем промокод на сервере…';
+ try{const result=await apiFetch('/api/promo/validate',{method:'POST',body:JSON.stringify({code,items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])}))})});
+ activePromo={code:result.code,discount_stars:Number(result.discount_stars||0),total_stars:Number(result.total_stars||0),discount_percent:Number(result.discount_percent||0)};
+ status.textContent='Промокод применён: скидка '+activePromo.discount_percent+'% · экономия '+money(activePromo.discount_stars)+'. Итог повторно проверяется сервером при оформлении.';drawCart();
+ }catch(e){activePromo=null;status.textContent=e.message||'Промокод не применён.';drawCart();}finally{button.disabled=false;}
+}
 async function checkout() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
  if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
@@ -1429,13 +1473,13 @@ async function checkout() {
  try {
   const data = await apiFetch('/api/orders',{
    method:'POST',
-   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])}))})
+   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])})),promo_code:activePromo?.code||''})
   });
 
   if (!data.invoice_url) throw new Error('Сервер не вернул ссылку на счёт.');
 
   openInvoice(data.invoice_url,status => {
-   if (status === 'paid') { cart = {}; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
+   if (status === 'paid') { cart = {}; activePromo=null; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
    else if (status === 'pending') { toast('Платёж ещё обрабатывается. Проверь «Мои заказы».'); loadMe(); }
    else if (status === 'failed') toast('Оплата не прошла. Попробуй ещё раз.');
    else toast('Оплата отменена. Корзина сохранена.');
