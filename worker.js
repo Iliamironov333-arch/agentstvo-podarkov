@@ -386,14 +386,15 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0, 64);
           if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
-          const [profile, orders, transactions, blocks] = await Promise.all([
+          const [profile, orders, transactions, blocks, adminHistory] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
-            env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId).all()
+            env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId).all(),
+            env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all()
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [] }, 200, origin);
+          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [] }, 200, origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
           const body = await readJson(request);
