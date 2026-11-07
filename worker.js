@@ -555,14 +555,14 @@ async function processBackupQueue(env) {
     if(state.stage==="exporting"){
       const result=await backupCloudflareApi(env,"export",{output_format:"polling",current_bookmark:state.bookmark,dump_options:{compatibility:"d1"}});
       if(result.status==="complete"&&result.result?.signed_url){await backupFinishExport(env,state,result.result.signed_url);return;}
-      if(result.status==="error")throw new Error(result.error||"Экспорт D1 завершился ошибкой.");
+      if(result.status==="error"){const error=new Error(result.error||"Экспорт D1 завершился ошибкой.");error.permanent=true;throw error;}
       state.bookmark=result.at_bookmark||state.bookmark;
       await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);return;
     }
     if(state.stage==="importing"){
       if(!state.bookmark)throw new Error("D1 не вернула идентификатор операции восстановления.");
       const result=await backupCloudflareApi(env,"import",{action:"poll",current_bookmark:state.bookmark});
-      if(result.status==="error")throw new Error(result.error||"Восстановление D1 завершилось ошибкой.");
+      if(result.status==="error"){const error=new Error(result.error||"Восстановление D1 завершилось ошибкой.");error.permanent=true;throw error;}
       if(result.status==="complete"){
         await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"completed",target_key:state.target_key,safety_key:state.safety_key,completed_at:new Date().toISOString(),final_bookmark:result.result?.final_bookmark||null});
         await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);await env.BACKUP_BUCKET.delete(BACKUP_PREP_KEY);return;
@@ -571,9 +571,13 @@ async function processBackupQueue(env) {
       await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
     }
   }catch(error){
-    await backupWriteJson(env.BACKUP_BUCKET,"system/last-backup-job.json",{status:"error",kind:state.kind,error:String(error.message||error).slice(0,500),failed_at:new Date().toISOString()});
-    if(state.kind==="restore")await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"error",target_key:state.target_key,safety_key:state.safety_key,error:String(error.message||error).slice(0,500),failed_at:new Date().toISOString()});
-    await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);
+    state.retry_count=Number(state.retry_count||0)+1;
+    state.last_error=String(error.message||error).slice(0,500);
+    state.last_attempt_at=new Date().toISOString();
+    if(error.permanent||state.retry_count>=10){state.resume_stage=state.stage;state.stage="needs_attention";}
+    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
+    await backupWriteJson(env.BACKUP_BUCKET,"system/last-backup-job.json",{status:state.stage==="needs_attention"?"needs_attention":"retrying",kind:state.kind,error:state.last_error,updated_at:state.last_attempt_at,retry_count:state.retry_count});
+    if(state.kind==="restore")await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:state.stage==="needs_attention"?"needs_attention":"retrying",target_key:state.target_key,safety_key:state.safety_key,error:state.last_error,updated_at:state.last_attempt_at,retry_count:state.retry_count});
   }
 }
 async function backupListUi(env) {
@@ -1178,6 +1182,14 @@ export default {
           if(!(await env.BACKUP_BUCKET.get(key)))return json({error:"Выбранная копия не найдена."},404,origin);
           try{return json({ok:true,...await backupStartExport(env,"restore_prepare","restore_safety",key)},202,origin);}
           catch(error){return json({error:String(error.message||error).slice(0,500)},503,origin);}
+        }
+        if(path==="/api/admin/backup-retry"&&method==="POST"){
+          if(!env.BACKUP_BUCKET)return json({error:"R2-хранилище не подключено."},503,origin);
+          const state=await backupReadJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY);
+          if(!state||state.stage!=="needs_attention"||!["exporting","importing"].includes(state.resume_stage))return json({error:"Нет операции, которую можно безопасно возобновить."},409,origin);
+          state.stage=state.resume_stage;state.resume_stage=null;state.retry_count=0;state.last_error=null;
+          await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
+          return json({ok:true,status:"resumed"},202,origin);
         }
         if(path==="/api/admin/backup-restore"&&method==="POST"){
           const body=await readJson(request),key=typeof body.key==="string"?body.key:"";
