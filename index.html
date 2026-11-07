@@ -133,7 +133,7 @@ body.light-theme .leaf-layer{opacity:.38}
  <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
  <div class="menu-grid">
   <button class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
-  <button class="menu-card" onclick="openBot('custom')"><strong>🎨 Создать своё</strong><span>Заказ по твоей идее — в боте</span></button>
+  <button class="menu-card" onclick="openCustomWizard()"><strong>🎨 Создать своё</strong><span>Индивидуальная работа за 8 шагов</span></button>
   <button class="menu-card" onclick="showView('vipView')"><strong>👑 VIP-подписка</strong><span>VIP-поддержка и ассистент</span></button>
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
@@ -164,6 +164,7 @@ body.light-theme .leaf-layer{opacity:.38}
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
  <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
+<section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 </section>
 <section id="profileView" class="hidden">
  <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
@@ -278,7 +279,7 @@ let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let favorites = new Set(JSON.parse(localStorage.getItem('gift-favs') || '[]'));
 let activeFilter = 'all';
 
-const allViews = ['menuView','catalogView','cartView','ordersView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
+const allViews = ['menuView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
 
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
@@ -520,6 +521,24 @@ async function sendSupport() {
  finally { button.disabled = false; }
 }
 
+
+const customSteps=[
+{key:'style',title:'Какой стиль хочешь?',hint:'Выбери художественное оформление.',options:[['classic','Классический',0],['cartoon','Мультяшный',40],['watercolor','Акварельный',80],['realistic','Реалистичный',150],['pixel','Пиксельный',30],['premium','Премиум-детализация',180]]},
+{key:'subject',title:'Что нужно изобразить?',hint:'Опиши предмет, животное, персонажа, место или сцену.',text:true,placeholder:'Например: уютный домик в заснеженном лесу…'},
+{key:'format',title:'Какой формат работы?',hint:'Размер влияет на объём работы.',options:[['postcard','Открытка',0],['a5','А5',40],['a4','А4',90],['large','Большой формат',140]]},
+{key:'palette',title:'Какая цветовая гамма?',hint:'Выбери общее настроение цветов.',options:[['natural','Естественные',0],['bright','Яркие',25],['pastel','Пастельные',35],['custom','Подобрать под идею',55]]},
+{key:'background',title:'Какой нужен фон?',hint:'Без фона, простой или детально проработанный.',options:[['none','Без фона',0],['simple','Простой фон',20],['full','Детальный фон',60]]},
+{key:'complexity',title:'Насколько детальной сделать работу?',hint:'Больше мелких элементов — больше времени.',options:[['simple','Простая',0],['medium','Средняя детализация',45],['detailed','Очень подробная',90]]},
+{key:'deadline',title:'Когда нужен заказ?',hint:'Точная дата согласуется отдельно.',options:[['standard','Обычный срок',0],['priority','Приоритетный заказ',100]]},
+{key:'wishes',title:'Дополнительные пожелания',hint:'Надписи, важные детали или то, чего точно не должно быть. Можно оставить пустым.',text:true,placeholder:'Например: золотая рамка и короткая надпись…'}
+];
+const customAnswers={};let customStep=0;
+function customPrice(){const p={"style":{"classic":0,"cartoon":40,"watercolor":80,"realistic":150,"pixel":30,"premium":180},"format":{"postcard":0,"a5":40,"a4":90,"large":140},"palette":{"natural":0,"bright":25,"pastel":35,"custom":55},"background":{"none":0,"simple":20,"full":60},"complexity":{"simple":0,"medium":45,"detailed":90},"deadline":{"standard":0,"priority":100}};let n=250;for(const k of Object.keys(p))n+=p[k][customAnswers[k]]||0;return Math.min(700,n);}
+function openCustomWizard(){Object.keys(customAnswers).forEach(k=>delete customAnswers[k]);customStep=0;renderCustomStep();showView('customWizardView');}
+function renderCustomStep(){const s=customSteps[customStep],n=customStep+1;document.getElementById('customStepLabel').textContent='Шаг '+n+' из 8';document.getElementById('customProgress').style.width=(n/8*100)+'%';document.getElementById('customQuestion').innerHTML='<h3>'+s.title+'</h3>';document.getElementById('customStepHint').textContent=s.hint;const opts=document.getElementById('customOptions'),fields=document.getElementById('customTextFields');opts.innerHTML='';fields.innerHTML='';if(s.options)s.options.forEach(([v,label,extra])=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label+(extra?' +'+extra+' ⭐':'');b.style.outline=customAnswers[s.key]===v?'2px solid var(--gold)':'none';b.onclick=()=>{customAnswers[s.key]=v;renderCustomStep();};opts.appendChild(b);});if(s.text){const t=document.createElement('textarea');t.rows=3;t.maxLength=s.key==='subject'?300:700;t.placeholder=s.placeholder;t.value=customAnswers[s.key]||'';t.style.cssText='width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit';t.oninput=()=>{customAnswers[s.key]=t.value;document.getElementById('customPrice').textContent=customPrice()+' ⭐';};fields.appendChild(t);}document.getElementById('customBack').disabled=customStep===0;document.getElementById('customNext').textContent=customStep===7?'Отправить заказ':'Далее →';document.getElementById('customPrice').textContent=customPrice()+' ⭐';}
+function customPrev(){if(customStep>0){customStep--;renderCustomStep();}}
+async function customNext(){const s=customSteps[customStep],v=customAnswers[s.key];if(s.key==='subject'&&(!v||v.trim().length<3)){toast('Напиши, что нужно изобразить.');return;}if(s.options&&!v){toast('Выбери вариант, чтобы продолжить.');return;}if(customStep<7){customStep++;renderCustomStep();return;}const b=document.getElementById('customNext');b.disabled=true;b.textContent='Отправляем…';try{const r=await apiFetch('/api/custom-orders',{method:'POST',body:JSON.stringify({answers:customAnswers})});toast('Заказ отправлен! Цена: '+r.total_stars+' ⭐');showView('ordersView');await loadMe();}catch(e){toast(e.message||'Не удалось отправить заказ.');}finally{b.disabled=false;b.textContent='Отправить заказ';}}
+
 async function checkout() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
  if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
@@ -554,14 +573,15 @@ async function checkout() {
 }
 
 async function loadMe() {
- try { const me = await apiFetch('/api/me'); const points = Number(me.points ?? me.balance_stars ?? 0);
-  document.getElementById('points').textContent = points.toLocaleString('ru-RU');
-  const bp = document.getElementById('balancePoints'); if (bp) bp.textContent = points.toLocaleString('ru-RU') + ' ⭐';
-  const pn = document.getElementById('profileName'); if (pn) pn.textContent = me.first_name || (me.username ? '@'+me.username : 'Пользователь Telegram');
-  const pp = document.getElementById('profilePoints'); if (pp) pp.textContent = points.toLocaleString('ru-RU') + ' баллов';
-  const orders = Array.isArray(me.orders) ? me.orders : []; const pc = document.getElementById('profileOrderCount'); if (pc) pc.textContent = orders.length;
-  const root = document.getElementById('ordersList'); if (root) root.innerHTML = orders.length ? orders.map(o => `<div class="lineitem"><span>${o.order_id}<br><small>${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${o.status === 'paid' ? 'Оплачен' : o.status === 'pending' ? 'Ожидает оплаты' : o.status}</small></b></div>`).join('') : '<p class="muted">Пока заказов нет.</p>';
- } catch(e) { if (initData) console.warn('Не удалось загрузить профиль:',e); }
+ try {
+  const [me,od]=await Promise.all([apiFetch('/api/me'),apiFetch('/api/orders')]),points=Number(me.points??me.balance_stars??0);
+  document.getElementById('points').textContent=points.toLocaleString('ru-RU');
+  const bp=document.getElementById('balancePoints');if(bp)bp.textContent=points.toLocaleString('ru-RU')+' ⭐';
+  const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
+  const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
+  const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
+  const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status);return `<div class="lineitem"><span><b>${o.title||o.order_id}</b><br><small>${o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога'} · ${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${state}</small></b></div>`;}).join(''):'<p class="muted">Пока заказов нет.</p>';
+ }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
 }
 async function openCase() {
  const result = document.getElementById('caseResult');
