@@ -371,6 +371,26 @@ export default {
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
         }
+        if (path === "/api/admin/dashboard" && method === "GET") {
+          const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM custom_orders").first(),
+            env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payments WHERE status='paid' AND currency='XTR'").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders WHERE payment_status='paid' AND fulfillment_status='awaiting_delivery'").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM custom_orders WHERE status='new'").first()
+          ]);
+          return json({
+            ok: true,
+            metrics: {
+              users: Number(users?.total || 0),
+              orders: Number(orders?.total || 0) + Number(customOrders?.total || 0),
+              revenue_stars: Number(revenue?.total || 0),
+              awaiting_processing: Number(waitingOrders?.total || 0) + Number(waitingCustom?.total || 0)
+            },
+            updated_at: new Date().toISOString()
+          }, 200, origin);
+        }
         return json({ error: "Admin route not found." }, 404, origin);
       }
 
