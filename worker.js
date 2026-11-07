@@ -529,8 +529,8 @@ export default {
           if (hasStatus && orderType === "product" && order.payment_status === "cancelled" && status !== "cancelled") {
             return json({ error: "Отменённый неоплаченный заказ нельзя повторно открыть." }, 409, origin);
           }
-          if (hasStatus && orderType === "product" && order.payment_status !== "paid" && !["new","cancelled"].includes(status)) {
-            return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в работу или готовые." }, 409, origin);
+          if (hasStatus && orderType === "product" && order.payment_status !== "paid" && status !== "cancelled") {
+            return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в рабочие статусы." }, 409, origin);
           }
           const previous = await getAdminOrderMeta(env, orderType, order);
           const statements = [];
