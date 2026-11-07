@@ -507,6 +507,28 @@ export default {
           }
           return json({ ok: true, telegram_id: targetId }, 200, origin);
         }
+        if (path === "/api/admin/order-notify" && method === "POST") {
+          const body = await readJson(request);
+          const orderId = typeof body.order_id === "string" ? body.order_id.trim().slice(0,100) : "";
+          const orderType = body.order_type;
+          if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
+          const order = orderType === "product"
+            ? await env.DB.prepare("SELECT id,telegram_id,payment_status,fulfillment_status,total_stars FROM orders WHERE id=?").bind(orderId).first()
+            : await env.DB.prepare("SELECT id,telegram_id,status,total_stars FROM custom_orders WHERE id=?").bind(orderId).first();
+          if (!order) return json({ error: "Заказ не найден." }, 404, origin);
+          const meta = await getAdminOrderMeta(env, orderType, order);
+          const labels = { unpaid: "ожидает оплаты", new: "принят и ожидает обработки", in_progress: "находится в работе", ready: "готов", cancelled: "отменён" };
+          const statusText = labels[meta.admin_status] || "обрабатывается";
+          const text = "🎁 Агентство подарков\n\nИнформация по вашему заказу № " + orderId + ": " + statusText + ".\nСумма: " + Number(order.total_stars || 0) + " ⭐\nЕсли у вас есть вопросы, ответьте на это сообщение.";
+          try {
+            await telegram(env, "sendMessage", { chat_id: String(order.telegram_id), text });
+          } catch (error) {
+            console.error("Order notification failed:", String(error).slice(0,300));
+            return json({ error: "Не удалось отправить сообщение. Возможно, покупатель не запускал бота или запретил сообщения." }, 502, origin);
+          }
+          await notifyOwner(env, "📨 Повторное уведомление по заказу " + orderId + " отправлено покупателю " + String(order.telegram_id));
+          return json({ ok: true, order_id: orderId, notified: true }, 200, origin);
+        }
         if (path === "/api/admin/order-update" && method === "POST") {
           if (!(await tableExists(env, "admin_action_log"))) return json({ error: "Требуется применить миграцию 0006_admin_action_log.sql перед управлением заказами." }, 503, origin);
           const body = await readJson(request);
