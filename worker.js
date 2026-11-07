@@ -394,6 +394,38 @@ export default {
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
           return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [] }, 200, origin);
         }
+        if (path === "/api/admin/balance-adjust" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const amount = Number(body.amount);
+          const reason = typeof body.reason === "string" ? body.reason.trim().slice(0,300) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          if (!Number.isSafeInteger(amount) || amount === 0 || Math.abs(amount) > 1000000) {
+            return json({ error: "Укажите целое количество баллов от 1 до 1 000 000 со знаком плюс или минус." }, 400, origin);
+          }
+          if (reason.length < 3) return json({ error: "Укажите причину операции (минимум 3 символа)." }, 400, origin);
+          const target = await env.DB.prepare("SELECT telegram_id,balance_stars FROM users WHERE telegram_id=?")
+            .bind(targetId).first();
+          if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
+          const operationId = makeId();
+          const description = "Операция владельца: " + reason;
+          const results = await env.DB.batch([
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars+?>=0")
+              .bind(amount, targetId, amount),
+            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'admin_adjustment',?,? WHERE changes()=1")
+              .bind(targetId, amount, description, "admin:" + operationId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'balance_adjustment',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ amount, reason, operation_id: operationId }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            const latest = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
+            if (!latest) return json({ error: "Пользователь не найден." }, 404, origin);
+            return json({ error: "Недостаточно баллов для списания или операция не выполнена. Баланс не изменён.", balance: Number(latest.balance_stars || 0) }, 409, origin);
+          }
+          const updated = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
+          await notifyOwner(env, "⭐ Изменение баланса владельцем\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
+          return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
+        }
         if (path === "/api/admin/dashboard" && method === "GET") {
           const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
