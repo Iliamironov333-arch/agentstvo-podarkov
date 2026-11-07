@@ -46,6 +46,21 @@ async function readJson(request) {
   try { return await request.json(); } catch { return {}; }
 }
 function makeId() { return crypto.randomUUID(); }
+function isMissingTableError(error, tableName) {
+  const message = String(error || "").toLowerCase();
+  return message.includes("no such table") && message.includes(String(tableName).toLowerCase());
+}
+async function optionalTableRows(statement, tableName) {
+  try { return await statement.all(); }
+  catch (error) {
+    if (isMissingTableError(error, tableName)) return { results: [], migration_pending: true };
+    throw error;
+  }
+}
+async function tableExists(env, tableName) {
+  try { await env.DB.prepare("SELECT 1 FROM " + tableName + " LIMIT 1").first(); return true; }
+  catch (error) { if (isMissingTableError(error, tableName)) return false; throw error; }
+}
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   let diff = 0;
@@ -390,13 +405,14 @@ export default {
             env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
-            env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId).all(),
-            env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all()
+            optionalTableRows(env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId), "user_blocks"),
+            optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId), "admin_action_log")
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [] }, 200, origin);
+          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending) }, 200, origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
+          if (!(await tableExists(env, "admin_action_log"))) return json({ error: "Требуется применить миграцию 0006_admin_action_log.sql перед управлением баллами." }, 503, origin);
           const body = await readJson(request);
           const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
           const amount = Number(body.amount);
@@ -429,6 +445,7 @@ export default {
           return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
         }
         if (path === "/api/admin/block-user" && method === "POST") {
+          if (!(await tableExists(env, "user_blocks")) || !(await tableExists(env, "admin_action_log"))) return json({ error: "Требуются миграции 0006 и 0007 перед управлением блокировками." }, 503, origin);
           const body = await readJson(request);
           const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
           const blockType = body.block_type;
@@ -451,6 +468,7 @@ export default {
           return json({ ok: true, telegram_id: targetId, block_type: blockType }, 200, origin);
         }
         if (path === "/api/admin/unblock-user" && method === "POST") {
+          if (!(await tableExists(env, "user_blocks")) || !(await tableExists(env, "admin_action_log"))) return json({ error: "Требуются миграции 0006 и 0007 перед управлением блокировками." }, 503, origin);
           const body = await readJson(request);
           const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
           if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
@@ -528,8 +546,14 @@ export default {
       }
 
       // Enforce user restrictions server-side after owner routes, so the owner can always administer accounts.
-      const activeBlock = await env.DB.prepare("SELECT block_type,reason FROM user_blocks WHERE telegram_id=? AND status='active' LIMIT 1")
-        .bind(telegramId).first();
+      let activeBlock = null;
+      try {
+        activeBlock = await env.DB.prepare("SELECT block_type,reason FROM user_blocks WHERE telegram_id=? AND status='active' LIMIT 1")
+          .bind(telegramId).first();
+      } catch (error) {
+        // Keep the storefront operational until the owner applies migration 0007.
+        if (!isMissingTableError(error, "user_blocks")) throw error;
+      }
       if (activeBlock?.block_type === "full") {
         return json({ error: "Доступ к Агентству ограничен владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
