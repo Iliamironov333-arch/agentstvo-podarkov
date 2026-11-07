@@ -122,12 +122,50 @@ async function createInvoice(env, title, description, payload, amount) {
   });
 }
 async function createPaymentIntent(env, data) {
-  const invoiceUrl = await createInvoice(env, data.title, data.description, data.payload, data.amount_stars);
   await env.DB.prepare("INSERT INTO payment_intents (payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES (?,?,?,?,?,?,?,'pending')")
     .bind(data.payload, String(data.telegram_id), data.kind, data.reference_id || null,
       data.amount_stars, data.bonus_points || 0, data.plan_type || null).run();
-  return invoiceUrl;
+  try {
+    return await createInvoice(env, data.title, data.description, data.payload, data.amount_stars);
+  } catch (error) {
+    await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'")
+      .bind(data.payload).run();
+    throw error;
+  }
 }
+
+async function createSupportAnswer(env, history, isVip) {
+  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
+  const instructions = [
+    "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
+    "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
+    "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
+    "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
+    "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
+    "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
+    isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу."
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
+      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 500 })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error("OpenAI support request failed:", response.status, JSON.stringify(data).slice(0, 1000));
+    throw new Error("Сервис помощника временно недоступен. Попробуй позже.");
+  }
+  let answer = typeof data.output_text === "string" ? data.output_text : "";
+  if (!answer && Array.isArray(data.output)) {
+    answer = data.output.flatMap(item => Array.isArray(item.content) ? item.content : [])
+      .filter(part => part.type === "output_text" && typeof part.text === "string")
+      .map(part => part.text).join("\n");
+  }
+  if (!answer.trim()) throw new Error("Помощник не вернул ответ. Попробуй ещё раз.");
+  return answer.trim().slice(0, 4000);
+}
+
 async function handleWebhook(request, env) {
   const supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(supplied || "", env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -263,7 +301,7 @@ export default {
           .bind(telegramId).first();
         const orders = await env.DB.prepare("SELECT id AS order_id,created_at,total_stars AS amount,'XTR' AS currency,payment_status AS status FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 20")
           .bind(telegramId).all();
-        const vip = await env.DB.prepare("SELECT plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? ORDER BY id DESC LIMIT 1")
+        const vip = await env.DB.prepare("SELECT plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1")
           .bind(telegramId).first();
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
@@ -359,7 +397,7 @@ export default {
       }
 
       if (path === "/api/vip" && method === "GET") {
-        const vip = await env.DB.prepare("SELECT id,plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? ORDER BY id DESC LIMIT 1")
+        const vip = await env.DB.prepare("SELECT id,plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1")
           .bind(telegramId).first();
         return json({ vip: vip || null }, 200, origin);
       }
@@ -376,13 +414,41 @@ export default {
         return json({ ok: true, invoice_url: invoiceUrl, plan_type: planType }, 200, origin);
       }
 
+      if (path === "/api/support/chat" && method === "GET") {
+        const rows = await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 30")
+          .bind(telegramId).all();
+        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
+          .bind(telegramId).first();
+        return json({ messages: (rows.results || []).reverse(), vip: !!vip }, 200, origin);
+      }
+
       if (path === "/api/support/chat" && method === "POST") {
         const body = await readJson(request);
         const message = typeof body.message === "string" ? body.message.trim() : "";
         if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов" }, 400, origin);
-        await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
-        await notifyOwner(env, "💬 Обращение в поддержку\nTelegram ID: " + telegramId + "\n\n" + message);
-        return json({ ok: true, saved: true, reply: "Сообщение сохранено. Ожидайте ответа." }, 200, origin);
+        if (!env.OPENAI_API_KEY) return json({ error: "ИИ-помощник ещё не подключён. Владелец должен добавить OPENAI_API_KEY в Cloudflare." }, 503, origin);
+        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
+          .bind(telegramId).first();
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content) VALUES (?,'user',?)")
+          .bind(telegramId, message).run();
+        const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 12")
+          .bind(telegramId).all();
+        const history = (rows.results || []).reverse();
+        let reply;
+        try {
+          reply = await createSupportAnswer(env, history, !!vip);
+        } catch (error) {
+          console.error("Support assistant failed:", String(error));
+          return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
+        }
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content) VALUES (?,'assistant',?)")
+          .bind(telegramId, reply).run();
+        const ownerRequested = /(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message);
+        if (ownerRequested) {
+          await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
+          await notifyOwner(env, "💬 Запрос на помощь владельца\nTelegram ID: " + telegramId + "\n\n" + message);
+        }
+        return json({ ok: true, reply, vip: !!vip, saved: true }, 200, origin);
       }
 
       return json({ error: "Маршрут не найден" }, 404, origin);
