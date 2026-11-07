@@ -311,7 +311,7 @@ async function handleWebhook(request, env) {
   if (!chargeId) return json({ ok: true });
 
   if (intent.kind === "order") {
-    const order = await env.DB.prepare("SELECT id,product_title,total_stars,payment_status FROM orders WHERE id=? AND telegram_id=?")
+    const order = await env.DB.prepare("SELECT id,product_title,total_stars,payment_status,promo_code FROM orders WHERE id=? AND telegram_id=?")
       .bind(intent.reference_id, telegramId).first();
     if (!order) return json({ ok: true });
     const earned = Math.floor(Number(intent.amount_stars) / 3);
@@ -330,6 +330,8 @@ async function handleWebhook(request, env) {
         statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
           .bind(earned, telegramId));
       }
+      statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
+      statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
       if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
@@ -471,6 +473,25 @@ export default {
         if (telegramId !== ownerId) return json({ error: "Owner access required." }, 403, origin);
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
+        }
+        if(path==="/api/admin/promos"&&method==="GET"){
+          if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true},200,origin);
+          const rows=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100").all();
+          return json({ok:true,promos:rows.results||[]},200,origin);
+        }
+        if(path==="/api/admin/promo-save"&&method==="POST"){
+          if(!(await tableExists(env,"promo_codes")))return json({error:"Требуется миграция 0013_promo_codes.sql."},503,origin);
+          const body=await readJson(request),code=String(body.code||"").trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32);
+          const percent=Number(body.discount_percent),maxUses=body.max_uses===""||body.max_uses===null||body.max_uses===undefined?null:Number(body.max_uses);
+          const starts=typeof body.starts_at==="string"&&body.starts_at.trim()?body.starts_at.trim().slice(0,40):null;
+          const ends=typeof body.ends_at==="string"&&body.ends_at.trim()?body.ends_at.trim().slice(0,40):null;
+          const active=body.is_active===true||body.is_active===1?1:0;
+          if(!/^[A-Z0-9_-]{3,32}$/.test(code)||!Number.isSafeInteger(percent)||percent<1||percent>90||(maxUses!==null&&(!Number.isSafeInteger(maxUses)||maxUses<1)))return json({error:"Проверьте код, скидку 1–90% и лимит использований."},400,origin);
+          if(starts&&ends&&Date.parse(starts)>=Date.parse(ends))return json({error:"Дата окончания должна быть позже даты начала."},400,origin);
+          await env.DB.prepare("INSERT INTO promo_codes (code,discount_percent,max_uses,starts_at,ends_at,is_active) VALUES (?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET discount_percent=excluded.discount_percent,max_uses=excluded.max_uses,starts_at=excluded.starts_at,ends_at=excluded.ends_at,is_active=excluded.is_active,updated_at=CURRENT_TIMESTAMP")
+            .bind(code,percent,maxUses,starts,ends,active).run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"promo_code_saved",JSON.stringify({code,discount_percent:percent,max_uses:maxUses,is_active:active})).run();
+          return json({ok:true,code},200,origin);
         }
         if (path === "/api/admin/products" && method === "GET") {
           const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY CAST(id AS INTEGER),created_at DESC").all();
@@ -1214,6 +1235,23 @@ export default {
         return json({ok:true,order_id:id,total_stars:total,status:"new"},200,origin);
       }
 
+        if (path === "/api/promo/validate" && method === "POST") {
+          const body=await readJson(request),code=String(body.code||"").trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32);
+          if(!code)return json({error:"Введите промокод."},400,origin);
+          if(!(await tableExists(env,"promo_codes")))return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
+          const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(code).first();
+          if(!promo||!promo.is_active)return json({error:"Промокод не найден или отключён."},404,origin);
+          if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
+          if(promo.ends_at&&Date.parse(promo.ends_at)<Date.now())return json({error:"Срок действия промокода закончился."},400,origin);
+          if(promo.max_uses!==null&&Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)>=Number(promo.max_uses))return json({error:"Лимит использований промокода исчерпан."},409,origin);
+          if(!Array.isArray(body.items)||!body.items.length||body.items.length>43)return json({error:"Корзина пуста."},400,origin);
+          const catalog=await getProducts(env),quantities=new Map();
+          for(const item of body.items){const id=String(item.id??""),qty=Number(item.qty);if(!Number.isSafeInteger(qty)||qty<1||qty>10)return json({error:"Некорректное количество товара."},400,origin);quantities.set(id,(quantities.get(id)||0)+qty);}
+          let subtotal=0;for(const [id,qty] of quantities){const product=catalog.find(p=>String(p.id)===id);if(!product)return json({error:"Товар больше недоступен."},409,origin);subtotal+=Number(product.price_stars)*qty;}
+          if(!Number.isSafeInteger(subtotal)||subtotal<1)return json({error:"Некорректная сумма."},400,origin);
+          const discount=Math.min(subtotal-1,Math.floor(subtotal*Number(promo.discount_percent)/100));
+          return json({ok:true,code:promo.code,discount_percent:Number(promo.discount_percent),subtotal,discount_stars:discount,total_stars:subtotal-discount},200,origin);
+        }
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
         if (!Array.isArray(body.items) || !body.items.length || body.items.length > 43) return json({ error: "Корзина пуста или некорректна" }, 400, origin);
@@ -1235,27 +1273,44 @@ export default {
         // The customer receives the shared payment-confirmation postcard; the seller delivers the artwork separately.
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
-        const discount = 0; // Каталожные цены уже содержат скидку.
-        const total = subtotal;
+        let discount = 0, promoCode = null, discountPercent = 0;
+        const requestedPromo = typeof body.promo_code === "string" ? body.promo_code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32) : "";
+        if(requestedPromo){
+          if(!(await tableExists(env,"promo_codes")))return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
+          const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(requestedPromo).first();
+          if(!promo||!promo.is_active)return json({error:"Промокод не найден или отключён."},404,origin);
+          if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
+          if(promo.ends_at&&Date.parse(promo.ends_at)<Date.now())return json({error:"Срок действия промокода закончился."},400,origin);
+          if(promo.max_uses!==null&&Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)>=Number(promo.max_uses))return json({error:"Лимит использований промокода исчерпан."},409,origin);
+          promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(subtotal-1,Math.floor(subtotal*discountPercent/100));
+        }
+        const total = subtotal-discount;
         const orderId = makeId();
         const title = items.map(item => item.title + " × " + item.qty).join("; ");
         const orderStatements = [
-          env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
+          env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?)")
             .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title,
-              items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total),
+              items.reduce((sum, item) => sum + item.qty, 0), subtotal, discountPercent, total, promoCode, discount),
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
             .bind(orderId, item.id, item.title, item.qty, item.image_url))
         ];
-        // D1 batch is transactional: the order and all its line items are created together.
-        await env.DB.batch(orderStatements);
+        if(promoCode){
+          orderStatements.unshift(env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode));
+          orderStatements.push(env.DB.prepare("INSERT INTO promo_redemptions (order_id,code,telegram_id,discount_stars,status) SELECT ?,?,?,?,'reserved' WHERE changes()=1").bind(orderId,promoCode,telegramId,discount));
+        }
+        const orderResults=await env.DB.batch(orderStatements);
+        if(promoCode&&(!orderResults[0]?.meta||orderResults[0].meta.changes!==1))return json({error:"Промокод только что исчерпал лимит. Попробуйте другой."},409,origin);
         try {
           const invoiceUrl = await createPaymentIntent(env, { payload: orderId, telegram_id: telegramId,
             kind: "order", reference_id: orderId, amount_stars: total, title: "Заказ " + orderId.slice(0, 8),
             description: title });
           return json({ ok: true, invoice_url: invoiceUrl, order_id: orderId }, 200, origin);
         } catch (error) {
-          await env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'")
-            .bind(orderId).run();
+          await env.DB.batch([
+            env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId),
+            env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId),
+            env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId)
+          ]);
           throw error;
         }
       }
