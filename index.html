@@ -34,7 +34,6 @@ main{padding:12px 15px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
 .product{background:linear-gradient(155deg,#30251b,#211a14);border:1px solid var(--line);border-radius:17px;overflow:hidden;min-width:0}
 .art{height:112px;display:grid;place-items:center;background:radial-gradient(circle,#594027,#2c2117 72%);font-size:53px;position:relative}
-.fav{position:absolute;right:8px;top:8px;background:#17130fba;border:1px solid #80633f;border-radius:50%;width:31px;height:31px;color:white;font-size:17px}
 .productbody{padding:11px}
 .product h3{font-size:13px;line-height:1.35;margin:0 0 8px;min-height:35px}
 .price{font-weight:800;color:var(--gold2);font-size:15px}
@@ -52,6 +51,7 @@ main{padding:12px 15px}
 .bottom button{border:0;background:none;color:var(--muted);font-size:11px;padding:5px 0}
 .bottom button strong{display:block;font-size:20px;margin-bottom:3px}
 .bottom button.active{color:var(--gold2)}
+button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.55)}
 .menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
 .menu-card{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:14px;text-align:left;color:var(--text);min-height:88px}
 .menu-card:first-child{grid-column:1/-1;background:linear-gradient(120deg,#493019,#2b2117);min-height:72px}
@@ -90,8 +90,7 @@ body.light-theme .hero small{color:#9c5a13}
 body.light-theme .hero p{color:#79634d}
 body.light-theme .product{background:#fff;border-color:var(--line);box-shadow:0 3px 12px #6b45100b}
 body.light-theme .art{background:radial-gradient(circle,#fff0d6,#fffaf3 72%)}
-body.light-theme .fav{background:#ffffffdf;border-color:#e4c99f;color:#8a4b08}
-body.light-theme .panel{background:#fff;border-color:var(--line)}
+body.light-theme body.light-theme .panel{background:#fff;border-color:var(--line)}
 body.light-theme .secondary{background:#fff3df;color:#75420e;border-color:#e7c99a}
 body.light-theme .bottom{background:#fffaf3f5;border-color:var(--line)}
 body.light-theme .bottom button{color:#8a7560}
@@ -140,7 +139,7 @@ body.light-theme .leaf-layer{opacity:.38}
   <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
   <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
-  <button class="menu-card" onclick="showView('favoritesView')"><strong>❤️ Избранное</strong><span>Сохранённые товары</span></button>
+  <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Создание идей поделок и подробных инструкций</span></button>
   <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
  </div>
 </section>
@@ -178,16 +177,22 @@ body.light-theme .leaf-layer{opacity:.38}
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>💬 Поддержка</h2></div>
+ <div class="panel" id="vipHelpCard"><h3>👑 Помощь Агентства VIP</h3><p class="muted" id="vipHelpDescription">Проверяем действующую подписку…</p><button class="primary" id="vipHelpButton" onclick="openVipSupport()" disabled>🔒 VIP-помощь заблокирована</button></div>
  <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
 </section>
+<section id="aiWorkshopView" class="hidden">
+ <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Опишите задумку — помощник разработает оригинальную идею поделки и объяснит, как её создать.</p></div>
+ <div class="panel"><h3>Создать идею поделки</h3><label class="muted" for="craftTheme" style="display:block;margin:10px 0 6px">Что хотите сделать?</label><textarea id="craftTheme" rows="3" maxlength="1200" placeholder="Например: необычный подарок из бумаги в осенней тематике…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
+ <label class="muted" for="craftMaterial" style="display:block;margin:12px 0 6px">Предпочтительные материалы</label><select id="craftMaterial" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><option value="На усмотрение помощника">На усмотрение помощника</option><option>Бумага и картон</option><option>Пластилин</option><option>Природные материалы</option><option>Ткань и нитки</option><option>Краски и карандаши</option><option>Подручные материалы</option></select>
+ <label class="muted" for="craftLevel" style="display:block;margin:12px 0 6px">Сложность</label><select id="craftLevel" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><option value="Простая">Простая</option><option value="Средняя" selected>Средняя</option><option value="Сложная">Сложная</option></select>
+ <button class="primary" id="craftGenerateBtn" onclick="generateCraft()">✨ Придумать поделку</button><p class="notice" id="craftResultStatus" aria-live="polite">Помощник предложит название, материалы и последовательность изготовления.</p></div>
+ <div class="panel hidden" id="craftResultPanel"><h3 id="craftResultTitle">Ваша идея</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
+</section>
+<section id="vipSupportView" class="hidden"><div class="sectionhead"><h2>👑 VIP-помощь Агентства</h2><span id="vipHelpStatus">Проверка подписки…</span></div><div class="panel"><p class="muted">Персональная помощь для владельцев действующей VIP-подписки. Опишите вопрос — помощник учтёт VIP-статус и при необходимости передаст обращение владельцу.</p><textarea id="vipSupportMessage" rows="4" maxlength="2000" placeholder="Опишите, с чем нужна помощь…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="vipSupportSendBtn" onclick="sendVipSupport()">Отправить в VIP-поддержку</button><p class="notice" id="vipSupportResult" aria-live="polite"></p></div></section>
 <section id="balanceView" class="hidden">
  <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
  <div class="panel"><div class="lineitem"><span>Баланс</span><b id="balancePoints">— ⭐</b></div><p class="muted">1 Telegram Star = 1 балл. Все операции фиксируются в базе Агентства.</p><div class="sectionhead"><h3>Пополнить</h3><span>выбери сумму</span></div><div class="row-actions"><button class="secondary" onclick="topUp(50)">50 ⭐</button><button class="secondary" onclick="topUp(100)">100 ⭐</button><button class="secondary" onclick="topUp(250)">250 ⭐</button><button class="secondary" onclick="topUp(500)">500 ⭐</button><button class="secondary" onclick="topUp(750)">750 ⭐</button><button class="secondary" onclick="topUp(1000)">1000 ⭐</button></div><div style="margin-top:16px"><label for="customTopUpAmount" class="muted" style="display:block;margin-bottom:7px">Или укажите собственную сумму (от 1 до 10 000 ⭐)</label><input id="customTopUpAmount" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="Например, 1250" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><button class="primary" type="button" onclick="topUpCustom()">Пополнить на указанную сумму</button><p class="notice">Сервер проверит сумму и создаст счёт Telegram Stars. При сумме свыше 500 ⭐ сохраняется бонус +50 баллов.</p></div></div>
  <div class="panel"><h3>История операций</h3><div id="balanceHistory"><p class="muted">Загружаем операции…</p></div></div>
-</section>
-<section id="favoritesView" class="hidden">
- <div class="sectionhead"><h2>❤️ Избранное</h2><span>сохранённые товары</span></div>
- <div class="grid" id="favoriteProducts"></div>
 </section>
 <section id="dealsView" class="hidden">
  <div class="hero"><small>Осенняя акция</small><h2>🍂 Скидка 10% на всё</h2><p>Выбирай авторские подарки из каталога. Скидка будет подтверждена при оформлении заказа в боте.</p><button class="primary" onclick="showView('catalogView')">Перейти в магазин</button></div>
@@ -200,7 +205,7 @@ body.light-theme .leaf-layer{opacity:.38}
 <div class="bottom">
  <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
  <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
- <button data-view="favoritesView"><strong>❤️</strong>Избранное</button>
+ <button data-view="aiWorkshopView"><strong>🧵</strong>ИИ-мастерская</button>
  <button data-view="supportView"><strong>💬</strong>Поддержка</button>
  <button data-view="ordersView"><strong>📦</strong>Заказы</button>
 </div>
@@ -276,18 +281,18 @@ async function loadProducts() {
  }
 }
 let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
-let favorites = new Set(JSON.parse(localStorage.getItem('gift-favs') || '[]'));
+let vipActive = false;
 let activeFilter = 'all';
 
-const allViews = ['menuView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
+const allViews = ['menuView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
- if (id === 'favoritesView') { loadFavorites(); drawFavorites(); }
- if (id === 'supportView') loadSupportHistory();
+ if (id === 'supportView') { loadSupportHistory(); refreshVipHelpCard(); }
+ if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
 }
@@ -340,14 +345,9 @@ function drawProducts() {
 
  shown.forEach(p => {
   const qty = Number(cart[p[0]] || 0);
-  const fav = favorites.has(p[0]);
   const el = document.createElement('article');
   el.className = 'product';
-  el.innerHTML = `<div class="art"><span>${p[3]}</span><button class="fav" aria-label="Избранное">${fav?'♥':'♡'}</button></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
-
-  el.querySelector('.fav').onclick = () => {
-   toggleFavorite(p[0]);
-  };
+  el.innerHTML = `<div class="art"><span>${p[3]}</span></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
 
   el.querySelector('.add').onclick = () => {
    if (qty) {
@@ -432,21 +432,6 @@ function formatDate(value) {
  return Number.isNaN(date.getTime()) ? raw : date.toLocaleString('ru-RU');
 }
 
-async function loadFavorites() {
- if (!initData) return;
- try { const data = await apiFetch('/api/favorites'); favorites = new Set((data.favorites || []).map(x => Number(x.product_id))); localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); if (!document.getElementById('favoritesView').classList.contains('hidden')) drawFavorites(); }
- catch(e) { console.warn('Не удалось загрузить избранное:',e); }
-}
-
-async function toggleFavorite(id) {
- const wasSaved = favorites.has(id);
- if (wasSaved) favorites.delete(id); else favorites.add(id);
- localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); drawFavorites();
- if (!initData) { toast('Сохранено на этом устройстве. Для синхронизации открой приложение в Telegram.'); return; }
- try { await apiFetch('/api/favorites',{method:'POST',body:JSON.stringify({product_id:String(id),action:wasSaved?'remove':'add'})}); }
- catch(e) { if (wasSaved) favorites.add(id); else favorites.delete(id); localStorage.setItem('gift-favs',JSON.stringify([...favorites])); drawProducts(); drawFavorites(); toast('Не удалось сохранить избранное: '+e.message); }
-}
-
 async function loadBalance() {
  if (!initData) return;
  const root = document.getElementById('balanceHistory');
@@ -477,15 +462,11 @@ async function topUp(amount) {
 
 async function subscribeVip(planType) {
  try { const data = await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})}); if (!data.invoice_url) throw new Error('Сервер не вернул счёт VIP.');
-  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Оплата VIP подтверждена!'); loadVip(); } else if(status==='pending') toast('Платёж VIP обрабатывается.'); else if(status==='failed') toast('Не удалось провести оплату VIP.'); });
+  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Оплата VIP подтверждена!'); loadVip(); loadMe(); refreshVipHelpCard(); } else if(status==='pending') toast('Платёж VIP обрабатывается.'); else if(status==='failed') toast('Не удалось провести оплату VIP.'); });
  } catch(e) { toast(e.message || 'Не удалось оформить VIP.'); }
 }
 
-async function loadVip() {
- const el = document.getElementById('vipStatus'); if (!el || !initData) return;
- try { const data = await apiFetch('/api/vip'); const vip = data.vip; el.textContent = vip && vip.status === 'active' ? `VIP активен: ${vip.plan_type === 'lifetime' ? 'навсегда' : 'подписка'}${vip.expires_at ? ' · до '+formatDate(vip.expires_at) : ''}.` : 'Активной VIP-подписки пока нет.'; }
- catch(e) { el.textContent = 'Не удалось загрузить статус VIP: '+e.message; }
-}
+async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
 
 function renderSupportMessages(messages) {
  const root = document.getElementById('supportChatLog');
@@ -532,6 +513,12 @@ async function sendSupport() {
  finally { button.disabled = false; }
 }
 
+
+function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),d=document.getElementById('vipHelpDescription'),b=document.getElementById('vipHelpButton'),h=document.getElementById('vipHelpStatus');if(s&&!v)s.textContent='Активной VIP-подписки пока нет.';if(d)d.textContent=v?'Подписка подтверждена сервером. Вам доступен отдельный канал VIP-помощи.':'Для доступа необходима действующая VIP-подписка. Обычная поддержка остаётся доступной.';if(b){b.disabled=!v;b.textContent=v?'Открыть VIP-помощь →':'🔒 VIP-помощь заблокирована';}if(h)h.textContent=v?'Подписка активна':'Нужен VIP';}
+async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку. Обновите приложение.';}}
+function openVipSupport(){if(!vipActive){toast('Для VIP-помощи нужна действующая подписка.');return;}showView('vipSupportView');}
+async function sendVipSupport(){const i=document.getElementById('vipSupportMessage'),r=document.getElementById('vipSupportResult'),b=document.getElementById('vipSupportSendBtn'),message=i.value.trim();if(!message){r.textContent='Опишите вопрос перед отправкой.';return;}b.disabled=true;r.textContent='VIP-помощник готовит ответ…';try{const d=await apiFetch('/api/vip/support',{method:'POST',body:JSON.stringify({message})});i.value='';r.textContent=d.reply||'Обращение обработано.';}catch(e){r.textContent=e.message||'Не удалось отправить обращение.';}finally{b.disabled=false;}}
+async function generateCraft(){const theme=document.getElementById('craftTheme').value.trim(),material=document.getElementById('craftMaterial').value,level=document.getElementById('craftLevel').value,b=document.getElementById('craftGenerateBtn'),s=document.getElementById('craftResultStatus'),p=document.getElementById('craftResultPanel');if(theme.length<3){s.textContent='Опишите задумку хотя бы несколькими словами.';return;}b.disabled=true;b.textContent='Создаём идею…';s.textContent='ИИ-мастерская разрабатывает поделку…';p.classList.add('hidden');try{const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({theme,material,level})});document.getElementById('craftResultTitle').textContent=d.title||'Ваша идея поделки';document.getElementById('craftResultText').textContent=d.answer||'Помощник не вернул описание.';p.classList.remove('hidden');s.textContent='Готово! Идея создана.';}catch(e){s.textContent=e.message||'Не удалось создать идею. Попробуйте ещё раз.';}finally{b.disabled=false;b.textContent='✨ Придумать поделку';}}
 
 const customSteps=[
 {key:'style',title:'Какой стиль работы вы предпочитаете?',hint:'Перспектива — это изображение пространства, в котором линии визуально сходятся в одной точке вдали, например дорога уходит к горизонту.',options:[['classic','Классический',0],['watercolor','Акварельный',80],['perspective','С перспективой',120],['autumn','Осенний',40],['realistic','Реалистичный',150],['artist_choice','На усмотрение',0]]},
@@ -588,7 +575,8 @@ async function loadMe() {
   const [me,od]=await Promise.all([apiFetch('/api/me'),apiFetch('/api/orders')]),points=Number(me.points??me.balance_stars??0);
   document.getElementById('points').textContent=points.toLocaleString('ru-RU');
   const bp=document.getElementById('balancePoints');if(bp)bp.textContent=points.toLocaleString('ru-RU')+' ⭐';
-  const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
+  setVipUi(!!me.vip);
+ const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status);return `<div class="lineitem"><span><b>${o.title||o.order_id}</b><br><small>${o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога'} · ${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${state}</small></b></div>`;}).join(''):'<p class="muted">Пока заказов нет.</p>';
@@ -620,20 +608,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 
 document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
-function drawFavorites() {
- const root = document.getElementById('favoriteProducts'); const list = products.filter(p => favorites.has(p[0])); root.innerHTML = '';
- if (!list.length) { root.innerHTML = '<p class="muted">Пока нет избранных товаров. Нажми ♡ на карточке в каталоге.</p>'; return; }
- list.forEach(p => { const el = document.createElement('article'); el.className = 'product';
-  el.innerHTML = `<div class="art">${p[3]}</div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])}</div><button class="add">＋ В корзину</button><button class="secondary remove-fav" style="width:100%;margin-top:7px">Убрать из избранного</button></div>`;
-  el.querySelector('.add').onclick = () => addFavoriteToCart(p[0]); el.querySelector('.remove-fav').onclick = () => toggleFavorite(p[0]); root.appendChild(el);
- });
-}
-function addFavoriteToCart(id) {
- const p = products.find(x => x[0] === id);
- if (!p || p[2] == null) return toast('Цена этой работы пока уточняется.');
- cart[id] = Number(cart[id] || 0) + 1;
- persistCart();
- drawProducts();
+drawProducts();
  drawCart();
  toast('Добавлено в корзину 🎁');
 }
@@ -642,7 +617,7 @@ drawProducts();
 drawCart();
 loadProducts();
 loadMe();
-loadFavorites();
+refreshVipHelpCard();
 showView('menuView');
 </script>
 </body>
