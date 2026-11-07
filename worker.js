@@ -772,6 +772,18 @@ export default {
             updated_at: new Date().toISOString()
           }, 200, origin);
         }
+        if (path === "/api/admin/analytics" && method === "GET") {
+          const [dailyRevenue, dailyOrders, newUsers, totals] = await Promise.all([
+            env.DB.prepare("SELECT date(confirmed_at) AS day,COALESCE(SUM(amount_stars),0) AS stars,COUNT(*) AS payments FROM payments WHERE status='paid' AND currency='XTR' AND confirmed_at>=datetime('now','-30 days') GROUP BY date(confirmed_at) ORDER BY day").all(),
+            env.DB.prepare("SELECT date(created_at) AS day,COUNT(*) AS orders FROM orders WHERE created_at>=datetime('now','-30 days') GROUP BY date(created_at) ORDER BY day").all(),
+            env.DB.prepare("SELECT date(created_at) AS day,COUNT(*) AS users FROM users WHERE created_at>=datetime('now','-30 days') GROUP BY date(created_at) ORDER BY day").all(),
+            env.DB.prepare("SELECT (SELECT COUNT(*) FROM orders WHERE payment_status='paid') AS paid_orders,(SELECT COUNT(*) FROM custom_orders) AS custom_orders,(SELECT COUNT(*) FROM users) AS users,(SELECT COALESCE(SUM(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS revenue_stars,(SELECT COALESCE(AVG(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS average_check").first()
+          ]);
+          return json({ok:true,period_days:30,daily_revenue:dailyRevenue.results||[],daily_orders:dailyOrders.results||[],new_users:newUsers.results||[],totals:{
+            paid_orders:Number(totals?.paid_orders||0),custom_orders:Number(totals?.custom_orders||0),users:Number(totals?.users||0),
+            revenue_stars:Number(totals?.revenue_stars||0),average_check_stars:Math.round(Number(totals?.average_check||0))
+          },updated_at:new Date().toISOString()},200,origin);
+        }
         if (path === "/api/admin/support/conversations" && method === "GET") {
           const url = new URL(request.url);
           const term = (url.searchParams.get("q") || "").trim().slice(0,64);
@@ -787,13 +799,27 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
-          const [profile, messages, control] = await Promise.all([
-            env.DB.prepare("SELECT telegram_id,first_name,username,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
+          const [profile, messages, control, productOrders, customOrders, tickets, notes, balanceHistory] = await Promise.all([
+            env.DB.prepare("SELECT telegram_id,first_name,username,created_at,balance_stars,updated_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId).all(),
-            env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first()
+            env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first(),
+            env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status AS payment_status,fulfillment_status AS status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
+            optionalTableRows(env.DB.prepare("SELECT id,'Индивидуальный заказ: ' || subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId), "custom_orders"),
+            env.DB.prepare("SELECT id,message,status,created_at FROM support_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
+            optionalTableRows(env.DB.prepare("SELECT id,admin_telegram_id,note,created_at FROM support_internal_notes WHERE telegram_id=? ORDER BY id DESC LIMIT 100").bind(targetId), "support_internal_notes"),
+            env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 20").bind(targetId).all()
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null, messages: (messages.results || []).reverse() }, 200, origin);
+          const orders = [
+            ...(productOrders.results || []).map(row => ({...row, order_type:"product"})),
+            ...(customOrders.results || []).map(row => ({...row, order_type:"custom"}))
+          ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
+          return json({
+            ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
+            messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
+            notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
+            balance_history: balanceHistory.results || []
+          }, 200, origin);
         }
         if (path === "/api/admin/support/tickets" && method === "GET") {
           const url = new URL(request.url);
