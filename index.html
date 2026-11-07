@@ -198,6 +198,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    </div>
    <p id="adminOrdersStatus" class="notice" aria-live="polite">Заказы загружаются…</p>
    <div id="adminOrdersList"></div>
+   <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
@@ -636,6 +637,46 @@ async function loadAdminDashboard() {
  }
 }
 
+async function openAdminOrder(orderId,orderType) {
+ const box=document.getElementById('adminOrderDetail');if(!box)return;
+ box.classList.remove('hidden');box.textContent='Загружаем заказ…';
+ try{
+  const params=new URLSearchParams({order_id:String(orderId),order_type:String(orderType)});
+  const data=await apiFetch('/api/admin/order?'+params.toString());
+  const order=data.order||{};box.replaceChildren();
+  const title=document.createElement('div');title.className='admin-detail-title';
+  title.textContent=(orderType==='custom'?'🎨 Индивидуальный заказ':'📦 Заказ')+' № '+order.id;box.append(title);
+  const addLine=(label,value)=>{
+   const line=document.createElement('div');line.className='admin-detail-line';
+   const strong=document.createElement('b');strong.textContent=label+': ';
+   const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
+   line.append(strong,span);box.append(line);
+  };
+  addLine('Покупатель',order.first_name||order.username||order.telegram_id);
+  addLine('Telegram ID',order.telegram_id);
+  addLine('Дата',order.created_at);
+  addLine('Сумма',Number(order.total_stars||0)+' ⭐');
+  if(orderType==='product'){
+   addLine('Оплата',order.payment_status);
+   addLine('Статус выполнения',order.fulfillment_status);
+   addLine('Скидка',Number(order.discount_percent||0)+'%');
+   const payment=data.payment;
+   if(payment)addLine('Платёж',payment.status+' · '+payment.amount_stars+' '+payment.currency+' · '+(payment.confirmed_at||payment.created_at));
+   const items=Array.isArray(data.items)?data.items:[];
+   addLine('Позиций',items.length);
+   items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
+  }else{
+   addLine('Тема',order.subject);
+   addLine('Статус',order.status);
+   let answers=order.answers_json||'';
+   try{answers=JSON.stringify(JSON.parse(answers),null,2);}catch(e){}
+   addLine('Ответы и пожелания',answers);
+  }
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть подробности';
+  close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+ }catch(e){box.textContent=e.message||'Не удалось загрузить заказ.';}
+}
+
 async function loadAdminOrders() {
  const status=document.getElementById('adminOrdersStatus');
  const root=document.getElementById('adminOrdersList');
@@ -657,7 +698,10 @@ async function loadAdminOrders() {
    const name=document.createElement('strong');name.textContent=(order.order_type==='custom'?'🎨 ':'📦 ')+(order.title||'Заказ');
    const meta=document.createElement('small');
    meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+(labels[order.admin_status]||order.admin_status||'Статус неизвестен')+' · '+(order.created_at||'');
-   info.append(name,meta);row.append(info);root.append(row);
+   info.append(name,meta);
+   const detail=document.createElement('button');detail.type='button';detail.className='secondary';detail.textContent='Подробнее';
+   detail.addEventListener('click',()=>openAdminOrder(order.id,order.order_type));
+   row.append(info,detail);root.append(row);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
 }
