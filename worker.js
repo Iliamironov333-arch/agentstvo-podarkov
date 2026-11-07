@@ -905,6 +905,16 @@ export default {
           const total=await env.DB.prepare("SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?").bind(id).first();
           return json({ok:true,id,recipient_count:Number(total?.total||0),status:Number(total?.total||0)?"queued":"completed"},200,origin);
         }
+
+        if (path === "/api/admin/campaign-report" && method === "GET") {
+          const url=new URL(request.url),id=Number(url.searchParams.get("id"));
+          if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите номер рассылки."},400,origin);
+          const campaign=await env.DB.prepare("SELECT id,title,status FROM campaigns WHERE id=?").bind(id).first();
+          if(!campaign)return json({error:"Рассылка не найдена."},404,origin);
+          const counts=await env.DB.prepare("SELECT status,COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=? GROUP BY status").bind(id).all();
+          const rows=await env.DB.prepare("SELECT r.telegram_id,u.first_name,u.username,r.status,r.attempts,r.last_error,r.sent_at,r.updated_at FROM campaign_recipients r LEFT JOIN users u ON u.telegram_id=r.telegram_id WHERE r.campaign_id=? ORDER BY CASE r.status WHEN 'failed' THEN 1 WHEN 'uncertain' THEN 2 WHEN 'sending' THEN 3 WHEN 'pending' THEN 4 ELSE 5 END,r.id DESC LIMIT 200").bind(id).all();
+          return json({ok:true,campaign,counts:counts.results||[],recipients:rows.results||[],limit:200},200,origin);
+        }
         if (path === "/api/admin/campaign-retry" && method === "POST") {
           const body=await readJson(request),id=Number(body.id);
           if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите рассылку."},400,origin);
