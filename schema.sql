@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
   image_url TEXT,
   delivery_status TEXT NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending','sending','sent')),
+  delivery_started_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   delivered_at TEXT,
   FOREIGN KEY (order_id) REFERENCES orders(id),
