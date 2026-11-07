@@ -1006,7 +1006,7 @@ export default {
             env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key LIKE 'feature_%' OR key='sales_paused'").all()
           ]);
           const tableChecks={users:true,products:true,orders:true,app_settings:true,system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),announcements:await tableExists(env,"announcements"),campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients")};
-          return json({ok:true,database:"connected",counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY,backup_storage:!!env.BACKUP_BUCKET},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "GET") {
           const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
