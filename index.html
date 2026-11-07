@@ -678,7 +678,8 @@ async function openAdminOrder(orderId,orderType) {
   const statusLabel=document.createElement('label');statusLabel.textContent='Статус';
   const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','Новый статус заказа');
   const currentStatus=data.admin_status||'new';
-  const isUnpaid=orderType==='product'&&order.payment_status!=='paid';
+  const isUnpaid=orderType==='product'&&order.payment_status==='pending';
+  const isCancelled=orderType==='product'&&order.payment_status==='cancelled';
   if(isUnpaid){
    const opt=document.createElement('option');opt.value='unpaid';opt.textContent='Не оплачен — ожидает оплаты';statusSelect.append(opt);
    statusSelect.value='unpaid';statusSelect.disabled=true;
@@ -687,6 +688,7 @@ async function openAdminOrder(orderId,orderType) {
     const opt=document.createElement('option');opt.value=key;opt.textContent=label;statusSelect.append(opt);
    });
    statusSelect.value=statusLabels[currentStatus]?currentStatus:'new';
+   if(isCancelled)statusSelect.disabled=true;
   }
   statusLabel.append(statusSelect);section.append(statusLabel);
   const commentLabel=document.createElement('label');commentLabel.textContent='Комментарий владельца';
