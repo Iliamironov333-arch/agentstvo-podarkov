@@ -870,14 +870,14 @@ export default {
             console.error("Support ticket reply failed:", String(error).slice(0,300));
             return json({ error: "Не удалось отправить ответ покупателю. Статус обращения не изменён." }, 502, origin);
           }
-          await env.DB.prepare("UPDATE support_messages SET status='in_progress' WHERE id=? AND status!='closed'").bind(id).run();
+          await env.DB.prepare("UPDATE support_messages SET status='in_progress' WHERE id=?").bind(id).run();
           if (await tableExists(env, "admin_action_log")) {
             try {
               await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
                 .bind(telegramId, String(ticket.telegram_id), "support_ticket_reply", JSON.stringify({ ticket_id: id, length: message.length })).run();
             } catch (error) { console.error("Support ticket reply audit failed:", String(error).slice(0,200)); }
           }
-          return json({ ok: true, sent: true, status: ticket.status === "closed" ? "closed" : "in_progress" }, 200, origin);
+          return json({ ok: true, sent: true, status: "in_progress" }, 200, origin);
         }
         if (path === "/api/admin/support/ticket-status" && method === "POST") {
           const body = await readJson(request);
