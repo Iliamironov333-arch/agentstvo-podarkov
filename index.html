@@ -105,6 +105,12 @@ body.light-theme .leaf-layer{opacity:.38}
 .row-actions .secondary{flex:1 1 68px}
 .menu-card.about-card{grid-column:1/-1}
 @media(max-width:420px){.brand{gap:8px}.logo{width:40px;height:40px;font-size:23px}.brand h1{font-size:16px}.brand p{font-size:10px}.headtools{gap:4px}.headchip{padding:7px 6px;font-size:11px}.theme-toggle{min-width:32px;padding:7px}}
+.admin-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.admin-metric{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:15px;min-width:0}
+.admin-metric span{display:block;color:var(--muted);font-size:12px;line-height:1.35}
+.admin-metric strong{display:block;color:var(--gold2);font-size:25px;margin-top:8px;overflow-wrap:anywhere}
+body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
+@media(min-width:600px){.admin-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -147,7 +153,16 @@ body.light-theme .leaf-layer{opacity:.38}
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
- <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверен сервером. Все будущие административные операции будут проходить повторную проверку на Worker.</p></div>
+ <div class="sectionhead"><h3>Обзор Агентства</h3><button class="secondary" type="button" id="adminRefreshBtn" onclick="loadAdminDashboard()">↻ Обновить</button></div>
+ <div class="admin-metrics" id="adminMetrics">
+  <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
+  <div class="admin-metric"><span>Всего заказов</span><strong id="adminOrders">—</strong></div>
+  <div class="admin-metric"><span>Выручка</span><strong id="adminRevenue">— ⭐</strong></div>
+  <div class="admin-metric"><span>Ожидают обработки</span><strong id="adminWaiting">—</strong></div>
+ </div>
+ <p class="notice" id="adminUpdatedAt">Показатели загружаются из D1 через защищённый Worker.</p>
+ <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
+ <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
 <section id="catalogView" class="hidden">
@@ -291,7 +306,7 @@ let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let vipActive = false;
 let activeFilter = 'all';
 
-const allViews = ['menuView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
+const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
@@ -302,6 +317,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
+ if (id === 'adminPanelView') loadAdminDashboard();
 }
 
 function openBot(action) {
@@ -406,6 +422,32 @@ function changeQty(id,d) {
  persistCart();
  drawProducts();
  drawCart();
+}
+
+async function loadAdminDashboard() {
+ const status = document.getElementById('adminDashboardStatus');
+ const button = document.getElementById('adminRefreshBtn');
+ if (!status) return;
+ if (!initData) { status.textContent = 'Откройте приложение через Telegram.'; return; }
+ if (button) button.disabled = true;
+ status.textContent = 'Получаем свежие показатели…';
+ try {
+  const data = await apiFetch('/api/admin/dashboard');
+  const m = data.metrics || {};
+  document.getElementById('adminUsers').textContent = Number(m.users || 0).toLocaleString('ru-RU');
+  document.getElementById('adminOrders').textContent = Number(m.orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminRevenue').textContent = Number(m.revenue_stars || 0).toLocaleString('ru-RU') + ' ⭐';
+  document.getElementById('adminWaiting').textContent = Number(m.awaiting_processing || 0).toLocaleString('ru-RU');
+  const updated = data.updated_at ? new Date(data.updated_at) : null;
+  document.getElementById('adminUpdatedAt').textContent = updated && !Number.isNaN(updated.getTime())
+   ? 'Обновлено: ' + updated.toLocaleString('ru-RU')
+   : 'Показатели обновлены.';
+  status.textContent = 'Данные успешно получены из D1.';
+ } catch (e) {
+  status.textContent = e.message || 'Не удалось загрузить показатели.';
+ } finally {
+  if (button) button.disabled = false;
+ }
 }
 
 async function checkOwnerAccess() {
