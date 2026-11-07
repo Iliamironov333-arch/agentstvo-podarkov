@@ -609,11 +609,6 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
 drawProducts();
- drawCart();
- toast('Добавлено в корзину 🎁');
-}
-
-drawProducts();
 drawCart();
 loadProducts();
 loadMe();
