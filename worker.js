@@ -465,6 +465,24 @@ export default {
           }
           return json({ ok: true, telegram_id: targetId }, 200, origin);
         }
+        if (path === "/api/admin/order" && method === "GET") {
+          const url = new URL(request.url);
+          const orderId = (url.searchParams.get("order_id") || "").trim().slice(0,100);
+          const orderType = url.searchParams.get("order_type");
+          if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
+          if (orderType === "product") {
+            const [order, items, payment] = await Promise.all([
+              env.DB.prepare("SELECT o.*,u.first_name,u.username FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE o.id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT product_title,quantity,image_url,delivery_status,delivered_at FROM order_items WHERE order_id=? ORDER BY id").bind(orderId).all(),
+              env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first()
+            ]);
+            if (!order) return json({ error: "Заказ не найден." }, 404, origin);
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null }, 200, origin);
+          }
+          const order = await env.DB.prepare("SELECT * FROM custom_orders WHERE id=?").bind(orderId).first();
+          if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
+          return json({ ok: true, order_type: orderType, order, items: [], payment: null }, 200, origin);
+        }
         if (path === "/api/admin/orders" && method === "GET") {
           const url = new URL(request.url);
           const term = (url.searchParams.get("q") || "").trim().slice(0,80);
