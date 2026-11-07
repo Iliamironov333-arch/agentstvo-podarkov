@@ -544,8 +544,12 @@ async function backupStartRestore(env,targetKey) {
     await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
     return {status:"importing",target_key:targetKey,safety_key:prep.safety_key};
   }catch(error){
-    await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"error",target_key:targetKey,safety_key:prep.safety_key,error:String(error.message||error).slice(0,500),failed_at:new Date().toISOString()});
-    await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);throw error;
+    state.stage="needs_attention";state.resume_stage=state.bookmark?"importing":null;
+    state.last_error=String(error.message||error).slice(0,500);
+    state.last_attempt_at=new Date().toISOString();
+    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
+    await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"needs_attention",target_key:targetKey,safety_key:prep.safety_key,error:state.last_error,failed_at:state.last_attempt_at});
+    throw error;
   }
 }
 async function processBackupQueue(env) {
