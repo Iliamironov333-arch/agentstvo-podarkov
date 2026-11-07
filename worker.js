@@ -103,15 +103,21 @@ async function notifyOwner(env, message) {
 async function deliverOrderImages(env, orderId, telegramId) {
   const items = await env.DB.prepare("SELECT id,product_title,image_url,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
     .bind(orderId).all();
+  const rows = items.results || [];
+  if (!rows.length) {
+    await notifyOwner(env, "⚠️ Заказ " + orderId + " оплачен, но в order_items нет товаров. Автовыдача остановлена.");
+    return false;
+  }
   let failed = false;
-  for (const item of (items.results || [])) {
+  for (const item of rows) {
     if (item.delivery_status === "sent") continue;
     if (!item.image_url || !/^https:\/\//i.test(item.image_url)) {
       failed = true;
       await notifyOwner(env, "⚠️ Не удалось отправить картинку заказа " + orderId + ": у товара «" + item.product_title + "» не задан корректный HTTPS image_url.");
       continue;
     }
-    const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending' WHERE id=? AND delivery_status='pending'")
+    // Lease: a crashed Worker can leave 'sending'; after 10 minutes another webhook may reclaim it.
+    const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending',delivery_started_at=CURRENT_TIMESTAMP WHERE id=? AND (delivery_status='pending' OR (delivery_status='sending' AND (delivery_started_at IS NULL OR delivery_started_at < datetime('now','-10 minutes'))))")
       .bind(item.id).run();
     if (!claim.meta || claim.meta.changes !== 1) continue;
     try {
@@ -120,11 +126,11 @@ async function deliverOrderImages(env, orderId, telegramId) {
         photo: item.image_url,
         caption: "🎁 Ваш цифровой файл: " + item.product_title
       });
-      await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP WHERE id=? AND delivery_status='sending'")
+      await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP,delivery_started_at=NULL WHERE id=? AND delivery_status='sending'")
         .bind(item.id).run();
     } catch (error) {
       failed = true;
-      await env.DB.prepare("UPDATE order_items SET delivery_status='pending' WHERE id=? AND delivery_status='sending'")
+      await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=NULL WHERE id=? AND delivery_status='sending'")
         .bind(item.id).run();
       await notifyOwner(env, "⚠️ Не удалось отправить картинку покупателю\nЗаказ: " + orderId + "\nТовар: " + item.product_title + "\nОшибка: " + String(error).slice(0, 500));
     }
@@ -381,11 +387,15 @@ export default {
         const total = Math.max(1, subtotal - discount);
         const orderId = makeId();
         const title = items.map(item => item.title + " × " + item.qty).join("; ");
-        await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
-          .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title,
-            items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total).run();
-        await env.DB.batch(items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
-          .bind(orderId, item.id, item.title, item.qty, item.image_url)));
+        const orderStatements = [
+          env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
+            .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title,
+              items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total),
+          ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
+            .bind(orderId, item.id, item.title, item.qty, item.image_url))
+        ];
+        // D1 batch is transactional: the order and all its line items are created together.
+        await env.DB.batch(orderStatements);
         try {
           const invoiceUrl = await createPaymentIntent(env, { payload: orderId, telegram_id: telegramId,
             kind: "order", reference_id: orderId, amount_stars: total, title: "Заказ " + orderId.slice(0, 8),
