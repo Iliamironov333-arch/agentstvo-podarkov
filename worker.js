@@ -523,6 +523,8 @@ async function backupStartRestore(env,targetKey) {
   if(!prep||prep.status!=="ready"||prep.target_key!==targetKey||!prep.safety_key)throw new Error("Сначала создайте свежую страховочную копию и дождитесь её готовности.");
   if(await env.BACKUP_BUCKET.get(BACKUP_ACTIVE_KEY))throw new Error("Другая операция сейчас выполняется.");
   if(!targetKey.startsWith("backups/")||!targetKey.endsWith(".sql"))throw new Error("Недопустимый файл резервной копии.");
+  const metadata=await backupReadJson(env.BACKUP_BUCKET,targetKey+".json");
+  if(!metadata||metadata.kind!=="database"||metadata.key!==targetKey)throw new Error("Файл не прошёл проверку метаданных резервной копии.");
   const object=await env.BACKUP_BUCKET.get(targetKey);if(!object)throw new Error("Файл резервной копии не найден.");
   const bytes=await object.arrayBuffer(),etag=await backupMd5(bytes);
   const state={kind:"restore",stage:"importing",target_key:targetKey,safety_key:prep.safety_key,started_at:new Date().toISOString()};
