@@ -427,184 +427,9 @@ async function writeSystemError(env, error, path) {
 }
 
 
-const BACKUP_ACCOUNT_ID = "ec1e70a15ecba9cd22cabb6ad865c986";
-const BACKUP_DATABASE_ID = "077f0476-4ec0-4ddb-8236-be3575182b0a";
-const BACKUP_ACTIVE_KEY = "system/active-backup-job.json";
-const BACKUP_PREP_KEY = "system/restore-preparation.json";
-
-async function backupCloudflareApi(env, action, body) {
-  if (!env.CLOUDFLARE_API_TOKEN) throw new Error("Не настроен секрет CLOUDFLARE_API_TOKEN.");
-  const response = await fetch("https://api.cloudflare.com/client/v4/accounts/"+BACKUP_ACCOUNT_ID+"/d1/database/"+BACKUP_DATABASE_ID+"/"+action, {
-    method:"POST",
-    headers:{"Authorization":"Bearer "+env.CLOUDFLARE_API_TOKEN,"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  });
-  const data=await response.json().catch(()=>null);
-  if(!response.ok||!data?.success) throw new Error("Cloudflare D1 API: "+(data?.errors||[]).map(x=>x.message).join("; ").slice(0,500));
-  return data.result||{};
-}
-async function backupReadJson(bucket,key) {
-  const object=await bucket.get(key);if(!object)return null;
-  try{return await object.json();}catch{return null;}
-}
-async function backupWriteJson(bucket,key,value) {
-  await bucket.put(key,JSON.stringify(value),{httpMetadata:{contentType:"application/json; charset=utf-8"}});
-}
-async function backupListAll(bucket,prefix) {
-  const objects=[];let cursor;
-  do {const page=await bucket.list({prefix,limit:1000,cursor});objects.push(...(page.objects||[]));cursor=page.truncated?page.cursor:undefined;} while(cursor);
-  return objects;
-}
-async function backupPruneRetention(bucket) {
-  const objects=(await backupListAll(bucket,"backups/")).filter(x=>x.key.endsWith(".sql")).sort((a,b)=>String(b.uploaded).localeCompare(String(a.uploaded)));
-  for(const item of objects.slice(2)){await bucket.delete(item.key);await bucket.delete(item.key+".json");}
-}
-async function backupFinishExport(env,state,signedUrl) {
-  const response=await fetch(signedUrl);
-  if(!response.ok)throw new Error("Не удалось скачать SQL-экспорт D1: HTTP "+response.status);
-  const bytes=await response.arrayBuffer();
-  const stamp=new Date().toISOString().replace(/[:.]/g,"-");
-  const safety=state.kind==="restore_prepare";
-  const key=(safety?"safety/":"backups/")+(safety?"pre-restore-":"d1-")+stamp+".sql";
-  await env.BACKUP_BUCKET.put(key,bytes,{httpMetadata:{contentType:"application/sql",contentDisposition:'attachment; filename="'+key.split("/").pop()+'"'}});
-  const meta={key,kind:safety?"restore-safety":"database",trigger:state.trigger||"manual",created_at:new Date().toISOString(),size_bytes:bytes.byteLength};
-  await backupWriteJson(env.BACKUP_BUCKET,key+".json",meta);
-  if(!safety)await backupPruneRetention(env.BACKUP_BUCKET);
-  if(safety){
-    const prep={status:"ready",target_key:state.target_key,safety_key:key,prepared_at:new Date().toISOString()};
-    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_PREP_KEY,prep);
-  }
-  await backupWriteJson(env.BACKUP_BUCKET,"system/last-backup-job.json",{status:"completed",completed_at:new Date().toISOString(),backup:meta,kind:state.kind});
-  await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);
-  return meta;
-}
-async function backupStartExport(env,kind="backup",trigger="manual",targetKey=null) {
-  if(!env.BACKUP_BUCKET)throw new Error("Не подключено R2-хранилище BACKUP_BUCKET.");
-  if(!env.CLOUDFLARE_API_TOKEN)throw new Error("Не настроен секрет CLOUDFLARE_API_TOKEN.");
-  const active=await env.BACKUP_BUCKET.get(BACKUP_ACTIVE_KEY);
-  if(active)throw new Error("Уже выполняется операция резервного копирования или восстановления.");
-  const state={kind,trigger,target_key:targetKey,stage:"starting",started_at:new Date().toISOString()};
-  await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-  try{
-    const result=await backupCloudflareApi(env,"export",{output_format:"polling",dump_options:{compatibility:"d1"}});
-    if(result.status==="complete"&&result.result?.signed_url){const backup=await backupFinishExport(env,state,result.result.signed_url);return {status:"completed",backup};}
-    if(result.status==="error")throw new Error(result.error||"Экспорт D1 завершился ошибкой.");
-    state.stage="exporting";state.bookmark=result.at_bookmark||null;
-    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-    return {status:"exporting",started_at:state.started_at};
-  }catch(error){await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);throw error;}
-}
-async function backupMd5(bytes) {
-  const input=new Uint8Array(bytes),length=input.length, paddedLength=((length+8)>>>6<<6)+64;
-  const data=new Uint8Array(paddedLength);data.set(input);data[length]=0x80;
-  const bitLength=length*8;for(let i=0;i<8;i++)data[paddedLength-8+i]=Math.floor(bitLength/Math.pow(256,i))&255;
-  const shifts=[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
-  const K=Array.from({length:64},(_,i)=>Math.floor(Math.abs(Math.sin(i+1))*4294967296)>>>0);
-  let a0=0x67452301,b0=0xefcdab89,c0=0x98badcfe,d0=0x10325476;
-  const rotate=(x,n)=>(x<<n)|(x>>>(32-n));
-  for(let offset=0;offset<data.length;offset+=64){
-    const M=new Uint32Array(16);for(let i=0;i<16;i++){const j=offset+i*4;M[i]=(data[j]|(data[j+1]<<8)|(data[j+2]<<16)|(data[j+3]<<24))>>>0;}
-    let A=a0,B=b0,C=c0,D=d0;
-    for(let i=0;i<64;i++){
-      let F,g,s;
-      if(i<16){F=(B&C)|(~B&D);g=i;s=shifts[i%4];}
-      else if(i<32){F=(D&B)|(~D&C);g=(5*i+1)%16;s=shifts[4+i%4];}
-      else if(i<48){F=B^C^D;g=(3*i+5)%16;s=shifts[8+i%4];}
-      else{F=C^(B|~D);g=(7*i)%16;s=shifts[12+i%4];}
-      const next=D;D=C;C=B;B=(B+rotate((A+F+K[i]+M[g])>>>0,s))>>>0;A=next;
-    }
-    a0=(a0+A)>>>0;b0=(b0+B)>>>0;c0=(c0+C)>>>0;d0=(d0+D)>>>0;
-  }
-  return [a0,b0,c0,d0].map(x=>[0,1,2,3].map(i=>((x>>>(i*8))&255).toString(16).padStart(2,"0")).join("")).join("");
-}
-async function backupStartRestore(env,targetKey) {
-  if(!env.BACKUP_BUCKET||!env.CLOUDFLARE_API_TOKEN)throw new Error("Для восстановления требуется подключённое R2 и секрет CLOUDFLARE_API_TOKEN.");
-  const prep=await backupReadJson(env.BACKUP_BUCKET,BACKUP_PREP_KEY);
-  if(!prep||prep.status!=="ready"||prep.target_key!==targetKey||!prep.safety_key)throw new Error("Сначала создайте свежую страховочную копию и дождитесь её готовности.");
-  if(await env.BACKUP_BUCKET.get(BACKUP_ACTIVE_KEY))throw new Error("Другая операция сейчас выполняется.");
-  if(!targetKey.startsWith("backups/")||!targetKey.endsWith(".sql"))throw new Error("Недопустимый файл резервной копии.");
-  const metadata=await backupReadJson(env.BACKUP_BUCKET,targetKey+".json");
-  if(!metadata||metadata.kind!=="database"||metadata.key!==targetKey)throw new Error("Файл не прошёл проверку метаданных резервной копии.");
-  const object=await env.BACKUP_BUCKET.get(targetKey);if(!object)throw new Error("Файл резервной копии не найден.");
-  const bytes=await object.arrayBuffer(),etag=await backupMd5(bytes);
-  const state={kind:"restore",stage:"importing",target_key:targetKey,safety_key:prep.safety_key,started_at:new Date().toISOString()};
-  await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-  try{
-    const init=await backupCloudflareApi(env,"import",{action:"init",etag});
-    if(!init.upload_url||!init.filename)throw new Error("D1 не вернула адрес загрузки SQL.");
-    const uploaded=await fetch(init.upload_url,{method:"PUT",body:bytes,headers:{"Content-Type":"application/sql"}});
-    if(!uploaded.ok)throw new Error("Загрузка файла для восстановления завершилась ошибкой: HTTP "+uploaded.status);
-    const ingest=await backupCloudflareApi(env,"import",{action:"ingest",etag,filename:init.filename});
-    if(ingest.status==="error")throw new Error(ingest.error||"D1 отклонила восстановление.");
-    if(ingest.status==="complete"){
-      await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"completed",target_key:targetKey,safety_key:prep.safety_key,completed_at:new Date().toISOString(),final_bookmark:ingest.result?.final_bookmark||null});
-      await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);
-      await env.BACKUP_BUCKET.delete(BACKUP_PREP_KEY);
-      return {status:"completed"};
-    }
-    state.bookmark=ingest.at_bookmark||null;
-    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-    return {status:"importing",target_key:targetKey,safety_key:prep.safety_key};
-  }catch(error){
-    state.stage="needs_attention";state.resume_stage=state.bookmark?"importing":null;
-    state.last_error=String(error.message||error).slice(0,500);
-    state.last_attempt_at=new Date().toISOString();
-    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-    await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"needs_attention",target_key:targetKey,safety_key:prep.safety_key,error:state.last_error,failed_at:state.last_attempt_at});
-    throw error;
-  }
-}
-async function processBackupQueue(env) {
-  if(!env.BACKUP_BUCKET||!env.CLOUDFLARE_API_TOKEN)return;
-  const state=await backupReadJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY);if(!state)return;
-  try{
-    if(state.stage==="exporting"){
-      const result=await backupCloudflareApi(env,"export",{output_format:"polling",current_bookmark:state.bookmark,dump_options:{compatibility:"d1"}});
-      if(result.status==="complete"&&result.result?.signed_url){await backupFinishExport(env,state,result.result.signed_url);return;}
-      if(result.status==="error"){const error=new Error(result.error||"Экспорт D1 завершился ошибкой.");error.permanent=true;throw error;}
-      state.bookmark=result.at_bookmark||state.bookmark;
-      await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);return;
-    }
-    if(state.stage==="importing"){
-      if(!state.bookmark)throw new Error("D1 не вернула идентификатор операции восстановления.");
-      const result=await backupCloudflareApi(env,"import",{action:"poll",current_bookmark:state.bookmark});
-      if(result.status==="error"){const error=new Error(result.error||"Восстановление D1 завершилось ошибкой.");error.permanent=true;throw error;}
-      if(result.status==="complete"){
-        await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:"completed",target_key:state.target_key,safety_key:state.safety_key,completed_at:new Date().toISOString(),final_bookmark:result.result?.final_bookmark||null});
-        await env.BACKUP_BUCKET.delete(BACKUP_ACTIVE_KEY);await env.BACKUP_BUCKET.delete(BACKUP_PREP_KEY);return;
-      }
-      state.bookmark=result.at_bookmark||state.bookmark;
-      await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-    }
-  }catch(error){
-    state.retry_count=Number(state.retry_count||0)+1;
-    state.last_error=String(error.message||error).slice(0,500);
-    state.last_attempt_at=new Date().toISOString();
-    if(error.permanent||state.retry_count>=10){state.resume_stage=state.stage;state.stage="needs_attention";}
-    await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-    await backupWriteJson(env.BACKUP_BUCKET,"system/last-backup-job.json",{status:state.stage==="needs_attention"?"needs_attention":"retrying",kind:state.kind,error:state.last_error,updated_at:state.last_attempt_at,retry_count:state.retry_count});
-    if(state.kind==="restore")await backupWriteJson(env.BACKUP_BUCKET,"system/last-restore-job.json",{status:state.stage==="needs_attention"?"needs_attention":"retrying",target_key:state.target_key,safety_key:state.safety_key,error:state.last_error,updated_at:state.last_attempt_at,retry_count:state.retry_count});
-  }
-}
-async function backupListUi(env) {
-  if(!env.BACKUP_BUCKET)return {configured:false,backups:[],active:null,preparation:null,last_job:null};
-  const [regular,safety,active,preparation,lastJob,lastRestore]=await Promise.all([
-    backupListAll(env.BACKUP_BUCKET,"backups/"),backupListAll(env.BACKUP_BUCKET,"safety/"),
-    backupReadJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY),backupReadJson(env.BACKUP_BUCKET,BACKUP_PREP_KEY),
-    backupReadJson(env.BACKUP_BUCKET,"system/last-backup-job.json"),backupReadJson(env.BACKUP_BUCKET,"system/last-restore-job.json")
-  ]);
-  const map=items=>items.filter(x=>x.key.endsWith(".sql")).map(x=>({key:x.key,name:x.key.split("/").pop(),size_bytes:x.size,uploaded:x.uploaded?.toISOString?.()||String(x.uploaded||"")}));
-  return {configured:true,token_configured:!!env.CLOUDFLARE_API_TOKEN,backups:map(regular),safety_backups:map(safety),active,preparation,last_job:lastJob,last_restore:lastRestore};
-}
-
 export default {
   async scheduled(controller, env, ctx) {
-    if (controller.cron !== "0 3 1 * *") {
-      ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
-    } else {
-      ctx.waitUntil(backupStartExport(env,"backup","monthly").catch(error => console.error("Monthly D1 backup could not start:",String(error).slice(0,500))));
-    }
-    ctx.waitUntil(processBackupQueue(env).catch(error => console.error("D1 backup queue failed:",String(error).slice(0,500))));
+    ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1173,44 +998,6 @@ export default {
         }
 
 
-        if(path==="/api/admin/backups"&&method==="GET"){
-          return json({ok:true,...await backupListUi(env)},200,origin);
-        }
-        if(path==="/api/admin/backup-create"&&method==="POST"){
-          const body=await readJson(request);if(body.confirm!==true)return json({error:"Подтвердите создание резервной копии."},400,origin);
-          try{return json({ok:true,...await backupStartExport(env,"backup","manual")},202,origin);}
-          catch(error){return json({error:String(error.message||error).slice(0,500)},503,origin);}
-        }
-        if(path==="/api/admin/backup-restore-prepare"&&method==="POST"){
-          const body=await readJson(request),key=typeof body.key==="string"?body.key:"";
-          if(!key.startsWith("backups/")||!key.endsWith(".sql"))return json({error:"Выберите резервную копию из списка."},400,origin);
-          if(!env.BACKUP_BUCKET)return json({error:"R2-хранилище пока не подключено."},503,origin);
-          if(!(await env.BACKUP_BUCKET.get(key)))return json({error:"Выбранная копия не найдена."},404,origin);
-          try{return json({ok:true,...await backupStartExport(env,"restore_prepare","restore_safety",key)},202,origin);}
-          catch(error){return json({error:String(error.message||error).slice(0,500)},503,origin);}
-        }
-        if(path==="/api/admin/backup-retry"&&method==="POST"){
-          if(!env.BACKUP_BUCKET)return json({error:"R2-хранилище не подключено."},503,origin);
-          const state=await backupReadJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY);
-          if(!state||state.stage!=="needs_attention"||!["exporting","importing"].includes(state.resume_stage))return json({error:"Нет операции, которую можно безопасно возобновить."},409,origin);
-          state.stage=state.resume_stage;state.resume_stage=null;state.retry_count=0;state.last_error=null;
-          await backupWriteJson(env.BACKUP_BUCKET,BACKUP_ACTIVE_KEY,state);
-          return json({ok:true,status:"resumed"},202,origin);
-        }
-        if(path==="/api/admin/backup-restore"&&method==="POST"){
-          const body=await readJson(request),key=typeof body.key==="string"?body.key:"";
-          if(body.confirm!==true)return json({error:"Не получено подтверждение восстановления."},400,origin);
-          try{return json({ok:true,...await backupStartRestore(env,key)},202,origin);}
-          catch(error){return json({error:String(error.message||error).slice(0,500)},400,origin);}
-        }
-        if(path==="/api/admin/backup-download"&&method==="GET"){
-          const key=new URL(request.url).searchParams.get("key")||"";
-          if(!(key.startsWith("backups/")||key.startsWith("safety/"))||!key.endsWith(".sql"))return json({error:"Недопустимый файл."},400,origin);
-          if(!env.BACKUP_BUCKET)return json({error:"R2-хранилище не подключено."},503,origin);
-          const object=await env.BACKUP_BUCKET.get(key);if(!object)return json({error:"Файл не найден."},404,origin);
-          return new Response(object.body,{status:200,headers:{"Content-Type":"application/sql","Content-Disposition":'attachment; filename="'+key.split("/").pop()+'"',"Cache-Control":"no-store","Access-Control-Allow-Origin":origin,"Vary":"Origin"}});
-        }
-
         if (path === "/api/admin/technical-status" && method === "GET") {
           const [users,products,orders,pendingPayments,errors,settings]=await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
@@ -1221,7 +1008,7 @@ export default {
             env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key LIKE 'feature_%' OR key='sales_paused'").all()
           ]);
           const tableChecks={users:true,products:true,orders:true,app_settings:true,system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),announcements:await tableExists(env,"announcements"),campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients")};
-          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY,backup_storage:!!env.BACKUP_BUCKET&&!!env.CLOUDFLARE_API_TOKEN},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "GET") {
           const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
