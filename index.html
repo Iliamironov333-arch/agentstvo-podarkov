@@ -48,7 +48,7 @@ main{padding:12px 15px}
 .lineitem:last-child{border:0}
 .primary{width:100%;padding:13px;border:0;border-radius:12px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#25180b;font-weight:800;font-size:14px;margin-top:10px}
 .secondary{padding:10px 12px;background:#34271a;color:var(--gold2);border:1px solid #6b4a25;border-radius:10px}
-.bottom{position:fixed;bottom:0;left:0;right:0;background:#17130ff5;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:9px 5px calc(9px + env(safe-area-inset-bottom));z-index:5;backdrop-filter:blur(12px)}
+.bottom{position:fixed;bottom:0;left:0;right:0;background:#17130ff5;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:9px 5px calc(9px + env(safe-area-inset-bottom));z-index:5;backdrop-filter:blur(12px)}
 .bottom button{border:0;background:none;color:var(--muted);font-size:11px;padding:5px 0}
 .bottom button strong{display:block;font-size:20px;margin-bottom:3px}
 .bottom button.active{color:var(--gold2)}
@@ -141,7 +141,6 @@ body.light-theme .leaf-layer{opacity:.38}
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('favoritesView')"><strong>❤️ Избранное</strong><span>Сохранённые товары</span></button>
   <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
-  <button class="menu-card" onclick="showView('casesView')"><strong>🎁 Сюрприз-кейс</strong><span>Игровые бонусы</span></button>
  </div>
 </section>
 <section id="catalogView" class="hidden">
@@ -160,11 +159,6 @@ body.light-theme .leaf-layer{opacity:.38}
   <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
  </div>
 </section>
-<section id="casesView" class="hidden">
- <div class="sectionhead"><h2>🎁 Сюрприз-кейс</h2><span>игровой бонус</span></div>
- <div class="casebox"><div class="caseemoji">🎁</div><h3>Случайные кейсы временно отключены</h3><p class="muted">Баланс, покупки и история операций продолжают работать. Вместо случайных призов можно использовать прозрачные бонусы с заранее известным результатом.</p><button class="primary" disabled>Временно недоступно</button><p id="caseResult" class="notice"></p></div>
- <div class="panel"><h3>Как это работает</h3><p class="muted">Баланс и история операций сохраняются в базе. Если Mini App не открыт через Telegram, сервер не примет запрос.</p></div>
-</section>
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
  <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
@@ -181,7 +175,7 @@ body.light-theme .leaf-layer{opacity:.38}
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>💬 Поддержка</h2></div>
- <div class="panel"><h3>Написать владельцу</h3><p class="muted">Обращение сохранится в базе, а владелец получит уведомление в Telegram.</p><textarea id="supportMessage" rows="5" maxlength="2000" placeholder="Опиши вопрос по заказу, оплате или товару..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" onclick="sendSupport()">Отправить обращение</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
+ <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
 </section>
 <section id="balanceView" class="hidden">
  <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
@@ -204,6 +198,7 @@ body.light-theme .leaf-layer{opacity:.38}
  <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
  <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
  <button data-view="favoritesView"><strong>❤️</strong>Избранное</button>
+ <button data-view="supportView"><strong>💬</strong>Поддержка</button>
  <button data-view="ordersView"><strong>📦</strong>Заказы</button>
 </div>
 <div class="toast" id="toast"></div>
@@ -266,7 +261,7 @@ let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let favorites = new Set(JSON.parse(localStorage.getItem('gift-favs') || '[]'));
 let activeFilter = 'all';
 
-const allViews = ['menuView','catalogView','cartView','casesView','ordersView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
+const allViews = ['menuView','catalogView','cartView','ordersView','vipView','supportView','balanceView','profileView','favoritesView','dealsView','aboutView'];
 
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
@@ -274,6 +269,7 @@ function showView(id) {
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
  if (id === 'favoritesView') { loadFavorites(); drawFavorites(); }
+ if (id === 'supportView') loadSupportHistory();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
 }
@@ -458,12 +454,49 @@ async function loadVip() {
  catch(e) { el.textContent = 'Не удалось загрузить статус VIP: '+e.message; }
 }
 
+function renderSupportMessages(messages) {
+ const root = document.getElementById('supportChatLog');
+ root.replaceChildren();
+ if (!messages.length) {
+  const empty = document.createElement('p'); empty.className = 'muted';
+  empty.textContent = 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
+  root.appendChild(empty); return;
+ }
+ for (const item of messages) {
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
+  const label = document.createElement('b');
+  label.textContent = item.role === 'user' ? 'Ты' : 'Помощник';
+  label.style.display = 'block'; label.style.marginBottom = '4px';
+  const content = document.createElement('span'); content.textContent = item.content;
+  bubble.append(label,content); root.appendChild(bubble);
+ }
+ root.scrollTop = root.scrollHeight;
+}
+
+async function loadSupportHistory() {
+ const root = document.getElementById('supportChatLog');
+ if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
+ try {
+  const data = await apiFetch('/api/support/chat');
+  renderSupportMessages(data.messages || []);
+ } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
+}
+
 async function sendSupport() {
- const input = document.getElementById('supportMessage'), result = document.getElementById('supportResult'); const message = input.value.trim();
+ const input = document.getElementById('supportMessage');
+ const result = document.getElementById('supportResult');
+ const button = document.getElementById('supportSendBtn');
+ const message = input.value.trim();
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
- result.textContent = 'Отправляем…';
- try { const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})}); result.textContent = data.reply || 'Обращение отправлено.'; input.value = ''; }
- catch(e) { result.textContent = e.message || 'Не удалось отправить обращение.'; }
+ button.disabled = true; result.textContent = 'Помощник готовит ответ…';
+ try {
+  const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})});
+  input.value = '';
+  await loadSupportHistory();
+  result.textContent = data.vip ? 'Ответ VIP-помощника готов.' : 'Ответ помощника готов.';
+ } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
+ finally { button.disabled = false; }
 }
 
 async function checkout() {
