@@ -415,6 +415,17 @@ async function processCampaignBatch(env, limit = 15) {
   return { processed };
 }
 
+
+async function writeSystemError(env, error, path) {
+  try {
+    if (!env.DB) return;
+    const raw=String(error?.message||error||"Unknown error");
+    const safe=raw.replace(/bot\d+:[^\s]+/gi,"[скрытый токен]").replace(/sk-[A-Za-z0-9_-]{12,}/g,"[скрытый ключ]").replace(/Bearer\s+[^\s]+/gi,"Bearer [скрыто]").slice(0,700);
+    await env.DB.prepare("INSERT INTO system_error_log (severity,source,message,status) VALUES ('error',?,?, 'new')")
+      .bind(String(path||"worker").slice(0,180),safe).run();
+  } catch (logError) { console.error("System error log unavailable:",String(logError).slice(0,250)); }
+}
+
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
@@ -984,6 +995,45 @@ export default {
           }
           return json({ ok: true, id, status }, 200, origin);
         }
+
+        if (path === "/api/admin/technical-status" && method === "GET") {
+          const [users,products,orders,pendingPayments,errors,settings]=await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM products").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders WHERE payment_status='pending'").first(),
+            (async()=>{try{return await env.DB.prepare("SELECT COUNT(*) AS total FROM system_error_log WHERE status='new'").first()}catch(e){if(isMissingTableError(e,"system_error_log"))return {total:null};throw e;}})(),
+            env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key LIKE 'feature_%' OR key='sales_paused'").all()
+          ]);
+          const tableChecks={users:true,products:true,orders:true,app_settings:true,system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),announcements:await tableExists(env,"announcements"),campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients")};
+          return json({ok:true,database:"connected",counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+        }
+        if (path === "/api/admin/feature-flags" && method === "GET") {
+          const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
+          const rows=await env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key IN ('feature_product_orders','feature_custom_orders','feature_points_topup','feature_support','feature_vip')").all();
+          const found=new Map((rows.results||[]).map(row=>[row.key,row]));
+          const flags={};for(const key of keys)flags[key]=found.has(key)?found.get(key).value==="1":true;
+          return json({ok:true,flags,updated_at:Object.fromEntries([...found.entries()].map(([k,v])=>[k,v.updated_at]))},200,origin);
+        }
+        if (path === "/api/admin/feature-flags" && method === "POST") {
+          const body=await readJson(request),allowed=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
+          if(!allowed.includes(body.key)||typeof body.enabled!=="boolean")return json({error:"Укажите известный переключатель и его состояние."},400,origin);
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(body.key,body.enabled?"1":"0").run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"feature_flag_changed",JSON.stringify({key:body.key,enabled:body.enabled})).run();
+          return json({ok:true,key:body.key,enabled:body.enabled},200,origin);
+        }
+        if (path === "/api/admin/error-log" && method === "GET") {
+          if(!(await tableExists(env,"system_error_log")))return json({ok:true,errors:[],migration_pending:true},200,origin);
+          const rows=await env.DB.prepare("SELECT id,severity,source,message,status,created_at,resolved_at FROM system_error_log ORDER BY CASE status WHEN 'new' THEN 0 ELSE 1 END,id DESC LIMIT 100").all();
+          return json({ok:true,errors:rows.results||[]},200,origin);
+        }
+        if (path === "/api/admin/error-resolve" && method === "POST") {
+          const body=await readJson(request),id=Number(body.id);
+          if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите запись журнала."},400,origin);
+          const result=await env.DB.prepare("UPDATE system_error_log SET status='resolved',resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='new'").bind(id).run();
+          if(!result.meta||result.meta.changes!==1)return json({error:"Новая ошибка не найдена."},404,origin);
+          return json({ok:true,id,status:"resolved"},200,origin);
+        }
         if (path === "/api/admin/system-controls" && method === "GET") {
           const row = await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='sales_paused'").first();
           return json({ ok: true, sales_paused: row?.value === "1", updated_at: row?.updated_at || null }, 200, origin);
@@ -1001,6 +1051,21 @@ export default {
           return json({ ok: true, sales_paused: body.sales_paused }, 200, origin);
         }
         return json({ error: "Admin route not found." }, 404, origin);
+      }
+
+
+      const featureGateMap={
+        "/api/orders":"feature_product_orders",
+        "/api/custom-orders":"feature_custom_orders",
+        "/api/balance/topup":"feature_points_topup",
+        "/api/support/chat":"feature_support",
+        "/api/vip/subscribe":"feature_vip",
+        "/api/vip/support":"feature_support"
+      };
+      const featureKey=method==="POST"?featureGateMap[path]:null;
+      if(featureKey){
+        const feature=await env.DB.prepare("SELECT value FROM app_settings WHERE key=?").bind(featureKey).first();
+        if(feature?.value==="0")return json({error:"Эта функция временно отключена владельцем."},503,origin);
       }
 
       // Emergency sales pause: keep the catalog readable and existing paid orders intact.
@@ -1209,6 +1274,7 @@ export default {
       return json({ error: "Маршрут не найден" }, 404, origin);
     } catch (error) {
       console.error("Worker request failed:", String(error));
+      await writeSystemError(env,error,new URL(request.url).pathname);
       return json({ error: "Внутренняя ошибка сервера. Попробуйте позже." }, 500, origin);
     }
   }
