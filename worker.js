@@ -526,6 +526,9 @@ export default {
           if (hasStatus && orderType === "product" && status === "cancelled" && order.payment_status === "paid") {
             return json({ error: "Оплаченный заказ нельзя отменить без подтверждённого возврата Telegram Stars. Сначала требуется отдельная процедура возврата." }, 409, origin);
           }
+          if (hasStatus && orderType === "product" && order.payment_status === "cancelled" && status !== "cancelled") {
+            return json({ error: "Отменённый неоплаченный заказ нельзя повторно открыть." }, 409, origin);
+          }
           if (hasStatus && orderType === "product" && order.payment_status !== "paid" && !["new","cancelled"].includes(status)) {
             return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в работу или готовые." }, 409, origin);
           }
