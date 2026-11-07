@@ -156,6 +156,7 @@ body.light-theme .leaf-layer{opacity:.38}
   <div class="lineitem"><span>Скидка 10%</span><b id="discount">—</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
+  <p class="notice" id="deliveryNotice">Проверяем каталог и наличие цифровых файлов…</p>
   <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
  </div>
 </section>
@@ -211,7 +212,7 @@ tg?.expand();
 const API_BASE = (new URLSearchParams(location.search).get('api') || 'https://agentstvo-podarkov.iliamironov333.workers.dev').replace(/\/+$/,'');
 const initData = tg?.initData || '';
 
-const products = [
+let products = [
 [0,"Зима в горах",200,"🏔️","winter"],
 [1,"Тёплая зима",90,"⛄","winter"],
 [2,"Новогодний ананас",260,"🍍","winter"],
@@ -256,7 +257,28 @@ const products = [
 [41,"Таинственный лес",200,"🌲","winter"],
 [42,"Сырная планета",200,"🧀","art"]
 ];
-
+let catalogLoaded = false;
+function hasRealDeliveryImage(product) {
+ try {
+  const url = new URL(product[5] || '');
+  return url.protocol === 'https:' && !/(^|\\.)placehold\\.co$/i.test(url.hostname);
+ } catch { return false; }
+}
+async function loadProducts() {
+ if (!initData) return;
+ try {
+  const data = await apiFetch('/api/products');
+  if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
+  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null]);
+  catalogLoaded = true;
+  drawProducts();
+  drawCart();
+ } catch (error) {
+  catalogLoaded = false;
+  console.error('Не удалось загрузить серверный каталог:', error);
+  toast('Не удалось загрузить актуальные цены. Попробуй открыть приложение позже.');
+ }
+}
 let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let favorites = new Set(JSON.parse(localStorage.getItem('gift-favs') || '[]'));
 let activeFilter = 'all';
@@ -366,7 +388,14 @@ function drawCart() {
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
- document.getElementById('checkoutBtn').disabled = !entries.length;
+ const missingFiles = entries.filter(p => !hasRealDeliveryImage(p));
+ const notice = document.getElementById('deliveryNotice');
+ if (notice) notice.textContent = !catalogLoaded
+  ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
+  : missingFiles.length
+   ? 'Оплата временно недоступна: для выбранных работ ещё не подключены оригинальные цифровые файлы.'
+   : 'Цифровые файлы готовы к автоматической отправке после подтверждения оплаты.';
+ document.getElementById('checkoutBtn').disabled = !entries.length || !catalogLoaded || missingFiles.length > 0;
 }
 
 function changeQty(id,d) {
@@ -503,6 +532,8 @@ async function checkout() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
  if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
  if (!entries.length) return toast('Корзина пустая.');
+ if (!catalogLoaded) return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
+ if (entries.some(p => !hasRealDeliveryImage(p))) return toast('Оплата пока недоступна: оригинальный цифровой файл ещё не подключён.');
  if (entries.some(p => p[2] == null)) return toast('У одной из работ ещё не указана цена.');
 
  const btn = document.getElementById('checkoutBtn');
@@ -587,6 +618,7 @@ function addFavoriteToCart(id) {
 
 drawProducts();
 drawCart();
+loadProducts();
 loadMe();
 loadFavorites();
 showView('menuView');
