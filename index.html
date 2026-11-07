@@ -189,7 +189,17 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
   <div id="adminUsersList"></div>
   <div id="adminUserDetail" class="admin-user-detail hidden"></div>
  </div>
- <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
+ <div class="panel">
+   <h3>📦 Заказы</h3>
+   <div class="admin-search"><input id="adminOrderSearch" type="search" maxlength="80" placeholder="Номер заказа или Telegram ID"><button class="secondary" type="button" onclick="loadAdminOrders()">Найти</button></div>
+   <div class="admin-search">
+    <select id="adminOrderType" aria-label="Тип заказа" onchange="loadAdminOrders()"><option value="all">Все типы</option><option value="product">Товары каталога</option><option value="custom">Индивидуальные</option></select>
+    <select id="adminOrderStatus" aria-label="Статус заказа" onchange="loadAdminOrders()"><option value="all">Все статусы</option><option value="unpaid">Не оплачен</option><option value="new">Новый</option><option value="in_progress">В работе</option><option value="ready">Готов</option><option value="cancelled">Отменён</option></select>
+   </div>
+   <p id="adminOrdersStatus" class="notice" aria-live="polite">Заказы загружаются…</p>
+   <div id="adminOrdersList"></div>
+  </div>
+  <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
 <section id="catalogView" class="hidden">
@@ -624,6 +634,32 @@ async function loadAdminDashboard() {
  } finally {
   if (button) button.disabled = false;
  }
+}
+
+async function loadAdminOrders() {
+ const status=document.getElementById('adminOrdersStatus');
+ const root=document.getElementById('adminOrdersList');
+ if(!status||!root)return;
+ const q=document.getElementById('adminOrderSearch')?.value.trim()||'';
+ const type=document.getElementById('adminOrderType')?.value||'all';
+ const filter=document.getElementById('adminOrderStatus')?.value||'all';
+ status.textContent='Загружаем заказы…';root.replaceChildren();
+ try{
+  const params=new URLSearchParams({q,type,status:filter,limit:'100'});
+  const data=await apiFetch('/api/admin/orders?'+params.toString());
+  const orders=Array.isArray(data.orders)?data.orders:[];
+  const labels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
+  if(!orders.length){status.textContent='Заказы по выбранным условиям не найдены.';return;}
+  status.textContent='Найдено заказов: '+orders.length;
+  orders.forEach(order=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');info.className='admin-user-info';
+   const name=document.createElement('strong');name.textContent=(order.order_type==='custom'?'🎨 ':'📦 ')+(order.title||'Заказ');
+   const meta=document.createElement('small');
+   meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+(labels[order.admin_status]||order.admin_status||'Статус неизвестен')+' · '+(order.created_at||'');
+   info.append(name,meta);row.append(info);root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
 }
 
 async function checkOwnerAccess() {
