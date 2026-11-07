@@ -250,7 +250,8 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminConversationDetail" class="admin-user-detail hidden"></div>
    <div class="divider"></div>
    <h4>Обращения владельцу</h4>
-   <div class="admin-search"><select id="adminTicketFilter" onchange="loadAdminSupportTickets()"><option value="all">Все обращения</option><option value="open">Новые</option><option value="in_progress">В работе</option><option value="closed">Закрытые</option></select></div>
+   <div class="admin-search"><select id="adminTicketFilter" onchange="loadAdminSupportTickets()"><option value="all">Все обращения</option><option value="open">Новые</option><option value="in_progress">В работе</option><option value="closed">Закрытые</option></select><input id="adminTicketSearch" type="search" maxlength="64" placeholder="Поиск по тексту, имени, @username или Telegram ID" onkeydown="if(event.key==='Enter')loadAdminSupportTickets()"><button class="secondary" type="button" onclick="loadAdminSupportTickets()">Найти</button></div>
+   <div id="adminTicketSummary" class="notice" aria-live="polite">Сводка активности загружается…</div>
    <p id="adminTicketsStatus" class="notice" aria-live="polite">Обращения загружаются…</p><div id="adminTicketsList"></div>
   </div>
   <div class="panel" id="adminAnnouncementsPanel">
@@ -778,15 +779,16 @@ async function loadAdminSupport() {
   rows.forEach(item=>{
    const row=document.createElement('div');row.className='admin-user-row';
    const info=document.createElement('div');
-   const name=document.createElement('strong');name.textContent=item.first_name||item.username||'Покупатель';
-   const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+Number(item.message_count||0)+' сообщений · '+(item.last_message_at||'');
+   const name=document.createElement('strong');name.textContent=item.first_name||'Покупатель';
+   const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
+   const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
+   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
    const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
-   info.append(name,meta,preview);
-   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть';button.addEventListener('click',()=>openAdminConversation(item.telegram_id));
+   info.append(name,username,meta,activity,preview);
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Карточка';button.addEventListener('click',()=>openAdminConversation(item.telegram_id));
    row.append(info,button);root.append(row);
   });
   await loadAdminSupportTickets();
- }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
 }
 async function openAdminConversation(telegramId) {
  const box=document.getElementById('adminConversationDetail');if(!box)return;
@@ -827,23 +829,27 @@ async function openAdminConversation(telegramId) {
  }catch(e){box.textContent=e.message||'Не удалось загрузить историю.';}
 }
 async function loadAdminSupportTickets() {
- const status=document.getElementById('adminTicketsStatus'),root=document.getElementById('adminTicketsList');
+ const status=document.getElementById('adminTicketsStatus'),root=document.getElementById('adminTicketsList'),summary=document.getElementById('adminTicketSummary');
  if(!status||!root)return;
  status.textContent='Загружаем обращения…';root.replaceChildren();
  try{
   const filter=document.getElementById('adminTicketFilter')?.value||'all';
-  const data=await apiFetch('/api/admin/support/tickets?status='+encodeURIComponent(filter));
+  const q=document.getElementById('adminTicketSearch')?.value.trim()||'';
+  const data=await apiFetch('/api/admin/support/tickets?status='+encodeURIComponent(filter)+'&q='+encodeURIComponent(q));
   const rows=Array.isArray(data.tickets)?data.tickets:[];
-  status.textContent=rows.length?'Обращений: '+rows.length:'Обращений нет.';
+  const s=data.summary||{};
+  if(summary)summary.textContent='Всего: '+Number(s.total||0)+' · Покупателей: '+Number(s.buyers||0)+' · Новые: '+Number(s.open||0)+' · В работе: '+Number(s.in_progress||0)+' · Закрытые: '+Number(s.closed||0)+' · За 7 дней: '+Number(s.last_7_days||0);
+  status.textContent=rows.length?'Показано обращений: '+rows.length+(q?' · Поиск: «'+q+'»':''):'По заданным условиям обращений нет.';
   const labels={open:'Новое',in_progress:'В работе',closed:'Закрыто'};
   rows.forEach(ticket=>{
    const row=document.createElement('div');row.className='admin-order-actions';
-   const heading=document.createElement('h4');heading.textContent=(ticket.first_name||ticket.username||'Покупатель')+' · '+labels[ticket.status];
-   const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at;
+   const heading=document.createElement('h4');heading.textContent=(ticket.first_name||'Покупатель')+(ticket.username?' · @'+ticket.username:'')+' · '+labels[ticket.status];
+   const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at+' · Всего обращений покупателя: '+Number(ticket.customer_ticket_count||0);
    const message=document.createElement('p');message.textContent=ticket.message||'';
+   const actions=document.createElement('div');actions.className='row-actions';
+   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>openAdminConversation(ticket.telegram_id));
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответить покупателю в Telegram';reply.setAttribute('aria-label','Ответ на обращение №'+ticket.id);
    reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
-   const actions=document.createElement('div');actions.className='row-actions';
    const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в Telegram';
    send.addEventListener('click',async()=>{
     const text=reply.value.trim();if(!text){toast('Напишите ответ покупателю.');return;}
@@ -858,12 +864,10 @@ async function loadAdminSupportTickets() {
    select.value=ticket.status;
    const save=document.createElement('button');save.type='button';save.className='secondary';save.textContent='Сохранить статус';
    save.addEventListener('click',async()=>{save.disabled=true;try{await apiFetch('/api/admin/support/ticket-status',{method:'POST',body:JSON.stringify({id:ticket.id,status:select.value})});toast('Статус обращения обновлён.');await loadAdminSupportTickets();}catch(e){toast(e.message||'Не удалось обновить обращение.');}finally{save.disabled=false;}});
-   actions.append(send,save);row.append(heading,meta,message,reply,actions,select);root.append(row);
+   actions.append(profile,send,save);row.append(heading,meta,message,reply,actions,select);root.append(row);
   });
- }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';}
+ }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';if(summary)summary.textContent='Не удалось загрузить сводку активности.';}
 }
-
-
 async function openAdminCampaignReport(id){
  const root=document.getElementById('adminCampaignReport');if(!root)return;
  root.classList.remove('hidden');root.textContent='Загружаем отчёт…';
