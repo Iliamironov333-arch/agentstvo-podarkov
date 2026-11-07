@@ -101,47 +101,54 @@ async function notifyOwner(env, message) {
   } catch (error) { console.error("Owner notification failed:", String(error)); }
 }
 async function deliverOrderImages(env, orderId, telegramId) {
-  const items = await env.DB.prepare("SELECT id,product_title,image_url,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
+  const rowsResult = await env.DB.prepare("SELECT id,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
     .bind(orderId).all();
-  const rows = items.results || [];
+  const rows = rowsResult.results || [];
   if (!rows.length) {
-    await notifyOwner(env, "⚠️ Заказ " + orderId + " оплачен, но в order_items нет товаров. Автовыдача остановлена.");
+    await notifyOwner(env, "⚠️ Заказ " + orderId + " оплачен, но в order_items нет товаров. Отправка открытки остановлена.");
     return false;
   }
-  let failed = false;
-  for (const item of rows) {
-    if (item.delivery_status === "sent") continue;
-    if (!item.image_url || !/^https:\/\//i.test(item.image_url)) {
-      failed = true;
-      await notifyOwner(env, "⚠️ Не удалось отправить картинку заказа " + orderId + ": у товара «" + item.product_title + "» не задан корректный HTTPS image_url.");
-      continue;
+  if (rows.every(row => row.delivery_status === "sent")) return true;
+
+  // Claim the order's pending delivery rows to prevent two webhook retries from sending two postcards.
+  const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending',delivery_started_at=CURRENT_TIMESTAMP WHERE order_id=? AND (delivery_status='pending' OR (delivery_status='sending' AND (delivery_started_at IS NULL OR delivery_started_at < datetime('now','-10 minutes'))))")
+    .bind(orderId).run();
+  if (!claim.meta || claim.meta.changes < 1) return false;
+
+  try {
+    const assetUrl = "https://raw.githubusercontent.com/Iliamironov333-arch/agentstvo-podarkov/main/assets/thank-you.jpg.b64";
+    const assetResponse = await fetch(assetUrl, { cf: { cacheTtl: 3600 } });
+    if (!assetResponse.ok) throw new Error("Не удалось получить открытку из GitHub: HTTP " + assetResponse.status);
+    const base64 = (await assetResponse.text()).trim();
+    if (!base64.startsWith("/9j/") || base64.length < 1000) throw new Error("Файл открытки повреждён или имеет неверный формат.");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const form = new FormData();
+    form.append("chat_id", String(telegramId));
+    form.append("caption", "🎁 Спасибо за покупку! Ваш заказ оплачен. Саму работу Илья доставит отдельно.");
+    form.append("photo", new Blob([bytes], { type: "image/jpeg" }), "thank-you.jpg");
+    const telegramResponse = await fetch("https://api.telegram.org/bot" + env.BOT_TOKEN + "/sendPhoto", {
+      method: "POST",
+      body: form
+    });
+    const telegramResult = await telegramResponse.json();
+    if (!telegramResponse.ok || !telegramResult.ok) {
+      throw new Error("Telegram sendPhoto: " + (telegramResult.description || telegramResponse.status));
     }
-    // Lease: a crashed Worker can leave 'sending'; after 10 minutes another webhook may reclaim it.
-    const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending',delivery_started_at=CURRENT_TIMESTAMP WHERE id=? AND (delivery_status='pending' OR (delivery_status='sending' AND (delivery_started_at IS NULL OR delivery_started_at < datetime('now','-10 minutes'))))")
-      .bind(item.id).run();
-    if (!claim.meta || claim.meta.changes !== 1) continue;
-    try {
-      await telegram(env, "sendPhoto", {
-        chat_id: telegramId,
-        photo: item.image_url,
-        caption: "🎁 Ваш цифровой файл: " + item.product_title
-      });
-      await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP,delivery_started_at=NULL WHERE id=? AND delivery_status='sending'")
-        .bind(item.id).run();
-    } catch (error) {
-      failed = true;
-      await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=NULL WHERE id=? AND delivery_status='sending'")
-        .bind(item.id).run();
-      await notifyOwner(env, "⚠️ Не удалось отправить картинку покупателю\nЗаказ: " + orderId + "\nТовар: " + item.product_title + "\nОшибка: " + String(error).slice(0, 500));
-    }
-  }
-  const remaining = await env.DB.prepare("SELECT COUNT(*) AS count FROM order_items WHERE order_id=? AND delivery_status!='sent'")
-    .bind(orderId).first();
-  if (Number(remaining?.count || 0) === 0) {
+
+    await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP,delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
+      .bind(orderId).run();
     await env.DB.prepare("UPDATE orders SET fulfillment_status='delivered',delivered_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='paid'")
       .bind(orderId).run();
+    return true;
+  } catch (error) {
+    await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
+      .bind(orderId).run();
+    await notifyOwner(env, "⚠️ Не удалось отправить открытку покупателю\nЗаказ: " + orderId + "\nОшибка: " + String(error).slice(0, 500));
+    return false;
   }
-  return !failed && Number(remaining?.count || 0) === 0;
 }
 
 async function getProducts(env) {
@@ -381,21 +388,7 @@ export default {
           const product = catalog.find(p => String(p.id) === id);
           return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
-        // Never charge for a digital product until its original delivery file is configured.
-        const missingDeliveryFiles = items.filter(item => {
-          if (!item.image_url || !/^https:\/\//i.test(item.image_url)) return true;
-          try {
-            const host = new URL(item.image_url).hostname.toLowerCase();
-            return host === "placehold.co" || host.endsWith(".placehold.co");
-          }
-          catch { return true; }
-        });
-        if (missingDeliveryFiles.length) {
-          return json({
-            error: "Оформление пока недоступно: для выбранных работ ещё не загружены оригинальные цифровые файлы. Оплата не списана.",
-            missing_products: missingDeliveryFiles.map(item => item.title)
-          }, 409, origin);
-        }
+        // The customer receives the shared payment-confirmation postcard; the seller delivers the artwork separately.
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const discount = Math.floor(subtotal * DISCOUNT_PERCENT / 100);
