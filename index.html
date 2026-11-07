@@ -725,6 +725,17 @@ async function openAdminConversation(telegramId) {
    const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
    item.append(head,body);box.append(item);
   });
+  const notesTitle=document.createElement('h4');notesTitle.textContent='🔒 Внутренние заметки владельца';box.append(notesTitle);
+  const notesRoot=document.createElement('div');notesRoot.className='admin-notes-list';box.append(notesRoot);
+  try{
+   const notesData=await apiFetch('/api/admin/support/notes?telegram_id='+encodeURIComponent(telegramId));
+   if(notesData.migration_pending){const pending=document.createElement('p');pending.className='notice';pending.textContent='Для заметок требуется миграция 0009_support_internal_notes.sql.';notesRoot.append(pending);}
+   (notesData.notes||[]).forEach(note=>{const item=document.createElement('div');item.className='admin-detail-line';const head=document.createElement('b');head.textContent='Владелец · '+(note.created_at||'');const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=note.note||'';item.append(head,body);notesRoot.append(item);});
+  }catch(noteError){const error=document.createElement('p');error.className='notice';error.textContent=noteError.message||'Не удалось загрузить заметки.';notesRoot.append(error);}
+  const noteInput=document.createElement('textarea');noteInput.rows=2;noteInput.maxLength=2000;noteInput.placeholder='Личная заметка по покупателю — её не увидит покупатель';noteInput.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+  const saveNote=document.createElement('button');saveNote.type='button';saveNote.className='secondary';saveNote.textContent='Сохранить заметку';
+  saveNote.addEventListener('click',async()=>{const note=noteInput.value.trim();if(note.length<2){toast('Введите заметку хотя бы из двух символов.');return;}saveNote.disabled=true;try{await apiFetch('/api/admin/support/notes',{method:'POST',body:JSON.stringify({telegram_id:telegramId,note})});toast('Внутренняя заметка сохранена.');await openAdminConversation(telegramId);}catch(e){toast(e.message||'Не удалось сохранить заметку.');}finally{saveNote.disabled=false;}});
+  box.append(noteInput,saveNote);
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть переписку';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось загрузить историю.';}
 }
