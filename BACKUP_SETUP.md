@@ -8,7 +8,7 @@ The owner backup module stores full D1 SQL exports in a private R2 bucket. It do
 2. Add the R2 binding to the Worker:
    - binding: `BACKUP_BUCKET`
    - bucket: `agentstvo-podarkov-backups`
-3. Configure the Worker secret `CLOUDFLARE_API_TOKEN`. Use a dedicated token with the minimum D1 permissions needed for database export and import. Do not put the token in GitHub, frontend code, or chat.
+3. Configure the Worker secret `CLOUDFLARE_API_TOKEN`. Use a dedicated token with the D1 Write permission (shown as D1 Edit in some Cloudflare permission screens) for database export and import. Do not put the token in GitHub, frontend code, or chat.
 4. Keep the existing D1 binding `DB`, Telegram secrets, and Worker routes unchanged.
 
 ## Schedule
