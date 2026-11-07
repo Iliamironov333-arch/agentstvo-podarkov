@@ -261,7 +261,8 @@ let catalogLoaded = false;
 function hasRealDeliveryImage(product) {
  try {
   const url = new URL(product[5] || '');
-  return url.protocol === 'https:' && !/(^|\\.)placehold\\.co$/i.test(url.hostname);
+  const host = url.hostname.toLowerCase();
+  return url.protocol === 'https:' && host !== 'placehold.co' && !host.endsWith('.placehold.co');
  } catch { return false; }
 }
 async function loadProducts() {
