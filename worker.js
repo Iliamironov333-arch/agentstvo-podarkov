@@ -797,6 +797,15 @@ export default {
           const rows = await env.DB.prepare("SELECT id,title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_at,updated_at FROM announcements ORDER BY id DESC LIMIT 100").all();
           return json({ ok: true, announcements: rows.results || [] }, 200, origin);
         }
+        if (path === "/api/admin/announcement-preview" && method === "POST") {
+          const body = await readJson(request);
+          const audienceType = body.audience_type === "selected" ? "selected" : "all";
+          const ids = Array.isArray(body.audience_ids) ? [...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500) : [];
+          const row = audienceType === "all"
+            ? await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first()
+            : await env.DB.prepare("SELECT COUNT(*) AS total FROM users WHERE telegram_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(ids)).first();
+          return json({ ok: true, recipient_count: Number(row?.total || 0), audience_type: audienceType, unknown_ids: audienceType === "selected" ? ids.length - Number(row?.total || 0) : 0 }, 200, origin);
+        }
         if (path === "/api/admin/announcement-save" && method === "POST") {
           const body = await readJson(request);
           const id = Number(body.id || 0);
