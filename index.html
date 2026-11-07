@@ -277,7 +277,7 @@ async function loadProducts() {
  } catch (error) {
   catalogLoaded = false;
   console.error('Не удалось загрузить серверный каталог:', error);
-  toast('Не удалось загрузить актуальные цены. Попробуй открыть приложение позже.');
+  toast('Каталог: ' + (error.message || 'не удалось загрузить цены'));
  }
 }
 let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
@@ -415,7 +415,7 @@ async function apiFetch(path,options={}) {
  });
 
  const data = await response.json().catch(() => ({detail:'Сервер вернул некорректный ответ'}));
- if (!response.ok) throw new Error(data.error || data.detail || data.message || `Ошибка сервера ${response.status}`);
+ if (!response.ok) throw new Error((data.error || data.detail || data.message || 'Ошибка сервера') + ` (HTTP ${response.status})`);
  return data;
 }
 
@@ -515,7 +515,7 @@ async function sendSupport() {
 
 
 function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),d=document.getElementById('vipHelpDescription'),b=document.getElementById('vipHelpButton'),h=document.getElementById('vipHelpStatus');if(s&&!v)s.textContent='Активной VIP-подписки пока нет.';if(d)d.textContent=v?'Подписка подтверждена сервером. Вам доступен отдельный канал VIP-помощи.':'Для доступа необходима действующая VIP-подписка. Обычная поддержка остаётся доступной.';if(b){b.disabled=!v;b.textContent=v?'Открыть VIP-помощь →':'🔒 VIP-помощь заблокирована';}if(h)h.textContent=v?'Подписка активна':'Нужен VIP';}
-async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку. Обновите приложение.';}}
+async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку: '+(e.message||'ошибка сервера')+'. Обновите приложение.';}}
 function openVipSupport(){if(!vipActive){toast('Для VIP-помощи нужна действующая подписка.');return;}showView('vipSupportView');}
 async function sendVipSupport(){const i=document.getElementById('vipSupportMessage'),r=document.getElementById('vipSupportResult'),b=document.getElementById('vipSupportSendBtn'),message=i.value.trim();if(!message){r.textContent='Опишите вопрос перед отправкой.';return;}b.disabled=true;r.textContent='VIP-помощник готовит ответ…';try{const d=await apiFetch('/api/vip/support',{method:'POST',body:JSON.stringify({message})});i.value='';r.textContent=d.reply||'Обращение обработано.';}catch(e){r.textContent=e.message||'Не удалось отправить обращение.';}finally{b.disabled=false;}}
 async function generateCraft(){const theme=document.getElementById('craftTheme').value.trim(),material=document.getElementById('craftMaterial').value,level=document.getElementById('craftLevel').value,b=document.getElementById('craftGenerateBtn'),s=document.getElementById('craftResultStatus'),p=document.getElementById('craftResultPanel');if(theme.length<3){s.textContent='Опишите задумку хотя бы несколькими словами.';return;}b.disabled=true;b.textContent='Создаём идею…';s.textContent='ИИ-мастерская разрабатывает поделку…';p.classList.add('hidden');try{const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({theme,material,level})});document.getElementById('craftResultTitle').textContent=d.title||'Ваша идея поделки';document.getElementById('craftResultText').textContent=d.answer||'Помощник не вернул описание.';p.classList.remove('hidden');s.textContent='Готово! Идея создана.';}catch(e){s.textContent=e.message||'Не удалось создать идею. Попробуйте ещё раз.';}finally{b.disabled=false;b.textContent='✨ Придумать поделку';}}
