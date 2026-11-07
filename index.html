@@ -243,8 +243,8 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
-  <div class="lineitem"><span>Сумма до скидки</span><b id="subtotal">0 ⭐</b></div>
-  <div class="lineitem"><span>Скидка 10%</span><b id="discount">—</b></div>
+  <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
+  <div class="lineitem"><span>Скидка</span><b id="discount">Уже учтена в каталоге</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
   <p class="notice" id="deliveryNotice">После подтверждения оплаты бот отправит открытку. Саму работу ты доставишь покупателю отдельно.</p>
@@ -468,11 +468,11 @@ function drawCart() {
  }
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
- const discountAmount = Math.floor(subtotal * 0.10);
- const total = Math.max(0,subtotal - discountAmount);
+ const discountAmount = 0;
+ const total = subtotal;
 
  document.getElementById('subtotal').textContent = money(subtotal);
- document.getElementById('discount').textContent = '−' + money(discountAmount);
+ document.getElementById('discount').textContent = 'Уже учтена в каталоге';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
