@@ -1295,11 +1295,19 @@ export default {
             .bind(orderId, item.id, item.title, item.qty, item.image_url))
         ];
         if(promoCode){
-          orderStatements.unshift(env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode));
-          orderStatements.push(env.DB.prepare("INSERT INTO promo_redemptions (order_id,code,telegram_id,discount_stars,status) SELECT ?,?,?,?,'reserved' WHERE changes()=1").bind(orderId,promoCode,telegramId,discount));
+          const reservation=await env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode).run();
+          if(!reservation.meta||reservation.meta.changes!==1)return json({error:"Промокод только что исчерпал лимит. Попробуйте другой."},409,origin);
+          orderStatements.push(env.DB.prepare("INSERT INTO promo_redemptions (order_id,code,telegram_id,discount_stars,status) VALUES (?,?,?,?,'reserved')").bind(orderId,promoCode,telegramId,discount));
         }
-        const orderResults=await env.DB.batch(orderStatements);
-        if(promoCode&&(!orderResults[0]?.meta||orderResults[0].meta.changes!==1))return json({error:"Промокод только что исчерпал лимит. Попробуйте другой."},409,origin);
+        try {
+          await env.DB.batch(orderStatements);
+        } catch(orderError) {
+          if(promoCode)await env.DB.batch([
+            env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
+            env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId)
+          ]);
+          throw orderError;
+        }
         try {
           const invoiceUrl = await createPaymentIntent(env, { payload: orderId, telegram_id: telegramId,
             kind: "order", reference_id: orderId, amount_stars: total, title: "Заказ " + orderId.slice(0, 8),
