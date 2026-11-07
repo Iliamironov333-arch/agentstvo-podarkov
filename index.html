@@ -524,6 +524,20 @@ async function openAdminUser(telegramId) {
    });
   }
   box.append(blockControls);
+  const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
+  const audit=document.createElement('div');audit.className='admin-block-controls';
+  const auditTitle=document.createElement('h4');auditTitle.textContent='История действий владельца';audit.append(auditTitle);
+  if(!adminHistory.length){
+   const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
+  }else{
+   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки'};
+   adminHistory.forEach(item=>{
+    const line=document.createElement('p');line.className='notice';
+    line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
+    audit.append(line);
+   });
+  }
+  box.append(audit);
   const controls=document.createElement('div');controls.className='admin-balance-controls';
   const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
   const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
