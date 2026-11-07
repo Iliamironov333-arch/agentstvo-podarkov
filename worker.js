@@ -402,6 +402,13 @@ export default {
       const telegramId = String(user.id);
       await ensureUser(env, user);
 
+      if (path === "/api/announcements" && method === "GET") {
+        const rows = await env.DB.prepare(
+          "SELECT id,title,body,link_url,starts_at,ends_at FROM announcements WHERE status='published' AND (starts_at IS NULL OR starts_at='' OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR ends_at='' OR datetime(ends_at)>=datetime('now')) AND (audience_type='all' OR (audience_type='selected' AND EXISTS (SELECT 1 FROM json_each(announcements.audience_ids) WHERE CAST(value AS TEXT)=?))) ORDER BY created_at DESC LIMIT 10"
+        ).bind(telegramId).all();
+        return json({ ok: true, announcements: rows.results || [] }, 200, origin);
+      }
+
       // Every owner endpoint is protected on the server, not merely hidden in the Mini App.
       if (path.startsWith("/api/admin/")) {
         const ownerId = String(env.ADMIN_TELEGRAM_ID || "").trim();
@@ -783,6 +790,55 @@ export default {
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
               .bind(telegramId,String(ticket.telegram_id),"support_ticket_status_changed",JSON.stringify({ticket_id:id,from:ticket.status,to:status})).run();
+          }
+          return json({ ok: true, id, status }, 200, origin);
+        }
+        if (path === "/api/admin/announcements" && method === "GET") {
+          const rows = await env.DB.prepare("SELECT id,title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_at,updated_at FROM announcements ORDER BY id DESC LIMIT 100").all();
+          return json({ ok: true, announcements: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/announcement-save" && method === "POST") {
+          const body = await readJson(request);
+          const id = Number(body.id || 0);
+          const title = typeof body.title === "string" ? body.title.trim().slice(0,100) : "";
+          const content = typeof body.body === "string" ? body.body.trim().slice(0,3000) : "";
+          const linkUrl = typeof body.link_url === "string" ? body.link_url.trim().slice(0,500) : "";
+          const startsAt = typeof body.starts_at === "string" && body.starts_at.trim() ? body.starts_at.trim().slice(0,40) : null;
+          const endsAt = typeof body.ends_at === "string" && body.ends_at.trim() ? body.ends_at.trim().slice(0,40) : null;
+          const audienceType = body.audience_type === "selected" ? "selected" : body.audience_type === "all" ? "all" : "";
+          const audienceIds = Array.isArray(body.audience_ids) ? [...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\d{1,24}$/.test(x)))].slice(0,500) : [];
+          const status = ["draft","published","archived"].includes(body.status) ? body.status : "draft";
+          if (!title || title.length < 2 || !content) return json({ error: "Заполните заголовок и текст объявления." }, 400, origin);
+          if (!audienceType || (audienceType === "selected" && !audienceIds.length)) return json({ error: "Для выбранной аудитории укажите хотя бы один Telegram ID." }, 400, origin);
+          if (linkUrl) { try { const parsed=new URL(linkUrl); if (!["https:","http:"].includes(parsed.protocol)) throw new Error("protocol"); } catch { return json({ error: "Ссылка должна быть корректным HTTP(S)-адресом." }, 400, origin); } }
+          if (startsAt && Number.isNaN(Date.parse(startsAt))) return json({ error: "Некорректная дата начала." }, 400, origin);
+          if (endsAt && Number.isNaN(Date.parse(endsAt))) return json({ error: "Некорректная дата окончания." }, 400, origin);
+          if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return json({ error: "Дата окончания должна быть позже даты начала." }, 400, origin);
+          if (id > 0) {
+            const existing = await env.DB.prepare("SELECT id FROM announcements WHERE id=?").bind(id).first();
+            if (!existing) return json({ error: "Объявление не найдено." }, 404, origin);
+            await env.DB.prepare("UPDATE announcements SET title=?,body=?,link_url=?,starts_at=?,ends_at=?,audience_type=?,audience_ids=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,id).run();
+          } else {
+            await env.DB.prepare("INSERT INTO announcements (title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_by) VALUES (?,?,?,?,?,?,?,?,?)")
+              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,telegramId).run();
+          }
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
+              .bind(telegramId,"announcement_saved",JSON.stringify({id:id || null,status,audience_type:audienceType})).run();
+          }
+          return json({ ok: true }, 200, origin);
+        }
+        if (path === "/api/admin/announcement-status" && method === "POST") {
+          const body = await readJson(request);
+          const id = Number(body.id);
+          const status = ["draft","published","archived"].includes(body.status) ? body.status : "";
+          if (!Number.isSafeInteger(id) || id < 1 || !status) return json({ error: "Укажите объявление и корректный статус." }, 400, origin);
+          const result = await env.DB.prepare("UPDATE announcements SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(status,id).run();
+          if (!result.meta || result.meta.changes !== 1) return json({ error: "Объявление не найдено." }, 404, origin);
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
+              .bind(telegramId,"announcement_status_changed",JSON.stringify({id,status})).run();
           }
           return json({ ok: true, id, status }, 200, origin);
         }
