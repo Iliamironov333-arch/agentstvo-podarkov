@@ -775,10 +775,12 @@ export default {
         if (path === "/api/admin/support/conversations" && method === "GET") {
           const url = new URL(request.url);
           const term = (url.searchParams.get("q") || "").trim().slice(0,64);
+          const likeTerm = "%" + term + "%";
+          const likeUsername = "%" + term.replace(/^@/, "") + "%";
           const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
           const rows = await env.DB.prepare(
-            "SELECT s.telegram_id,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_role FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id ORDER BY last_message_at DESC LIMIT ?"
-          ).bind(term, "%" + term + "%", "%" + term.replace(/^@/, "") + "%", "%" + term + "%", limit).all();
+            "SELECT s.telegram_id,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id ORDER BY last_message_at DESC LIMIT ?"
+          ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           return json({ ok: true, conversations: rows.results || [] }, 200, origin);
         }
         if (path === "/api/admin/support/conversation" && method === "GET") {
@@ -794,11 +796,24 @@ export default {
           return json({ ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null, messages: (messages.results || []).reverse() }, 200, origin);
         }
         if (path === "/api/admin/support/tickets" && method === "GET") {
-          const status = ["all","open","in_progress","closed"].includes(new URL(request.url).searchParams.get("status")) ? new URL(request.url).searchParams.get("status") : "all";
-          const rows = await env.DB.prepare(
-            "SELECT s.id,s.telegram_id,s.message,s.status,s.created_at,u.first_name,u.username FROM support_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='all' OR s.status=?) ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,s.id DESC LIMIT 100"
-          ).bind(status,status).all();
-          return json({ ok: true, tickets: rows.results || [] }, 200, origin);
+          const url = new URL(request.url);
+          const status = ["all","open","in_progress","closed"].includes(url.searchParams.get("status")) ? url.searchParams.get("status") : "all";
+          const term = (url.searchParams.get("q") || "").trim().slice(0,64);
+          const likeTerm = "%" + term + "%";
+          const likeUsername = "%" + term.replace(/^@/, "") + "%";
+          const [rows, summary] = await Promise.all([
+            env.DB.prepare(
+              "SELECT s.id,s.telegram_id,s.message,s.status,s.created_at,u.first_name,u.username,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS customer_ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS customer_last_ticket_at FROM support_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='all' OR s.status=?) AND (?='' OR s.telegram_id LIKE ? OR s.message LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,s.id DESC LIMIT 100"
+            ).bind(status,status,term,likeTerm,likeTerm,likeUsername,likeTerm).all(),
+            env.DB.prepare(
+              "SELECT COUNT(*) AS total,COUNT(DISTINCT telegram_id) AS buyers,SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) AS open,SUM(CASE WHEN status='in_progress' THEN 1 ELSE 0 END) AS in_progress,SUM(CASE WHEN status='closed' THEN 1 ELSE 0 END) AS closed,SUM(CASE WHEN created_at>=datetime('now','-7 days') THEN 1 ELSE 0 END) AS last_7_days FROM support_messages"
+            ).first()
+          ]);
+          return json({ ok: true, tickets: rows.results || [], summary: {
+            total:Number(summary?.total||0), buyers:Number(summary?.buyers||0),
+            open:Number(summary?.open||0), in_progress:Number(summary?.in_progress||0),
+            closed:Number(summary?.closed||0), last_7_days:Number(summary?.last_7_days||0)
+          } }, 200, origin);
         }
         if (path === "/api/admin/support/notes" && method === "GET") {
           const targetId = (new URL(request.url).searchParams.get("telegram_id") || "").trim().slice(0,64);
