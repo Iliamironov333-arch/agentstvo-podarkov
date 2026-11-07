@@ -371,6 +371,29 @@ export default {
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
         }
+        if (path === "/api/admin/users" && method === "GET") {
+          const url = new URL(request.url);
+          const term = (url.searchParams.get("q") || "").trim().slice(0, 64);
+          const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 25)));
+          const rows = term
+            ? await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id LIKE ? OR username LIKE ? OR first_name LIKE ? ORDER BY created_at DESC LIMIT ?")
+                .bind("%" + term + "%", "%" + term.replace(/^@/, "") + "%", "%" + term + "%", limit).all()
+            : await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users ORDER BY created_at DESC LIMIT ?")
+                .bind(limit).all();
+          return json({ ok: true, users: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/user" && method === "GET") {
+          const url = new URL(request.url);
+          const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0, 64);
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          const [profile, orders, transactions] = await Promise.all([
+            env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
+            env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
+            env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all()
+          ]);
+          if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
+          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [] }, 200, origin);
+        }
         if (path === "/api/admin/dashboard" && method === "GET") {
           const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
