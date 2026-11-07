@@ -7,10 +7,5 @@ binding = "DB"
 database_name = "agentstvo-podarkov"
 database_id = "077f0476-4ec0-4ddb-8236-be3575182b0a"
 
-# After R2 is enabled and the bucket is created, add:
-# [[r2_buckets]]
-# binding = "BACKUP_BUCKET"
-# bucket_name = "agentstvo-podarkov-backups"
-# Also configure the Worker secret CLOUDFLARE_API_TOKEN (D1 export/import permission).
 [triggers]
-crons = ["*/1 * * * *", "0 3 1 * *"]
+crons = ["*/1 * * * *"]
