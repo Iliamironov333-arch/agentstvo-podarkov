@@ -352,11 +352,6 @@ export default {
         return json({ ok: true, service: "agentstvo-podarkov-api",
           databaseConfigured: !!env.DB, botConfigured: !!env.BOT_TOKEN }, 200, origin);
       }
-      // Temporary non-secret diagnostic: identify which Telegram bot this Worker token belongs to.
-      if (path === "/api/telegram/identity" && method === "GET") {
-        const bot = await telegram(env, "getMe", {});
-        return json({ ok: true, bot: { id: bot.id, username: bot.username, first_name: bot.first_name } }, 200, origin);
-      }
       if (path === "/api/telegram/webhook" && method === "POST") {
         if (!env.DB || !env.BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) return json({ error: "Webhook is not configured" }, 500, origin);
         return handleWebhook(request, env);
