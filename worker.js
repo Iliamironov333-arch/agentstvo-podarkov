@@ -715,6 +715,30 @@ export default {
           ).bind(status,status).all();
           return json({ ok: true, tickets: rows.results || [] }, 200, origin);
         }
+        if (path === "/api/admin/support/notes" && method === "GET") {
+          const targetId = (new URL(request.url).searchParams.get("telegram_id") || "").trim().slice(0,64);
+          if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
+          const notes = await optionalTableRows(env.DB.prepare(
+            "SELECT id,admin_telegram_id,note,created_at FROM support_internal_notes WHERE telegram_id=? ORDER BY id DESC LIMIT 100"
+          ).bind(targetId), "support_internal_notes");
+          return json({ ok: true, notes: (notes.results || []).reverse(), migration_pending: !!notes.migration_pending }, 200, origin);
+        }
+        if (path === "/api/admin/support/notes" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const note = typeof body.note === "string" ? body.note.trim().slice(0,2000) : "";
+          if (!targetId || note.length < 2) return json({ error: "Укажите пользователя и заметку (минимум 2 символа)." }, 400, origin);
+          const user = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!user) return json({ error: "Пользователь не найден." }, 404, origin);
+          if (!(await tableExists(env,"support_internal_notes"))) return json({ error: "Требуется миграция 0009_support_internal_notes.sql для внутренних заметок." }, 503, origin);
+          const saved = await env.DB.prepare("INSERT INTO support_internal_notes (telegram_id,admin_telegram_id,note) VALUES (?,?,?)")
+            .bind(targetId,telegramId,note).run();
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+              .bind(telegramId,targetId,"support_internal_note_added",JSON.stringify({note_id:saved.meta?.last_row_id || null,length:note.length})).run();
+          }
+          return json({ ok: true }, 200, origin);
+        }
         if (path === "/api/admin/support/conversation-mode" && method === "POST") {
           const body = await readJson(request);
           const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
