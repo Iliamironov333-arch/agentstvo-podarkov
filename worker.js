@@ -378,12 +378,14 @@ async function handleWebhook(request, env) {
 
 async function processCampaignBatch(env, limit = 15) {
   if (!env.DB || !env.BOT_TOKEN) return { processed: 0, skipped: true };
+  if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return { processed: 0, skipped: true, migration_pending: true };
+  await env.DB.prepare("UPDATE campaign_recipients SET status='uncertain',last_error='Неизвестно, успел ли Telegram доставить сообщение до сбоя. Проверьте историю чата перед повтором.',updated_at=CURRENT_TIMESTAMP WHERE status='sending' AND started_at < datetime('now','-10 minutes')").run();
   const rows = await env.DB.prepare(
     "SELECT r.id AS recipient_id,r.telegram_id,r.attempts,c.id AS campaign_id,c.body,c.media_url,c.button_text,c.button_url FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='pending' AND c.status IN ('queued','sending') ORDER BY c.id,r.id LIMIT ?"
   ).bind(Math.min(25, Math.max(1, Number(limit) || 15))).all();
   let processed = 0;
   for (const row of rows.results || []) {
-    const claim = await env.DB.prepare("UPDATE campaign_recipients SET status='sending',attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+    const claim = await env.DB.prepare("UPDATE campaign_recipients SET status='sending',attempts=attempts+1,started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
       .bind(row.recipient_id).run();
     if (!claim.meta || claim.meta.changes !== 1) continue;
     try {
@@ -408,14 +410,14 @@ async function processCampaignBatch(env, limit = 15) {
     processed++;
   }
   await env.DB.prepare(
-    "UPDATE campaigns SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('pending','sending')) THEN 'sending' WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status='failed') THEN 'partial' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued','sending')"
+    "UPDATE campaigns SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('pending','sending')) THEN 'sending' WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('failed','uncertain')) THEN 'partial' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued','sending')"
   ).run();
   return { processed };
 }
 
 export default {
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(processCampaignBatch(env, 15));
+    ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -837,7 +839,7 @@ export default {
 
         if (path === "/api/admin/campaigns" && method === "GET") {
           if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return json({error:"Требуется миграция 0011_mass_mailing.sql."},503,origin);
-          const rows = await env.DB.prepare("SELECT c.id,c.title,c.body,c.audience_type,c.audience_ids,c.media_url,c.button_text,c.button_url,c.status,c.created_at,c.updated_at,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id) AS total,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent') AS sent,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed') AS failed,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('pending','sending')) AS pending FROM campaigns c ORDER BY c.id DESC LIMIT 100").all();
+          const rows = await env.DB.prepare("SELECT c.id,c.title,c.body,c.audience_type,c.audience_ids,c.media_url,c.button_text,c.button_url,c.status,c.created_at,c.updated_at,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id) AS total,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent') AS sent,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed') AS failed,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('pending','sending')) AS pending,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='uncertain') AS uncertain FROM campaigns c ORDER BY c.id DESC LIMIT 100").all();
           return json({ok:true,campaigns:rows.results||[]},200,origin);
         }
         if (path === "/api/admin/campaign-preview" && method === "POST") {
@@ -894,12 +896,12 @@ export default {
           if(campaign.audience_type==="buyers")audienceSql="WHERE EXISTS (SELECT 1 FROM orders o WHERE o.telegram_id=u.telegram_id AND o.payment_status='paid')";
           else if(campaign.audience_type==="inactive")audienceSql="WHERE COALESCE(u.updated_at,u.created_at)<=datetime('now','-30 days')";
           else if(campaign.audience_type==="selected") {audienceSql="WHERE u.telegram_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))";audienceBinds.push(campaign.audience_ids||"[]");}
-          const batch=await env.DB.batch([
+          const batch=[
             env.DB.prepare(insert+audienceSql).bind(...audienceBinds),
-            env.DB.prepare("UPDATE campaigns SET status=CASE WHEN (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id=?)=0 THEN 'completed' ELSE 'queued' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'").bind(id,id),
-            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) SELECT ?, 'campaign_queued', ? WHERE EXISTS (SELECT 1 FROM campaigns WHERE id=? AND status IN ('queued','completed'))")
-              .bind(telegramId,JSON.stringify({campaign_id:id}),id)
-          ]);
+            env.DB.prepare("UPDATE campaigns SET status=CASE WHEN (SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id=?)=0 THEN 'completed' ELSE 'queued' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'").bind(id,id)
+          ];
+          if (await tableExists(env,"admin_action_log")) batch.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) SELECT ?, 'campaign_queued', ? WHERE EXISTS (SELECT 1 FROM campaigns WHERE id=? AND status IN ('queued','completed'))").bind(telegramId,JSON.stringify({campaign_id:id}),id));
+          await env.DB.batch(batch);
           const total=await env.DB.prepare("SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?").bind(id).first();
           return json({ok:true,id,recipient_count:Number(total?.total||0),status:Number(total?.total||0)?"queued":"completed"},200,origin);
         }
