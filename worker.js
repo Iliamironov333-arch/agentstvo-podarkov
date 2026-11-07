@@ -140,8 +140,8 @@ async function deliverOrderImages(env, orderId, telegramId) {
 
     await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP,delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
       .bind(orderId).run();
-    await env.DB.prepare("UPDATE orders SET fulfillment_status='delivered',delivered_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='paid'")
-      .bind(orderId).run();
+    // The postcard is delivered automatically; the actual artwork is delivered manually by the seller.
+    // Keep the order in awaiting_delivery until the seller completes the artwork delivery.
     return true;
   } catch (error) {
     await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
