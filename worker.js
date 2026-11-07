@@ -762,7 +762,29 @@ export default {
           }
           return json({ ok: true, id, status }, 200, origin);
         }
+        if (path === "/api/admin/system-controls" && method === "GET") {
+          const row = await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='sales_paused'").first();
+          return json({ ok: true, sales_paused: row?.value === "1", updated_at: row?.updated_at || null }, 200, origin);
+        }
+        if (path === "/api/admin/system-controls" && method === "POST") {
+          const body = await readJson(request);
+          if (typeof body.sales_paused !== "boolean") return json({ error: "Укажите состояние остановки продаж." }, 400, origin);
+          const value = body.sales_paused ? "1" : "0";
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('sales_paused',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP")
+            .bind(value).run();
+          if (await tableExists(env,"admin_action_log")) {
+            await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
+              .bind(telegramId,"sales_pause_changed",JSON.stringify({sales_paused:body.sales_paused})).run();
+          }
+          return json({ ok: true, sales_paused: body.sales_paused }, 200, origin);
+        }
         return json({ error: "Admin route not found." }, 404, origin);
+      }
+
+      // Emergency sales pause: keep the catalog readable and existing paid orders intact.
+      if (method === "POST" && ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
+        const salesPause = await env.DB.prepare("SELECT value FROM app_settings WHERE key='sales_paused'").first();
+        if (salesPause?.value === "1") return json({ error: "Оформление новых покупок временно приостановлено владельцем. Уже оплаченные заказы продолжают обрабатываться." }, 503, origin);
       }
 
       // Enforce user restrictions server-side after owner routes, so the owner can always administer accounts.
