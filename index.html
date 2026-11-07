@@ -191,8 +191,11 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="admin-metrics" id="adminMetrics">
   <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
   <div class="admin-metric"><span>Всего заказов</span><strong id="adminOrders">—</strong></div>
+  <div class="admin-metric"><span>Обычные заказы</span><strong id="adminProductOrders">—</strong></div>
+  <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="adminCustomOrders">—</strong></div>
   <div class="admin-metric"><span>Выручка</span><strong id="adminRevenue">— ⭐</strong></div>
   <div class="admin-metric"><span>Ожидают обработки</span><strong id="adminWaiting">—</strong></div>
+  <div class="admin-metric"><span>Ожидают оплаты</span><strong id="adminPendingPayments">—</strong></div>
  </div>
  <p class="notice" id="adminUpdatedAt">Показатели загружаются из D1 через защищённый Worker.</p>
  <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
@@ -987,8 +990,11 @@ async function loadAdminDashboard() {
   const m = data.metrics || {};
   document.getElementById('adminUsers').textContent = Number(m.users || 0).toLocaleString('ru-RU');
   document.getElementById('adminOrders').textContent = Number(m.orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminProductOrders').textContent = Number(m.product_orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminCustomOrders').textContent = Number(m.custom_orders || 0).toLocaleString('ru-RU');
   document.getElementById('adminRevenue').textContent = Number(m.revenue_stars || 0).toLocaleString('ru-RU') + ' ⭐';
   document.getElementById('adminWaiting').textContent = Number(m.awaiting_processing || 0).toLocaleString('ru-RU');
+  document.getElementById('adminPendingPayments').textContent = Number(m.pending_payments || 0).toLocaleString('ru-RU');
   const updated = data.updated_at ? new Date(data.updated_at) : null;
   document.getElementById('adminUpdatedAt').textContent = updated && !Number.isNaN(updated.getTime())
    ? 'Обновлено: ' + updated.toLocaleString('ru-RU')
