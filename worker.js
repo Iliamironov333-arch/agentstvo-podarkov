@@ -410,6 +410,57 @@ export default {
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
         }
+        if (path === "/api/admin/products" && method === "GET") {
+          const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY CAST(id AS INTEGER),created_at DESC").all();
+          const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
+          return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
+        }
+        if (path === "/api/admin/product-save" && method === "POST") {
+          const body = await readJson(request);
+          const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
+          const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
+          const description = typeof body.description === "string" ? body.description.trim().slice(0,2000) : "";
+          const imageUrl = typeof body.image_url === "string" ? body.image_url.trim().slice(0,1000) : "";
+          const category = typeof body.category === "string" ? body.category.trim().slice(0,60) : "";
+          const price = Number(body.price_stars);
+          const isActive = body.is_active === true || body.is_active === 1 ? 1 : 0;
+          if (title.length < 2) return json({ error: "Название должно содержать минимум 2 символа." }, 400, origin);
+          if (!Number.isSafeInteger(price) || price < 0 || price > 1000000) return json({ error: "Укажите корректную цену в Stars." }, 400, origin);
+          if (!category) return json({ error: "Укажите категорию товара." }, 400, origin);
+          if (imageUrl) {
+            try { const parsed = new URL(imageUrl); if (parsed.protocol !== "https:") throw new Error("protocol"); }
+            catch { return json({ error: "Ссылка на изображение должна начинаться с https://." }, 400, origin); }
+          }
+          if (id) {
+            const existing = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
+            if (!existing) return json({ error: "Товар не найден." }, 404, origin);
+            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=? WHERE id=?")
+              .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
+          } else {
+            const newId = makeId();
+            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active) VALUES (?,?,?,?,?,?,?)")
+              .bind(newId, title, description || null, imageUrl || null, category, price, isActive).run();
+            return json({ ok: true, id: newId, created: true }, 201, origin);
+          }
+          return json({ ok: true, id, created: false }, 200, origin);
+        }
+        if (path === "/api/admin/product-delete" && method === "POST") {
+          const body = await readJson(request);
+          const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
+          if (!id) return json({ error: "Укажите товар." }, 400, origin);
+          const existing = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
+          if (!existing) return json({ error: "Товар не найден." }, 404, origin);
+          const [orders,items,favorites] = await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders WHERE product_id=?").bind(id).first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM order_items WHERE product_id=?").bind(id).first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM favorites WHERE product_id=?").bind(id).first()
+          ]);
+          if (Number(orders?.total||0)+Number(items?.total||0)+Number(favorites?.total||0)>0) {
+            return json({ error: "Товар связан с заказами или избранным. Чтобы сохранить историю, его можно только скрыть из каталога." }, 409, origin);
+          }
+          await env.DB.prepare("DELETE FROM products WHERE id=?").bind(id).run();
+          return json({ ok: true, deleted: true }, 200, origin);
+        }
         if (path === "/api/admin/users" && method === "GET") {
           const url = new URL(request.url);
           const term = (url.searchParams.get("q") || "").trim().slice(0, 64);
