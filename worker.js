@@ -465,6 +465,27 @@ export default {
           }
           return json({ ok: true, telegram_id: targetId }, 200, origin);
         }
+        if (path === "/api/admin/orders" && method === "GET") {
+          const url = new URL(request.url);
+          const term = (url.searchParams.get("q") || "").trim().slice(0,80);
+          const type = ["all","product","custom"].includes(url.searchParams.get("type")) ? url.searchParams.get("type") : "all";
+          const status = ["all","unpaid","new","in_progress","ready","cancelled"].includes(url.searchParams.get("status")) ? url.searchParams.get("status") : "all";
+          const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
+          const like = "%" + term + "%";
+          const productStatus = "CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END";
+          const customStatus = "CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END";
+          const [products, custom] = await Promise.all([
+            type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+            ).bind(term,like,like,like,status,status,limit).all(),
+            type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
+              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status FROM custom_orders c) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+            ).bind(term,like,like,like,status,status,limit).all()
+          ]);
+          const rows = [...(products.results || []), ...(custom.results || [])]
+            .sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
+          return json({ ok: true, orders: rows, filters: { q: term, type, status }, updated_at: new Date().toISOString() }, 200, origin);
+        }
         if (path === "/api/admin/dashboard" && method === "GET") {
           const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
