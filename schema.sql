@@ -139,3 +139,23 @@ CREATE INDEX IF NOT EXISTS idx_balance_user ON balance_transactions(telegram_id,
 CREATE INDEX IF NOT EXISTS idx_vip_user ON vip_subscriptions(telegram_id, id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, created_at);
 CREATE INDEX IF NOT EXISTS idx_payment_intents_user ON payment_intents(telegram_id, created_at);
+
+
+CREATE TABLE IF NOT EXISTS support_chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 4000),
+  sender_type TEXT NOT NULL DEFAULT 'ai',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
+
+CREATE TABLE IF NOT EXISTS support_conversation_controls (
+  telegram_id TEXT PRIMARY KEY,
+  mode TEXT NOT NULL DEFAULT 'ai' CHECK (mode IN ('ai','human')),
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
+
