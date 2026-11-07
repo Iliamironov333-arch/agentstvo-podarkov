@@ -70,7 +70,7 @@ async function validateTelegram(initData, botToken) {
     const checkString = Array.from(params.entries())
       .sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
       .map(([key, value]) => key + "=" + value).join("\n");
-    const secret = await hmac(new TextEncoder().encode(botToken), "WebAppData");
+    const secret = await hmac(new TextEncoder().encode("WebAppData"), botToken);
     const calculated = toHex(await hmac(secret, checkString));
     if (!safeEqual(calculated, suppliedHash)) return null;
     const authDate = Number(params.get("auth_date"));
