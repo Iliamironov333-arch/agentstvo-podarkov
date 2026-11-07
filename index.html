@@ -122,6 +122,13 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 .admin-detail-line{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;overflow-wrap:anywhere}
 .admin-detail-line:last-child{border:0}
 .admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
+.admin-product-actions,.admin-product-row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.admin-product-actions>*{flex:1;min-width:120px}
+#adminProductEditor{display:grid;gap:10px;margin-top:12px}
+#adminProductEditor label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+#adminProductEditor input,#adminProductEditor textarea,#adminProductEditor select{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font:inherit}
+#adminProductEditor textarea{resize:vertical;min-height:70px}
+.admin-product-row-actions button{min-width:76px}
 .admin-order-actions{display:grid;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .admin-order-actions h4{margin:0;color:var(--gold2)}
 .admin-order-actions label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
@@ -205,6 +212,24 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <p id="adminOrdersStatus" class="notice" aria-live="polite">Заказы загружаются…</p>
    <div id="adminOrdersList"></div>
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
+  </div>
+  <div class="panel" id="adminCatalogPanel">
+   <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div>
+   <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
+   <p id="adminProductsStatus" class="notice" aria-live="polite">Каталог загружается…</p>
+   <div id="adminProductsList"></div>
+   <div id="adminProductEditor" class="admin-user-detail hidden">
+    <h4 id="adminProductEditorTitle">Новый товар</h4>
+    <input type="hidden" id="adminProductId">
+    <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
+    <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
+    <label>Ссылка на фотографию (HTTPS)<input id="adminProductImage" type="url" maxlength="1000" placeholder="https://…"></label>
+    <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
+    <datalist id="adminProductCategories"></datalist>
+    <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
+    <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
+    <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
+   </div>
   </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
@@ -361,7 +386,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); }
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); }
 }
 
 function openBot(action) {
@@ -780,6 +805,82 @@ async function loadAdminOrders() {
    row.append(info,detail);root.append(row);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
+}
+
+async function loadAdminProducts() {
+ const status=document.getElementById('adminProductsStatus');
+ const root=document.getElementById('adminProductsList');
+ if(!status||!root)return;
+ status.textContent='Загружаем каталог из D1…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/products');
+  const products=Array.isArray(data.products)?data.products:[];
+  const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
+  (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
+  status.textContent='Товаров в каталоге: '+products.length;
+  if(!products.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет товаров.';root.append(empty);return;}
+  products.forEach(product=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');info.className='admin-user-info';
+   const title=document.createElement('strong');title.textContent=product.title||'Без названия';
+   const meta=document.createElement('small');meta.textContent=(product.category||'Без категории')+' · '+Number(product.price_stars||0)+' ⭐ · '+(Number(product.is_active)===1?'Опубликован':'Черновик');
+   info.append(title,meta);
+   const actions=document.createElement('div');actions.className='admin-product-row-actions';
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>editAdminProduct(product));
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.addEventListener('click',()=>deleteAdminProduct(product));
+   actions.append(edit,remove);row.append(info,actions);root.append(row);
+  });
+ }catch(error){status.textContent=error.message||'Не удалось загрузить каталог.';}
+}
+function newAdminProduct(){
+ const editor=document.getElementById('adminProductEditor');if(!editor)return;
+ document.getElementById('adminProductEditorTitle').textContent='Новый товар';
+ document.getElementById('adminProductId').value='';
+ document.getElementById('adminProductTitle').value='';
+ document.getElementById('adminProductDescription').value='';
+ document.getElementById('adminProductImage').value='';
+ document.getElementById('adminProductCategory').value='';
+ document.getElementById('adminProductPrice').value='';
+ document.getElementById('adminProductActive').value='0';
+ editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function editAdminProduct(product){
+ const editor=document.getElementById('adminProductEditor');if(!editor)return;
+ document.getElementById('adminProductEditorTitle').textContent='Редактирование товара';
+ document.getElementById('adminProductId').value=String(product.id);
+ document.getElementById('adminProductTitle').value=product.title||'';
+ document.getElementById('adminProductDescription').value=product.description||'';
+ document.getElementById('adminProductImage').value=product.image_url||'';
+ document.getElementById('adminProductCategory').value=product.category||'';
+ document.getElementById('adminProductPrice').value=String(product.price_stars??0);
+ document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
+ editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeAdminProductEditor(){document.getElementById('adminProductEditor')?.classList.add('hidden');}
+async function saveAdminProduct(){
+ const button=document.getElementById('adminProductSaveBtn');if(button)button.disabled=true;
+ const payload={
+  id:document.getElementById('adminProductId').value.trim(),
+  title:document.getElementById('adminProductTitle').value.trim(),
+  description:document.getElementById('adminProductDescription').value.trim(),
+  image_url:document.getElementById('adminProductImage').value.trim(),
+  category:document.getElementById('adminProductCategory').value.trim(),
+  price_stars:Number(document.getElementById('adminProductPrice').value),
+  is_active:document.getElementById('adminProductActive').value==='1'
+ };
+ try{
+  await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
+  toast(payload.is_active?'Товар опубликован':'Черновик сохранён');
+  closeAdminProductEditor();await loadAdminProducts();
+ }catch(error){toast(error.message||'Не удалось сохранить товар.');}
+ finally{if(button)button.disabled=false;}
+}
+async function deleteAdminProduct(product){
+ if(!confirm('Удалить товар «'+product.title+'»? Если он связан с заказами или избранным, система не позволит удалить его и предложит скрыть.'))return;
+ try{
+  await apiFetch('/api/admin/product-delete',{method:'POST',body:JSON.stringify({id:String(product.id)})});
+  toast('Товар удалён');await loadAdminProducts();
+ }catch(error){toast(error.message||'Не удалось удалить товар.');}
 }
 
 async function checkOwnerAccess() {
