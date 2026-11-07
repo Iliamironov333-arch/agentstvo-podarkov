@@ -156,7 +156,7 @@ body.light-theme .leaf-layer{opacity:.38}
   <div class="lineitem"><span>Скидка 10%</span><b id="discount">—</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
-  <p class="notice" id="deliveryNotice">Проверяем каталог и наличие цифровых файлов…</p>
+  <p class="notice" id="deliveryNotice">После подтверждения оплаты бот отправит открытку. Саму работу ты доставишь покупателю отдельно.</p>
   <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
  </div>
 </section>
@@ -258,13 +258,6 @@ let products = [
 [42,"Сырная планета",200,"🧀","art"]
 ];
 let catalogLoaded = false;
-function hasRealDeliveryImage(product) {
- try {
-  const url = new URL(product[5] || '');
-  const host = url.hostname.toLowerCase();
-  return url.protocol === 'https:' && host !== 'placehold.co' && !host.endsWith('.placehold.co');
- } catch { return false; }
-}
 async function loadProducts() {
  if (!initData) return;
  try {
@@ -389,14 +382,11 @@ function drawCart() {
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
- const missingFiles = entries.filter(p => !hasRealDeliveryImage(p));
  const notice = document.getElementById('deliveryNotice');
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
-  : missingFiles.length
-   ? 'Оплата временно недоступна: для выбранных работ ещё не подключены оригинальные цифровые файлы.'
-   : 'Цифровые файлы готовы к автоматической отправке после подтверждения оплаты.';
- document.getElementById('checkoutBtn').disabled = !entries.length || !catalogLoaded || missingFiles.length > 0;
+  : 'После оплаты бот отправит открытку. Саму работу ты доставишь отдельно.';
+ document.getElementById('checkoutBtn').disabled = !entries.length || !catalogLoaded;
 }
 
 function changeQty(id,d) {
@@ -534,7 +524,6 @@ async function checkout() {
  if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
  if (!entries.length) return toast('Корзина пустая.');
  if (!catalogLoaded) return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
- if (entries.some(p => !hasRealDeliveryImage(p))) return toast('Оплата пока недоступна: оригинальный цифровой файл ещё не подключён.');
  if (entries.some(p => p[2] == null)) return toast('У одной из работ ещё не указана цена.');
 
  const btn = document.getElementById('checkoutBtn');
