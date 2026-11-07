@@ -231,6 +231,12 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
     <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
    </div>
   </div>
+  <div class="panel" id="adminSystemControlsPanel">
+   <h3>🚦 Экстренное управление</h3>
+   <p class="muted">Остановка запрещает новые покупки и оформление заказов. Каталог остаётся доступным, уже оплаченные заказы не затрагиваются.</p>
+   <p id="adminSalesPauseStatus" class="notice" aria-live="polite">Проверяем состояние продаж…</p>
+   <button id="adminSalesPauseButton" type="button" class="secondary" onclick="toggleAdminSalesPause()" disabled>Загрузка…</button>
+  </div>
   <div class="panel" id="adminSupportPanel">
    <div class="sectionhead"><h3>💬 Поддержка и CRM</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
    <p class="muted">История переписки с ИИ и обращения покупателей. Здесь можно отслеживать диалоги и менять статус заявок.</p>
@@ -398,7 +404,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); }
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); }
 }
 
 function openBot(action) {
@@ -654,6 +660,25 @@ async function adminAdjustBalance(telegramId) {
  finally{if(button)button.disabled=false;}
 }
 
+let adminSalesPaused=false;
+async function loadAdminSystemControls(){
+ const status=document.getElementById('adminSalesPauseStatus'),button=document.getElementById('adminSalesPauseButton');
+ if(!status||!button)return;
+ try{
+  const data=await apiFetch('/api/admin/system-controls');adminSalesPaused=!!data.sales_paused;
+  status.textContent=adminSalesPaused?'Продажи приостановлены. Каталог доступен, существующие оплаченные заказы продолжают работу.':'Продажи включены. Новые заказы и покупки разрешены.';
+  button.textContent=adminSalesPaused?'▶ Возобновить продажи':'⏸ Приостановить новые продажи';
+  button.className=adminSalesPaused?'primary':'secondary';button.disabled=false;
+ }catch(e){status.textContent=e.message||'Не удалось получить состояние продаж.';button.disabled=true;}
+}
+async function toggleAdminSalesPause(){
+ const next=!adminSalesPaused;
+ const promptText=next?'Приостановить оформление новых покупок? Каталог и оплаченные заказы останутся доступными.':'Возобновить оформление новых покупок?';
+ if(!confirm(promptText))return;
+ const button=document.getElementById('adminSalesPauseButton');if(button)button.disabled=true;
+ try{await apiFetch('/api/admin/system-controls',{method:'POST',body:JSON.stringify({sales_paused:next})});toast(next?'Новые продажи приостановлены.':'Продажи возобновлены.');await loadAdminSystemControls();}
+ catch(e){toast(e.message||'Не удалось изменить режим продаж.');if(button)button.disabled=false;}
+}
 async function loadAdminSupport() {
  const status=document.getElementById('adminConversationsStatus'),root=document.getElementById('adminConversationsList');
  if(!status||!root)return;
