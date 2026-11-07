@@ -1,7 +1,7 @@
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
 const VIP_PRICES = { subscription: 500, lifetime: 2000 };
-const TOPUP_AMOUNTS = [50, 100, 250, 500, 750, 1000];
+// Пополнение доступно на любую целую сумму от 1 до 10 000 Stars.
 const CUSTOM_PRICE_OPTIONS = {"style":{"classic":0,"watercolor":80,"perspective":120,"autumn":40,"realistic":150,"artist_choice":0},"format":{"postcard":0,"a5":40,"a4":90,"large":140},"palette":{"natural":0,"bright":25,"pastel":35,"custom":55},"complexity":{"simple":0,"medium":45,"detailed":90},"deadline":{"standard":0,"priority":100}};
 const PRODUCT_META = [
   ["0","Зима в горах","🏔️","winter"],["1","Тёплая зима","⛄","winter"],
@@ -460,7 +460,9 @@ export default {
       if (path === "/api/balance/topup" && method === "POST") {
         const body = await readJson(request);
         const amount = Number(body.amount_stars);
-        if (!TOPUP_AMOUNTS.includes(amount)) return json({ error: "Выберите одну из доступных сумм пополнения" }, 400, origin);
+        if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000) {
+          return json({ error: "Введите целую сумму от 1 до 10 000 Stars." }, 400, origin);
+        }
         const bonus = amount > 500 ? 50 : 0;
         const payload = "topup:" + telegramId + ":" + makeId();
         const invoiceUrl = await createPaymentIntent(env, { payload, telegram_id: telegramId, kind: "topup",
