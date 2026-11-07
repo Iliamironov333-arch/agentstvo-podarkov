@@ -8,4 +8,4 @@ database_name = "agentstvo-podarkov"
 database_id = "077f0476-4ec0-4ddb-8236-be3575182b0a"
 
 [triggers]
-crons = ["*/1 * * * *"]
+crons = ["*/1 * * * *", "0 3 1 * *"]
