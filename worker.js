@@ -363,6 +363,17 @@ export default {
       const telegramId = String(user.id);
       await ensureUser(env, user);
 
+      // Every owner endpoint is protected on the server, not merely hidden in the Mini App.
+      if (path.startsWith("/api/admin/")) {
+        const ownerId = String(env.ADMIN_TELEGRAM_ID || "").trim();
+        if (!ownerId) return json({ error: "Owner access is not configured." }, 503, origin);
+        if (telegramId !== ownerId) return json({ error: "Owner access required." }, 403, origin);
+        if (path === "/api/admin/session" && method === "GET") {
+          return json({ ok: true, owner: true }, 200, origin);
+        }
+        return json({ error: "Admin route not found." }, 404, origin);
+      }
+
       if (path === "/api/products" && method === "GET") {
         return json({ products: await getProducts(env) }, 200, origin);
       }
