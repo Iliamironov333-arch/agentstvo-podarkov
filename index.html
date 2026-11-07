@@ -141,7 +141,14 @@ body.light-theme .leaf-layer{opacity:.38}
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Создание идей поделок и подробных инструкций</span></button>
   <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card hidden" id="ownerAdminCard" onclick="showView('adminPanelView')"><strong>🔐 Панель владельца <span class="pill">ADMIN</span></strong><span>Управление Агентством подарков</span></button>
  </div>
+</section>
+<section id="adminPanelView" class="hidden">
+ <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
+ <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
+ <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверен сервером. Все будущие административные операции будут проходить повторную проверку на Worker.</p></div>
+ <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
 <section id="catalogView" class="hidden">
  <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
@@ -401,6 +408,18 @@ function changeQty(id,d) {
  drawCart();
 }
 
+async function checkOwnerAccess() {
+ const card = document.getElementById('ownerAdminCard');
+ if (!card || !initData) return;
+ card.classList.add('hidden');
+ try {
+  const result = await apiFetch('/api/admin/session');
+  if (result && result.owner === true) card.classList.remove('hidden');
+ } catch(e) {
+  card.classList.add('hidden');
+ }
+}
+
 async function apiFetch(path,options={}) {
  if (!API_BASE) throw new Error('API пока не настроен. Нужен публичный HTTPS-адрес сервера в параметре ?api=...');
  if (!initData) throw new Error('Открой каталог кнопкой внутри Telegram, чтобы проверить пользователя.');
@@ -613,6 +632,7 @@ drawCart();
 loadProducts();
 loadMe();
 refreshVipHelpCard();
+checkOwnerAccess();
 showView('menuView');
 </script>
 </body>
