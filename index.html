@@ -105,6 +105,32 @@ body.light-theme .leaf-layer{opacity:.38}
 .row-actions .secondary{flex:1 1 68px}
 .menu-card.about-card{grid-column:1/-1}
 @media(max-width:420px){.brand{gap:8px}.logo{width:40px;height:40px;font-size:23px}.brand h1{font-size:16px}.brand p{font-size:10px}.headtools{gap:4px}.headchip{padding:7px 6px;font-size:11px}.theme-toggle{min-width:32px;padding:7px}}
+.admin-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.admin-metric{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:15px;min-width:0}
+.admin-metric span{display:block;color:var(--muted);font-size:12px;line-height:1.35}
+.admin-metric strong{display:block;color:var(--gold2);font-size:25px;margin-top:8px;overflow-wrap:anywhere}
+body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
+@media(min-width:600px){.admin-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.admin-search{display:flex;gap:8px;align-items:center}
+.admin-search input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px;color:var(--text);font:inherit}
+.admin-user-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.admin-user-row:last-child{border-bottom:0}
+.admin-user-row strong,.admin-user-row small{display:block;overflow-wrap:anywhere}
+.admin-user-row small{color:var(--muted);font-size:11px;margin-top:4px}
+.admin-user-row button{flex-shrink:0}
+.admin-user-detail{margin-top:14px;padding:13px;background:var(--panel2);border:1px solid var(--line);border-radius:13px}
+.admin-detail-line{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;overflow-wrap:anywhere}
+.admin-detail-line:last-child{border:0}
+.admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
+.admin-balance-controls{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.admin-balance-controls h4{margin:0 0 10px;color:var(--gold2)}
+.admin-balance-controls input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit}
+.admin-balance-controls .primary{width:100%}
+.admin-block-controls{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.admin-block-controls h4{margin:0 0 10px;color:var(--gold2)}
+.admin-block-controls input,.admin-block-controls select{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit}
+.admin-block-controls button{width:100%;margin-top:8px}
+
 </style>
 </head>
 <body>
@@ -141,7 +167,41 @@ body.light-theme .leaf-layer{opacity:.38}
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Создание идей поделок и подробных инструкций</span></button>
   <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card hidden" id="ownerAdminCard" onclick="showView('adminPanelView')"><strong>🔐 Панель владельца <span class="pill">ADMIN</span></strong><span>Управление Агентством подарков</span></button>
  </div>
+</section>
+<section id="adminPanelView" class="hidden">
+ <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
+ <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
+ <div class="sectionhead"><h3>Обзор Агентства</h3><button class="secondary" type="button" id="adminRefreshBtn" onclick="loadAdminDashboard()">↻ Обновить</button></div>
+ <div class="admin-metrics" id="adminMetrics">
+  <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
+  <div class="admin-metric"><span>Всего заказов</span><strong id="adminOrders">—</strong></div>
+  <div class="admin-metric"><span>Выручка</span><strong id="adminRevenue">— ⭐</strong></div>
+  <div class="admin-metric"><span>Ожидают обработки</span><strong id="adminWaiting">—</strong></div>
+ </div>
+ <p class="notice" id="adminUpdatedAt">Показатели загружаются из D1 через защищённый Worker.</p>
+ <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
+ <div class="panel">
+  <h3>👥 Пользователи</h3>
+  <div class="admin-search"><input id="adminUserSearch" type="search" maxlength="64" placeholder="Telegram ID, имя или username"><button class="secondary" type="button" onclick="loadAdminUsers()">Найти</button></div>
+  <div id="adminUsersStatus" class="notice" aria-live="polite">Загрузка списка пользователей…</div>
+  <div id="adminUsersList"></div>
+  <div id="adminUserDetail" class="admin-user-detail hidden"></div>
+ </div>
+ <div class="panel">
+   <h3>📦 Заказы</h3>
+   <div class="admin-search"><input id="adminOrderSearch" type="search" maxlength="80" placeholder="Номер заказа или Telegram ID"><button class="secondary" type="button" onclick="loadAdminOrders()">Найти</button></div>
+   <div class="admin-search">
+    <select id="adminOrderType" aria-label="Тип заказа" onchange="loadAdminOrders()"><option value="all">Все типы</option><option value="product">Товары каталога</option><option value="custom">Индивидуальные</option></select>
+    <select id="adminOrderStatus" aria-label="Статус заказа" onchange="loadAdminOrders()"><option value="all">Все статусы</option><option value="unpaid">Не оплачен</option><option value="new">Новый</option><option value="in_progress">В работе</option><option value="ready">Готов</option><option value="cancelled">Отменён</option></select>
+   </div>
+   <p id="adminOrdersStatus" class="notice" aria-live="polite">Заказы загружаются…</p>
+   <div id="adminOrdersList"></div>
+   <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
+  </div>
+  <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
+ <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
 <section id="catalogView" class="hidden">
  <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
@@ -284,7 +344,7 @@ let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let vipActive = false;
 let activeFilter = 'all';
 
-const allViews = ['menuView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
+const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
@@ -295,6 +355,7 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); }
 }
 
 function openBot(action) {
@@ -399,6 +460,262 @@ function changeQty(id,d) {
  persistCart();
  drawProducts();
  drawCart();
+}
+
+async function loadAdminUsers() {
+ const status=document.getElementById('adminUsersStatus'),root=document.getElementById('adminUsersList'),detail=document.getElementById('adminUserDetail');
+ if(!status||!root)return;
+ status.textContent='Загружаем пользователей…';root.replaceChildren();detail?.classList.add('hidden');
+ try{
+  const q=document.getElementById('adminUserSearch')?.value.trim()||'';
+  const data=await apiFetch('/api/admin/users?q='+encodeURIComponent(q));
+  const users=Array.isArray(data.users)?data.users:[];
+  status.textContent=users.length?'Найдено: '+users.length:'Пользователи не найдены.';
+  users.forEach(u=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=u.first_name||u.username||'Пользователь';
+   const meta=document.createElement('small');meta.textContent='ID: '+u.telegram_id+' · Баланс: '+Number(u.balance_stars||0).toLocaleString('ru-RU');
+   info.append(name,meta);
+   const btn=document.createElement('button');btn.className='secondary';btn.type='button';btn.textContent='Профиль';btn.addEventListener('click',()=>openAdminUser(u.telegram_id));
+   row.append(info,btn);root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить пользователей.';}
+}
+async function openAdminUser(telegramId) {
+ const box=document.getElementById('adminUserDetail');if(!box)return;
+ box.classList.remove('hidden');box.textContent='Загружаем профиль…';
+ try{
+  const data=await apiFetch('/api/admin/user?telegram_id='+encodeURIComponent(telegramId));
+  box.replaceChildren();
+  const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Профиль пользователя';
+  box.append(title);
+  const addLine=(label,value)=>{
+   const line=document.createElement('div');line.className='admin-detail-line';
+   const b=document.createElement('b');b.textContent=label+': ';
+   const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
+   line.append(b,span);box.append(line);
+  };
+  const u=data.user||{};
+  addLine('Имя',u.first_name);addLine('Username',u.username?'@'+u.username:'—');
+  addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
+  addLine('Баланс',Number(u.balance_stars||0)+' баллов');
+  const orders=Array.isArray(data.orders)?data.orders:[];
+  addLine('Заказов',orders.length);
+  orders.forEach(o=>addLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
+  const history=Array.isArray(data.balance_history)?data.balance_history:[];
+  addLine('Операций с балансом',history.length);
+  history.forEach(t=>addLine('Баланс · '+t.created_at,(Number(t.amount_stars)>0?'+':'')+t.amount_stars+' · '+(t.operation_type||'')+' · '+(t.description||'')));
+  const blockHistory=Array.isArray(data.block_history)?data.block_history:[];
+  const activeBlock=blockHistory.find(item=>item.status==='active');
+  const blockControls=document.createElement('div');blockControls.className='admin-block-controls';
+  const blockHeading=document.createElement('h4');blockHeading.textContent='Ограничения пользователя';blockControls.append(blockHeading);
+  const blockStatus=document.createElement('p');blockStatus.className='notice';
+  blockStatus.textContent=activeBlock
+   ? (activeBlock.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(activeBlock.reason||'Без причины')+' · '+(activeBlock.blocked_at||'Дата неизвестна')
+   : 'Активных ограничений нет.';
+  blockControls.append(blockStatus);
+  if(activeBlock){
+   const unblock=document.createElement('button');unblock.type='button';unblock.className='secondary';unblock.textContent='Снять блокировку';
+   unblock.addEventListener('click',()=>adminUnblockUser(telegramId));blockControls.append(unblock);
+  }else{
+   const blockType=document.createElement('select');blockType.id='adminBlockType';blockType.setAttribute('aria-label','Тип блокировки');
+   [['purchases','Запретить покупки'],['full','Полностью закрыть доступ']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;blockType.append(option);});
+   const blockReason=document.createElement('input');blockReason.id='adminBlockReason';blockReason.type='text';blockReason.maxLength=500;blockReason.placeholder='Обязательная причина блокировки';blockReason.setAttribute('aria-label','Причина блокировки');
+   const blockButton=document.createElement('button');blockButton.type='button';blockButton.className='primary';blockButton.textContent='Применить блокировку';
+   blockButton.addEventListener('click',()=>adminSetUserBlock(telegramId));
+   blockControls.append(blockType,blockReason,blockButton);
+  }
+  if(blockHistory.length){
+   const historyTitle=document.createElement('h5');historyTitle.textContent='История блокировок';blockControls.append(historyTitle);
+   blockHistory.forEach(item=>{
+    const line=document.createElement('p');line.className='notice';
+    line.textContent=(item.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(item.status==='active'?'Активна':'Снята')+' · '+(item.reason||'')+' · '+(item.blocked_at||'')+(item.unblocked_at?' · снята: '+item.unblocked_at:'');
+    blockControls.append(line);
+   });
+  }
+  box.append(blockControls);
+  const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
+  const audit=document.createElement('div');audit.className='admin-block-controls';
+  const auditTitle=document.createElement('h4');auditTitle.textContent='История действий владельца';audit.append(auditTitle);
+  if(!adminHistory.length){
+   const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
+  }else{
+   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки'};
+   adminHistory.forEach(item=>{
+    const line=document.createElement('p');line.className='notice';
+    line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
+    audit.append(line);
+   });
+  }
+  box.append(audit);
+  const controls=document.createElement('div');controls.className='admin-balance-controls';
+  const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
+  const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
+  const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
+  const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.addEventListener('click',()=>adminAdjustBalance(telegramId));
+  const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
+  controls.append(amount,reason,action,hint);box.append(controls);
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+ }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
+}
+
+async function adminSetUserBlock(telegramId) {
+ const typeField=document.getElementById('adminBlockType');
+ const reasonField=document.getElementById('adminBlockReason');
+ const blockType=typeField?.value||'';
+ const reason=reasonField?.value.trim()||'';
+ if(!['purchases','full'].includes(blockType)){toast('Выберите тип блокировки.');return;}
+ if(reason.length<3){toast('Укажите причину блокировки.');return;}
+ const label=blockType==='full'?'полностью закрыть доступ':'запретить покупки';
+ if(!window.confirm('Подтвердить: '+label+' пользователю '+telegramId+'? Причина: '+reason))return;
+ const button=document.querySelector('.admin-block-controls .primary');
+ if(button)button.disabled=true;
+ try{
+  await apiFetch('/api/admin/block-user',{method:'POST',body:JSON.stringify({telegram_id:String(telegramId),block_type:blockType,reason})});
+  toast('Ограничение применено.');
+  await openAdminUser(telegramId);
+ }catch(e){toast(e.message||'Не удалось применить ограничение.');}
+ finally{if(button)button.disabled=false;}
+}
+
+async function adminUnblockUser(telegramId) {
+ if(!window.confirm('Снять активную блокировку пользователя '+telegramId+'?'))return;
+ const button=document.querySelector('.admin-block-controls button');
+ if(button)button.disabled=true;
+ try{
+  await apiFetch('/api/admin/unblock-user',{method:'POST',body:JSON.stringify({telegram_id:String(telegramId)})});
+  toast('Блокировка снята.');
+  await openAdminUser(telegramId);
+ }catch(e){toast(e.message||'Не удалось снять блокировку.');}
+ finally{if(button)button.disabled=false;}
+}
+
+async function adminAdjustBalance(telegramId) {
+ const amountField=document.getElementById('adminBalanceAmount');
+ const reasonField=document.getElementById('adminBalanceReason');
+ const amount=Number(amountField?.value);
+ const reason=reasonField?.value.trim()||'';
+ if(!Number.isSafeInteger(amount)||amount===0||Math.abs(amount)>1000000){toast('Введите целое число баллов от 1 до 1 000 000 со знаком плюс или минус.');return;}
+ if(reason.length<3){toast('Укажите причину операции.');return;}
+ const action=amount>0?'начислить':'списать';
+ if(!window.confirm('Подтвердить: '+action+' '+Math.abs(amount)+' баллов пользователю '+telegramId+'? Причина: '+reason))return;
+ const button=document.querySelector('.admin-balance-controls button');
+ if(button)button.disabled=true;
+ try{
+  const data=await apiFetch('/api/admin/balance-adjust',{method:'POST',body:JSON.stringify({telegram_id:String(telegramId),amount,reason})});
+  toast('Баланс обновлён: '+Number(data.balance||0).toLocaleString('ru-RU')+' баллов.');
+  await openAdminUser(telegramId);
+  await loadAdminUsers();
+ }catch(e){toast(e.message||'Не удалось изменить баланс.');}
+ finally{if(button)button.disabled=false;}
+}
+
+async function loadAdminDashboard() {
+ const status = document.getElementById('adminDashboardStatus');
+ const button = document.getElementById('adminRefreshBtn');
+ if (!status) return;
+ if (!initData) { status.textContent = 'Откройте приложение через Telegram.'; return; }
+ if (button) button.disabled = true;
+ status.textContent = 'Получаем свежие показатели…';
+ try {
+  const data = await apiFetch('/api/admin/dashboard');
+  const m = data.metrics || {};
+  document.getElementById('adminUsers').textContent = Number(m.users || 0).toLocaleString('ru-RU');
+  document.getElementById('adminOrders').textContent = Number(m.orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminRevenue').textContent = Number(m.revenue_stars || 0).toLocaleString('ru-RU') + ' ⭐';
+  document.getElementById('adminWaiting').textContent = Number(m.awaiting_processing || 0).toLocaleString('ru-RU');
+  const updated = data.updated_at ? new Date(data.updated_at) : null;
+  document.getElementById('adminUpdatedAt').textContent = updated && !Number.isNaN(updated.getTime())
+   ? 'Обновлено: ' + updated.toLocaleString('ru-RU')
+   : 'Показатели обновлены.';
+  status.textContent = 'Данные успешно получены из D1.';
+ } catch (e) {
+  status.textContent = e.message || 'Не удалось загрузить показатели.';
+ } finally {
+  if (button) button.disabled = false;
+ }
+}
+
+async function openAdminOrder(orderId,orderType) {
+ const box=document.getElementById('adminOrderDetail');if(!box)return;
+ box.classList.remove('hidden');box.textContent='Загружаем заказ…';
+ try{
+  const params=new URLSearchParams({order_id:String(orderId),order_type:String(orderType)});
+  const data=await apiFetch('/api/admin/order?'+params.toString());
+  const order=data.order||{};box.replaceChildren();
+  const title=document.createElement('div');title.className='admin-detail-title';
+  title.textContent=(orderType==='custom'?'🎨 Индивидуальный заказ':'📦 Заказ')+' № '+order.id;box.append(title);
+  const addLine=(label,value)=>{
+   const line=document.createElement('div');line.className='admin-detail-line';
+   const strong=document.createElement('b');strong.textContent=label+': ';
+   const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
+   line.append(strong,span);box.append(line);
+  };
+  addLine('Покупатель',order.first_name||order.username||order.telegram_id);
+  addLine('Telegram ID',order.telegram_id);
+  addLine('Дата',order.created_at);
+  addLine('Сумма',Number(order.total_stars||0)+' ⭐');
+  if(orderType==='product'){
+   addLine('Оплата',order.payment_status);
+   addLine('Статус выполнения',order.fulfillment_status);
+   addLine('Скидка',Number(order.discount_percent||0)+'%');
+   const payment=data.payment;
+   if(payment)addLine('Платёж',payment.status+' · '+payment.amount_stars+' '+payment.currency+' · '+(payment.confirmed_at||payment.created_at));
+   const items=Array.isArray(data.items)?data.items:[];
+   addLine('Позиций',items.length);
+   items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
+  }else{
+   addLine('Тема',order.subject);
+   addLine('Статус',order.status);
+   let answers=order.answers_json||'';
+   try{answers=JSON.stringify(JSON.parse(answers),null,2);}catch(e){}
+   addLine('Ответы и пожелания',answers);
+  }
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть подробности';
+  close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+ }catch(e){box.textContent=e.message||'Не удалось загрузить заказ.';}
+}
+
+async function loadAdminOrders() {
+ const status=document.getElementById('adminOrdersStatus');
+ const root=document.getElementById('adminOrdersList');
+ if(!status||!root)return;
+ const q=document.getElementById('adminOrderSearch')?.value.trim()||'';
+ const type=document.getElementById('adminOrderType')?.value||'all';
+ const filter=document.getElementById('adminOrderStatus')?.value||'all';
+ status.textContent='Загружаем заказы…';root.replaceChildren();
+ try{
+  const params=new URLSearchParams({q,type,status:filter,limit:'100'});
+  const data=await apiFetch('/api/admin/orders?'+params.toString());
+  const orders=Array.isArray(data.orders)?data.orders:[];
+  const labels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
+  if(!orders.length){status.textContent='Заказы по выбранным условиям не найдены.';return;}
+  status.textContent='Найдено заказов: '+orders.length;
+  orders.forEach(order=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');info.className='admin-user-info';
+   const name=document.createElement('strong');name.textContent=(order.order_type==='custom'?'🎨 ':'📦 ')+(order.title||'Заказ');
+   const meta=document.createElement('small');
+   meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+(labels[order.admin_status]||order.admin_status||'Статус неизвестен')+' · '+(order.created_at||'');
+   info.append(name,meta);
+   const detail=document.createElement('button');detail.type='button';detail.className='secondary';detail.textContent='Подробнее';
+   detail.addEventListener('click',()=>openAdminOrder(order.id,order.order_type));
+   row.append(info,detail);root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
+}
+
+async function checkOwnerAccess() {
+ const card = document.getElementById('ownerAdminCard');
+ if (!card || !initData) return;
+ card.classList.add('hidden');
+ try {
+  const result = await apiFetch('/api/admin/session');
+  if (result && result.owner === true) card.classList.remove('hidden');
+ } catch(e) {
+  card.classList.add('hidden');
+ }
 }
 
 async function apiFetch(path,options={}) {
@@ -613,6 +930,7 @@ drawCart();
 loadProducts();
 loadMe();
 refreshVipHelpCard();
+checkOwnerAccess();
 showView('menuView');
 </script>
 </body>

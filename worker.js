@@ -363,6 +363,181 @@ export default {
       const telegramId = String(user.id);
       await ensureUser(env, user);
 
+      // Every owner endpoint is protected on the server, not merely hidden in the Mini App.
+      if (path.startsWith("/api/admin/")) {
+        const ownerId = String(env.ADMIN_TELEGRAM_ID || "").trim();
+        if (!ownerId) return json({ error: "Owner access is not configured." }, 503, origin);
+        if (telegramId !== ownerId) return json({ error: "Owner access required." }, 403, origin);
+        if (path === "/api/admin/session" && method === "GET") {
+          return json({ ok: true, owner: true }, 200, origin);
+        }
+        if (path === "/api/admin/users" && method === "GET") {
+          const url = new URL(request.url);
+          const term = (url.searchParams.get("q") || "").trim().slice(0, 64);
+          const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 25)));
+          const rows = term
+            ? await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id LIKE ? OR username LIKE ? OR first_name LIKE ? ORDER BY created_at DESC LIMIT ?")
+                .bind("%" + term + "%", "%" + term.replace(/^@/, "") + "%", "%" + term + "%", limit).all()
+            : await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users ORDER BY created_at DESC LIMIT ?")
+                .bind(limit).all();
+          return json({ ok: true, users: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/user" && method === "GET") {
+          const url = new URL(request.url);
+          const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0, 64);
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          const [profile, orders, transactions, blocks, adminHistory] = await Promise.all([
+            env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
+            env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
+            env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
+            env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId).all(),
+            env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all()
+          ]);
+          if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
+          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/balance-adjust" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const amount = Number(body.amount);
+          const reason = typeof body.reason === "string" ? body.reason.trim().slice(0,300) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          if (!Number.isSafeInteger(amount) || amount === 0 || Math.abs(amount) > 1000000) {
+            return json({ error: "Укажите целое количество баллов от 1 до 1 000 000 со знаком плюс или минус." }, 400, origin);
+          }
+          if (reason.length < 3) return json({ error: "Укажите причину операции (минимум 3 символа)." }, 400, origin);
+          const target = await env.DB.prepare("SELECT telegram_id,balance_stars FROM users WHERE telegram_id=?")
+            .bind(targetId).first();
+          if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
+          const operationId = makeId();
+          const description = "Операция владельца: " + reason;
+          const results = await env.DB.batch([
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars+?>=0")
+              .bind(amount, targetId, amount),
+            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'admin_adjustment',?,? WHERE changes()=1")
+              .bind(targetId, amount, description, "admin:" + operationId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'balance_adjustment',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ amount, reason, operation_id: operationId }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            const latest = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
+            if (!latest) return json({ error: "Пользователь не найден." }, 404, origin);
+            return json({ error: "Недостаточно баллов для списания или операция не выполнена. Баланс не изменён.", balance: Number(latest.balance_stars || 0) }, 409, origin);
+          }
+          const updated = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
+          await notifyOwner(env, "⭐ Изменение баланса владельцем\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
+          return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
+        }
+        if (path === "/api/admin/block-user" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const blockType = body.block_type;
+          const reason = typeof body.reason === "string" ? body.reason.trim().slice(0,500) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          if (targetId === ownerId) return json({ error: "Нельзя заблокировать владельца панели." }, 400, origin);
+          if (!["purchases","full"].includes(blockType)) return json({ error: "Выберите корректный тип блокировки." }, 400, origin);
+          if (reason.length < 3) return json({ error: "Укажите причину блокировки (минимум 3 символа)." }, 400, origin);
+          const target = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
+          const results = await env.DB.batch([
+            env.DB.prepare("INSERT INTO user_blocks (telegram_id,block_type,reason,blocked_by) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_blocks WHERE telegram_id=? AND status='active')")
+              .bind(targetId, blockType, reason, telegramId, targetId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'user_block',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ block_type: blockType, reason }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            return json({ error: "У пользователя уже есть активная блокировка. Сначала снимите её." }, 409, origin);
+          }
+          return json({ ok: true, telegram_id: targetId, block_type: blockType }, 200, origin);
+        }
+        if (path === "/api/admin/unblock-user" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          const results = await env.DB.batch([
+            env.DB.prepare("UPDATE user_blocks SET status='lifted',unblocked_by=?,unblocked_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND status='active'")
+              .bind(telegramId, targetId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'user_unblock',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ reason: "Разблокировка владельцем" }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            return json({ error: "Активная блокировка не найдена." }, 404, origin);
+          }
+          return json({ ok: true, telegram_id: targetId }, 200, origin);
+        }
+        if (path === "/api/admin/order" && method === "GET") {
+          const url = new URL(request.url);
+          const orderId = (url.searchParams.get("order_id") || "").trim().slice(0,100);
+          const orderType = url.searchParams.get("order_type");
+          if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
+          if (orderType === "product") {
+            const [order, items, payment] = await Promise.all([
+              env.DB.prepare("SELECT o.*,u.first_name,u.username FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE o.id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT product_title,quantity,image_url,delivery_status,delivered_at FROM order_items WHERE order_id=? ORDER BY id").bind(orderId).all(),
+              env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first()
+            ]);
+            if (!order) return json({ error: "Заказ не найден." }, 404, origin);
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null }, 200, origin);
+          }
+          const order = await env.DB.prepare("SELECT * FROM custom_orders WHERE id=?").bind(orderId).first();
+          if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
+          return json({ ok: true, order_type: orderType, order, items: [], payment: null }, 200, origin);
+        }
+        if (path === "/api/admin/orders" && method === "GET") {
+          const url = new URL(request.url);
+          const term = (url.searchParams.get("q") || "").trim().slice(0,80);
+          const type = ["all","product","custom"].includes(url.searchParams.get("type")) ? url.searchParams.get("type") : "all";
+          const status = ["all","unpaid","new","in_progress","ready","cancelled"].includes(url.searchParams.get("status")) ? url.searchParams.get("status") : "all";
+          const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
+          const like = "%" + term + "%";
+          const productStatus = "CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END";
+          const customStatus = "CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END";
+          const [products, custom] = await Promise.all([
+            type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+            ).bind(term,like,like,like,status,status,limit).all(),
+            type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
+              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status FROM custom_orders c) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+            ).bind(term,like,like,like,status,status,limit).all()
+          ]);
+          const rows = [...(products.results || []), ...(custom.results || [])]
+            .sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
+          return json({ ok: true, orders: rows, filters: { q: term, type, status }, updated_at: new Date().toISOString() }, 200, origin);
+        }
+        if (path === "/api/admin/dashboard" && method === "GET") {
+          const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM custom_orders").first(),
+            env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payments WHERE status='paid' AND currency='XTR'").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM orders WHERE payment_status='paid' AND fulfillment_status='awaiting_delivery'").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM custom_orders WHERE status='new'").first()
+          ]);
+          return json({
+            ok: true,
+            metrics: {
+              users: Number(users?.total || 0),
+              orders: Number(orders?.total || 0) + Number(customOrders?.total || 0),
+              revenue_stars: Number(revenue?.total || 0),
+              awaiting_processing: Number(waitingOrders?.total || 0) + Number(waitingCustom?.total || 0)
+            },
+            updated_at: new Date().toISOString()
+          }, 200, origin);
+        }
+        return json({ error: "Admin route not found." }, 404, origin);
+      }
+
+      // Enforce user restrictions server-side after owner routes, so the owner can always administer accounts.
+      const activeBlock = await env.DB.prepare("SELECT block_type,reason FROM user_blocks WHERE telegram_id=? AND status='active' LIMIT 1")
+        .bind(telegramId).first();
+      if (activeBlock?.block_type === "full") {
+        return json({ error: "Доступ к Агентству ограничен владельцем. Причина: " + activeBlock.reason }, 403, origin);
+      }
+      if (activeBlock?.block_type === "purchases" && method === "POST" &&
+          ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
+        return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
+      }
+
       if (path === "/api/products" && method === "GET") {
         return json({ products: await getProducts(env) }, 200, origin);
       }
