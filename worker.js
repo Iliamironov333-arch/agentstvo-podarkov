@@ -100,6 +100,44 @@ async function notifyOwner(env, message) {
     await telegram(env, "sendMessage", { chat_id: env.ADMIN_TELEGRAM_ID, text: message });
   } catch (error) { console.error("Owner notification failed:", String(error)); }
 }
+async function deliverOrderImages(env, orderId, telegramId) {
+  const items = await env.DB.prepare("SELECT id,product_title,image_url,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
+    .bind(orderId).all();
+  let failed = false;
+  for (const item of (items.results || [])) {
+    if (item.delivery_status === "sent") continue;
+    if (!item.image_url || !/^https:\/\//i.test(item.image_url)) {
+      failed = true;
+      await notifyOwner(env, "⚠️ Не удалось отправить картинку заказа " + orderId + ": у товара «" + item.product_title + "» не задан корректный HTTPS image_url.");
+      continue;
+    }
+    const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending' WHERE id=? AND delivery_status='pending'")
+      .bind(item.id).run();
+    if (!claim.meta || claim.meta.changes !== 1) continue;
+    try {
+      await telegram(env, "sendPhoto", {
+        chat_id: telegramId,
+        photo: item.image_url,
+        caption: "🎁 Ваш цифровой файл: " + item.product_title
+      });
+      await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP WHERE id=? AND delivery_status='sending'")
+        .bind(item.id).run();
+    } catch (error) {
+      failed = true;
+      await env.DB.prepare("UPDATE order_items SET delivery_status='pending' WHERE id=? AND delivery_status='sending'")
+        .bind(item.id).run();
+      await notifyOwner(env, "⚠️ Не удалось отправить картинку покупателю\nЗаказ: " + orderId + "\nТовар: " + item.product_title + "\nОшибка: " + String(error).slice(0, 500));
+    }
+  }
+  const remaining = await env.DB.prepare("SELECT COUNT(*) AS count FROM order_items WHERE order_id=? AND delivery_status!='sent'")
+    .bind(orderId).first();
+  if (Number(remaining?.count || 0) === 0) {
+    await env.DB.prepare("UPDATE orders SET fulfillment_status='delivered',delivered_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='paid'")
+      .bind(orderId).run();
+  }
+  return !failed && Number(remaining?.count || 0) === 0;
+}
+
 async function getProducts(env) {
   const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER)")
     .all();
@@ -206,29 +244,34 @@ async function handleWebhook(request, env) {
   if (!chargeId) return json({ ok: true });
 
   if (intent.kind === "order") {
-    const order = await env.DB.prepare("SELECT id,product_title,total_stars FROM orders WHERE id=? AND telegram_id=?")
+    const order = await env.DB.prepare("SELECT id,product_title,total_stars,payment_status FROM orders WHERE id=? AND telegram_id=?")
       .bind(intent.reference_id, telegramId).first();
     if (!order) return json({ ok: true });
     const earned = Math.floor(Number(intent.amount_stars) / 3);
-    const statements = [
-      env.DB.prepare("UPDATE payment_intents SET status='paid',charge_id=?,paid_at=CURRENT_TIMESTAMP WHERE payload=? AND status='pending' AND telegram_id=? AND amount_stars=?")
-        .bind(chargeId, payload, telegramId, payment.total_amount),
-      env.DB.prepare("UPDATE orders SET payment_status='paid',fulfillment_status='awaiting_delivery',paid_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND payment_status='pending' AND EXISTS (SELECT 1 FROM payment_intents WHERE payload=? AND status='paid' AND charge_id=?)")
-        .bind(order.id, telegramId, payload, chargeId),
-      env.DB.prepare("INSERT OR IGNORE INTO payments (order_id,telegram_id,telegram_payment_charge_id,currency,amount_stars,status,confirmed_at) SELECT ?,?,?,'XTR',?,'paid',CURRENT_TIMESTAMP WHERE changes()=1")
-        .bind(order.id, telegramId, chargeId, payment.total_amount)
-    ];
-    if (earned > 0) {
-      statements.push(env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'purchase_reward',?,? WHERE changes()=1")
-        .bind(telegramId, earned, "Баллы за покупку: " + order.product_title, "purchase:" + order.id));
-      statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
-        .bind(earned, telegramId));
-    }
-    const results = await env.DB.batch(statements);
-    if (results[1] && results[1].meta && results[1].meta.changes === 1) {
+    if (intent.status === "pending") {
+      const statements = [
+        env.DB.prepare("UPDATE payment_intents SET status='paid',charge_id=?,paid_at=CURRENT_TIMESTAMP WHERE payload=? AND status='pending' AND telegram_id=? AND amount_stars=?")
+          .bind(chargeId, payload, telegramId, payment.total_amount),
+        env.DB.prepare("UPDATE orders SET payment_status='paid',fulfillment_status='awaiting_delivery',paid_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND payment_status='pending' AND EXISTS (SELECT 1 FROM payment_intents WHERE payload=? AND status='paid' AND charge_id=?)")
+          .bind(order.id, telegramId, payload, chargeId),
+        env.DB.prepare("INSERT OR IGNORE INTO payments (order_id,telegram_id,telegram_payment_charge_id,currency,amount_stars,status,confirmed_at) SELECT ?,?,?,'XTR',?,'paid',CURRENT_TIMESTAMP WHERE changes()=1")
+          .bind(order.id, telegramId, chargeId, payment.total_amount)
+      ];
+      if (earned > 0) {
+        statements.push(env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'purchase_reward',?,? WHERE changes()=1")
+          .bind(telegramId, earned, "Баллы за покупку: " + order.product_title, "purchase:" + order.id));
+        statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
+          .bind(earned, telegramId));
+      }
+      const results = await env.DB.batch(statements);
+      if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
         "\nСумма: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title);
+    } else if (intent.status !== "paid" || String(intent.charge_id || "") !== chargeId || order.payment_status !== "paid") {
+      return json({ ok: true });
     }
+    const delivered = await deliverOrderImages(env, order.id, telegramId);
+    if (!delivered) return json({ ok: false, error: "Image delivery pending retry" }, 500);
     return json({ ok: true });
   }
 
@@ -330,7 +373,7 @@ export default {
         }
         const items = Array.from(quantities.entries()).map(([id, qty]) => {
           const product = catalog.find(p => String(p.id) === id);
-          return { id, title: product.title, qty, unit_price: Number(product.price_stars) };
+          return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
@@ -341,6 +384,8 @@ export default {
         await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
           .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title,
             items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total).run();
+        await env.DB.batch(items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
+          .bind(orderId, item.id, item.title, item.qty, item.image_url)));
         try {
           const invoiceUrl = await createPaymentIntent(env, { payload: orderId, telegram_id: telegramId,
             kind: "order", reference_id: orderId, amount_stars: total, title: "Заказ " + orderId.slice(0, 8),
