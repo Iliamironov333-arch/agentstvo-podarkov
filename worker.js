@@ -683,7 +683,26 @@ export default {
             statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_comment', ?)").bind(telegramId, String(order.telegram_id), JSON.stringify({ order_type: orderType, order_id: orderId, comment })));
           }
           await env.DB.batch(statements);
-          return json({ ok: true, order_id: orderId, order_type: orderType, status: hasStatus ? status : previous.admin_status, comment_saved: !!comment }, 200, origin);
+          let notification = { attempted: false, sent: false };
+          if (hasStatus) {
+            notification.attempted = true;
+            const labels = { new: "принят и ожидает обработки", in_progress: "находится в работе", ready: "готов", cancelled: "отменён" };
+            const statusText = labels[status] || "обновлён";
+            const message = "🎁 Агентство подарков\\n\\nСтатус вашего заказа № " + orderId + " изменён: " + statusText + ".\\nЕсли у вас есть вопросы, ответьте на это сообщение.";
+            try {
+              await telegram(env, "sendMessage", { chat_id: String(order.telegram_id), text: message });
+              notification.sent = true;
+            } catch (error) {
+              notification.error = "Статус сохранён, но сообщение покупателю отправить не удалось.";
+              console.error("Order status notification failed:", String(error).slice(0,300));
+            }
+            try {
+              await notifyOwner(env, "📦 Заказ № " + orderId + ": статус изменён на «" + statusText + "». Покупатель " + String(order.telegram_id) + (notification.sent ? " уведомлён." : ". Уведомление покупателю не доставлено."));
+            } catch (error) {
+              console.error("Order owner notification failed:", String(error).slice(0,300));
+            }
+          }
+          return json({ ok: true, order_id: orderId, order_type: orderType, status: hasStatus ? status : previous.admin_status, comment_saved: !!comment, notification }, 200, origin);
         }
         if (path === "/api/admin/order" && method === "GET") {
           const url = new URL(request.url);
