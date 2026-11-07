@@ -386,13 +386,14 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0, 64);
           if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
-          const [profile, orders, transactions] = await Promise.all([
+          const [profile, orders, transactions, blocks] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
-            env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all()
+            env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
+            env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId).all()
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [] }, 200, origin);
+          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [] }, 200, origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
           const body = await readJson(request);
@@ -426,6 +427,43 @@ export default {
           await notifyOwner(env, "⭐ Изменение баланса владельцем\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
           return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
         }
+        if (path === "/api/admin/block-user" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const blockType = body.block_type;
+          const reason = typeof body.reason === "string" ? body.reason.trim().slice(0,500) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          if (targetId === ownerId) return json({ error: "Нельзя заблокировать владельца панели." }, 400, origin);
+          if (!["purchases","full"].includes(blockType)) return json({ error: "Выберите корректный тип блокировки." }, 400, origin);
+          if (reason.length < 3) return json({ error: "Укажите причину блокировки (минимум 3 символа)." }, 400, origin);
+          const target = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
+          const results = await env.DB.batch([
+            env.DB.prepare("INSERT INTO user_blocks (telegram_id,block_type,reason,blocked_by) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_blocks WHERE telegram_id=? AND status='active')")
+              .bind(targetId, blockType, reason, telegramId, targetId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'user_block',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ block_type: blockType, reason }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            return json({ error: "У пользователя уже есть активная блокировка. Сначала снимите её." }, 409, origin);
+          }
+          return json({ ok: true, telegram_id: targetId, block_type: blockType }, 200, origin);
+        }
+        if (path === "/api/admin/unblock-user" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          const results = await env.DB.batch([
+            env.DB.prepare("UPDATE user_blocks SET status='lifted',unblocked_by=?,unblocked_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND status='active'")
+              .bind(telegramId, targetId),
+            env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'user_unblock',? WHERE changes()=1")
+              .bind(telegramId, targetId, JSON.stringify({ reason: "Разблокировка владельцем" }))
+          ]);
+          if (!results[0]?.meta || results[0].meta.changes !== 1) {
+            return json({ error: "Активная блокировка не найдена." }, 404, origin);
+          }
+          return json({ ok: true, telegram_id: targetId }, 200, origin);
+        }
         if (path === "/api/admin/dashboard" && method === "GET") {
           const [users, orders, customOrders, revenue, waitingOrders, waitingCustom] = await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
@@ -447,6 +485,17 @@ export default {
           }, 200, origin);
         }
         return json({ error: "Admin route not found." }, 404, origin);
+      }
+
+      // Enforce user restrictions server-side after owner routes, so the owner can always administer accounts.
+      const activeBlock = await env.DB.prepare("SELECT block_type,reason FROM user_blocks WHERE telegram_id=? AND status='active' LIMIT 1")
+        .bind(telegramId).first();
+      if (activeBlock?.block_type === "full") {
+        return json({ error: "Доступ к Агентству ограничен владельцем. Причина: " + activeBlock.reason }, 403, origin);
+      }
+      if (activeBlock?.block_type === "purchases" && method === "POST" &&
+          ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
+        return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
 
       if (path === "/api/products" && method === "GET") {
