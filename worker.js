@@ -66,7 +66,6 @@ async function validateTelegram(initData, botToken) {
     const suppliedHash = params.get("hash");
     if (!suppliedHash) return null;
     params.delete("hash");
-    params.delete("signature");
     const checkString = Array.from(params.entries())
       .sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
       .map(([key, value]) => key + "=" + value).join("\n");
