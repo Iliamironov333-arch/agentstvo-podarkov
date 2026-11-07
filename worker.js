@@ -218,6 +218,21 @@ async function createSupportAnswer(env, history, isVip) {
   return answer.trim().slice(0, 4000);
 }
 
+async function createCraftAnswer(env,theme,material,level){
+ if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
+ const instructions=["Ты — ИИ-мастер Агентства подарков, специалист по оригинальным поделкам ручной работы.","Отвечай по-русски. Создавай конкретную и выполнимую идею, а не общие советы.","Структура: название; концепция; материалы; инструменты; пошаговое изготовление; оформление и персонализация; примерное время; советы по аккуратности и безопасности.","Учитывай материалы и сложность. Если материалы не указаны, предложи доступные и недорогие варианты.","Не предлагай огонь, токсичные вещества, опасные конструкции или рискованные действия. Для потенциально опасных инструментов укажи, что нужна помощь взрослого.","Не выдумывай цены и наличие материалов."].join("\n");
+ const input="Задумка: "+theme+"\nМатериалы: "+material+"\nСложность: "+level+"\nРазработай полноценный проект поделки.";
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:900})});
+ const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("ИИ-мастерская временно недоступна. Попробуйте позже.");}
+ let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула результат.");return a.trim().slice(0,7000);
+}
+async function createVipSupportAnswer(env,message){
+ const instructions=["Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:600})});
+ const d=await r.json().catch(()=>({}));if(!r.ok){console.error("VIP support failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("VIP-помощь временно недоступна.");}
+ let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
+}
+
 async function handleWebhook(request, env) {
   const supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(supplied || "", env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -310,8 +325,8 @@ async function handleWebhook(request, env) {
     const results = await env.DB.batch([
       env.DB.prepare("UPDATE payment_intents SET status='paid',charge_id=?,paid_at=CURRENT_TIMESTAMP WHERE payload=? AND status='pending' AND telegram_id=? AND amount_stars=?")
         .bind(chargeId, payload, telegramId, payment.total_amount),
-      env.DB.prepare("INSERT INTO vip_subscriptions (telegram_id,plan_type,status,starts_at,expires_at) SELECT ?,?,'active',CURRENT_TIMESTAMP,CASE WHEN ?='subscription' THEN datetime('now','+30 days') ELSE NULL END WHERE changes()=1")
-        .bind(telegramId, intent.plan_type, intent.plan_type)
+      env.DB.prepare("INSERT INTO vip_subscriptions (telegram_id,plan_type,status,starts_at,expires_at) SELECT ?,?,'active',CURRENT_TIMESTAMP,CASE WHEN ?='subscription' THEN datetime(COALESCE((SELECT MAX(expires_at) FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP),'now'),'+30 days') ELSE NULL END WHERE changes()=1")
+        .bind(telegramId, intent.plan_type, intent.plan_type, telegramId)
     ]);
     if (results[0] && results[0].meta && results[0].meta.changes === 1) {
       await notifyOwner(env, "👑 Оплачен VIP\nПользователь: " + telegramId +
@@ -430,26 +445,6 @@ export default {
         }
       }
 
-      if (path === "/api/favorites" && method === "GET") {
-        const result = await env.DB.prepare("SELECT f.product_id,f.created_at,p.title,p.description,p.image_url,p.category,p.price_stars FROM favorites f LEFT JOIN products p ON p.id=f.product_id WHERE f.telegram_id=? ORDER BY f.created_at DESC")
-          .bind(telegramId).all();
-        return json({ favorites: result.results || [] }, 200, origin);
-      }
-
-      if (path === "/api/favorites" && method === "POST") {
-        const body = await readJson(request);
-        const id = String(body.product_id ?? body.id ?? "");
-        if (!id) return json({ error: "Не указан товар" }, 400, origin);
-        if ((body.action || "add") === "remove") {
-          await env.DB.prepare("DELETE FROM favorites WHERE telegram_id=? AND product_id=?").bind(telegramId, id).run();
-          return json({ ok: true, removed: true }, 200, origin);
-        }
-        const product = await env.DB.prepare("SELECT id FROM products WHERE id=? AND is_active=1").bind(id).first();
-        if (!product) return json({ error: "Товар не найден" }, 404, origin);
-        await env.DB.prepare("INSERT OR IGNORE INTO favorites (telegram_id,product_id) VALUES (?,?)").bind(telegramId, id).run();
-        return json({ ok: true, added: true }, 200, origin);
-      }
-
       if (path === "/api/balance" && method === "GET") {
         const me = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const transactions = await env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50")
@@ -493,6 +488,20 @@ export default {
         return json({ ok: true, invoice_url: invoiceUrl, plan_type: planType }, 200, origin);
       }
 
+      if (path === "/api/craft/create" && method === "POST") {
+        const b=await readJson(request),theme=typeof b.theme==="string"?b.theme.trim().slice(0,1200):"",material=typeof b.material==="string"?b.material.slice(0,100):"На усмотрение помощника",level=["Простая","Средняя","Сложная"].includes(b.level)?b.level:"Средняя";
+        if(theme.length<3)return json({error:"Опишите задумку поделки подробнее."},400,origin);
+        try{const answer=await createCraftAnswer(env,theme,material,level),title=answer.split("\n").find(x=>x.trim())?.replace(/^#+\s*/,"").slice(0,100)||"Идея поделки";return json({ok:true,title,answer},200,origin);}
+        catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось создать идею поделки."},503,origin);}
+      }
+      if (path === "/api/vip/support" && method === "POST") {
+        const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        if(!vip)return json({error:"VIP-помощь доступна только при действующей VIP-подписке."},403,origin);
+        const b=await readJson(request),message=typeof b.message==="string"?b.message.trim():"";
+        if(!message||message.length>2000)return json({error:"Сообщение должно содержать от 1 до 2000 символов."},400,origin);
+        try{const reply=await createVipSupportAnswer(env,message);if(/(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message)){await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId,"[VIP] "+message).run();await notifyOwner(env,"👑 VIP-обращение\nTelegram ID: "+telegramId+"\n\n"+message);}return json({ok:true,reply,vip:true},200,origin);}
+        catch(e){console.error("VIP support failed:",String(e));return json({error:e.message||"VIP-помощь временно недоступна."},503,origin);}
+      }
       if (path === "/api/support/chat" && method === "GET") {
         const rows = await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 30")
           .bind(telegramId).all();
