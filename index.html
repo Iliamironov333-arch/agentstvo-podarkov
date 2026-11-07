@@ -122,6 +122,10 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 .admin-detail-line{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;overflow-wrap:anywhere}
 .admin-detail-line:last-child{border:0}
 .admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
+.admin-balance-controls{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.admin-balance-controls h4{margin:0 0 10px;color:var(--gold2)}
+.admin-balance-controls input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit}
+.admin-balance-controls .primary{width:100%}
 </style>
 </head>
 <body>
@@ -486,8 +490,35 @@ async function openAdminUser(telegramId) {
   const history=Array.isArray(data.balance_history)?data.balance_history:[];
   addLine('Операций с балансом',history.length);
   history.forEach(t=>addLine('Баланс · '+t.created_at,(Number(t.amount_stars)>0?'+':'')+t.amount_stars+' · '+(t.operation_type||'')+' · '+(t.description||'')));
+  const controls=document.createElement('div');controls.className='admin-balance-controls';
+  const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
+  const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
+  const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
+  const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.addEventListener('click',()=>adminAdjustBalance(telegramId));
+  const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
+  controls.append(amount,reason,action,hint);box.append(controls);
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
+}
+
+async function adminAdjustBalance(telegramId) {
+ const amountField=document.getElementById('adminBalanceAmount');
+ const reasonField=document.getElementById('adminBalanceReason');
+ const amount=Number(amountField?.value);
+ const reason=reasonField?.value.trim()||'';
+ if(!Number.isSafeInteger(amount)||amount===0||Math.abs(amount)>1000000){toast('Введите целое число баллов от 1 до 1 000 000 со знаком плюс или минус.');return;}
+ if(reason.length<3){toast('Укажите причину операции.');return;}
+ const action=amount>0?'начислить':'списать';
+ if(!window.confirm('Подтвердить: '+action+' '+Math.abs(amount)+' баллов пользователю '+telegramId+'? Причина: '+reason))return;
+ const button=document.querySelector('.admin-balance-controls button');
+ if(button)button.disabled=true;
+ try{
+  const data=await apiFetch('/api/admin/balance-adjust',{method:'POST',body:JSON.stringify({telegram_id:String(telegramId),amount,reason})});
+  toast('Баланс обновлён: '+Number(data.balance||0).toLocaleString('ru-RU')+' баллов.');
+  await openAdminUser(telegramId);
+  await loadAdminUsers();
+ }catch(e){toast(e.message||'Не удалось изменить баланс.');}
+ finally{if(button)button.disabled=false;}
 }
 
 async function loadAdminDashboard() {
