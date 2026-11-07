@@ -589,8 +589,9 @@ async function backupListUi(env) {
 
 export default {
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
-    if (controller.cron === "0 3 1 * *") {
+    if (controller.cron !== "0 3 1 * *") {
+      ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
+    } else {
       ctx.waitUntil(backupStartExport(env,"backup","monthly").catch(error => console.error("Monthly D1 backup could not start:",String(error).slice(0,500))));
     }
     ctx.waitUntil(processBackupQueue(env).catch(error => console.error("D1 backup queue failed:",String(error).slice(0,500))));
