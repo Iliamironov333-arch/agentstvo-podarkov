@@ -357,34 +357,7 @@ export default {
       }
 
       if (path === "/api/case/open" && method === "POST") {
-        const body = await readJson(request);
-        const requestId = String(body.request_id || "");
-        if (!requestId || requestId.length > 100) return json({ error: "Некорректный request_id" }, 400, origin);
-        const debitKey = "case:" + telegramId + ":" + requestId;
-        const reward = CASE_REWARDS[crypto.getRandomValues(new Uint32Array(1))[0] % CASE_REWARDS.length];
-        try {
-          const debit = await env.DB.batch([
-            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'case_open',?,? WHERE EXISTS (SELECT 1 FROM users WHERE telegram_id=? AND balance_stars>=?)")
-              .bind(telegramId, -CASE_COST, "Открытие кейса", debitKey, telegramId, CASE_COST),
-            env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=? AND changes()=1")
-              .bind(CASE_COST, telegramId, CASE_COST)
-          ]);
-          if (!debit[0]?.meta?.changes) return json({ error: "Недостаточно баллов" }, 400, origin);
-          if (reward > 0) {
-            await env.DB.batch([
-              env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES (?,?,'case_reward',?,?)")
-                .bind(telegramId, reward, "Награда из кейса: " + reward + " баллов", debitKey + ":reward"),
-              env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
-                .bind(reward, telegramId)
-            ]);
-          }
-          const finalUser = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
-          return json({ ok: true, points: Number(finalUser?.balance_stars || 0), reward,
-            message: reward ? "🎉 В кейсе " + reward + " баллов!" : "В этот раз без выигрыша. Попробуй позже!" }, 200, origin);
-        } catch (error) {
-          if (String(error).includes("UNIQUE")) return json({ error: "Этот кейс уже открыт", duplicate: true }, 409, origin);
-          throw error;
-        }
+        return json({ error: "Открытие случайных кейсов временно отключено." }, 403, origin);
       }
 
       if (path === "/api/vip" && method === "GET") {
