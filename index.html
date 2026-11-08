@@ -232,22 +232,22 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
   <div class="panel" id="adminAiPanel">
-   <div class="sectionhead"><h3>🤖 Управление ИИ</h3><button class="secondary" type="button" onclick="loadAdminAiSettings()">↻ Обновить</button></div>
-   <p class="muted">Изменения сначала сохраняются как черновик. Затем обязательно запускается тест, и только после успешного теста настройки можно опубликовать.</p>
+   <div class="sectionhead"><h3>🤖 Управление ИИ-помощником</h3><button class="secondary" type="button" onclick="loadAdminAiSettings()">↻ Обновить</button></div>
+   <p class="muted">Эти настройки управляют обычной поддержкой покупателей. Изменения сначала сохраняются как черновик, затем тестируются и только после успешного теста публикуются. ИИ-мастерская и VIP-помощь пока используют отдельные инструкции.</p>
    <p id="adminAiStatus" class="notice" aria-live="polite">Загружаем настройки ИИ…</p>
    <label class="row-actions"><input id="adminAiEnabled" type="checkbox" checked> ИИ-помощник включён</label>
    <label>Модель OpenAI<input id="adminAiModel" maxlength="80" value="gpt-4o-mini" placeholder="gpt-4o-mini"></label>
    <label>Приветствие покупателю<textarea id="adminAiGreeting" maxlength="500" rows="2" placeholder="Здравствуйте! Чем могу помочь?"></textarea></label>
    <label>Дополнительные системные инструкции<textarea id="adminAiInstructions" maxlength="8000" rows="6" placeholder="Правила и особенности ответов помощника…"></textarea></label>
    <label>Разрешённые темы (через запятую)<input id="adminAiTopics" maxlength="800" value="catalog, orders, payments, balance, support, vip, custom_orders"></label>
-   <p class="muted">Например: catalog, orders, payments, support. Список ограничивает тематику ответов.</p>
+   <p class="muted">Например: catalog, orders, payments, support. Список задаёт тематические ограничения в инструкциях модели; это не отдельный технический фильтр запросов.</p>
    <div class="row-actions">
     <button class="secondary" type="button" id="adminAiSaveButton" onclick="saveAdminAiDraft()">Сохранить черновик</button>
     <button class="secondary" type="button" id="adminAiTestButton" onclick="testAdminAiDraft()">Проверить ИИ</button>
     <button class="primary" type="button" id="adminAiPublishButton" onclick="publishAdminAiDraft()">Опубликовать</button>
    </div>
    <div class="divider"></div>
-   <h4>Использование API за 30 дней</h4>
+   <h4>Использование API поддержки за 30 дней</h4>
    <p id="adminAiUsage" class="notice">Статистика загружается…</p>
    <p id="adminAiTestResult" class="notice" aria-live="polite"></p>
   </div>
@@ -1257,7 +1257,7 @@ async function loadAdminAiSettings() {
   const u=data.usage;
   document.getElementById('adminAiUsage').textContent=u
    ? 'Запросов: '+Number(u.requests||0).toLocaleString('ru-RU')+' · Входные токены: '+Number(u.input_tokens||0).toLocaleString('ru-RU')+' · Выходные токены: '+Number(u.output_tokens||0).toLocaleString('ru-RU')+' · Всего: '+Number(u.total_tokens||0).toLocaleString('ru-RU')
-   : 'Статистика появится после установки миграции 0016 и первых запросов.';
+   : 'Показываются запросы и токены. Денежная оценка не рассчитывается: стоимость зависит от модели и актуальных тарифов.';
  }catch(e){status.textContent=e.message||'Не удалось загрузить настройки ИИ.';}
 }
 async function saveAdminAiDraft() {
