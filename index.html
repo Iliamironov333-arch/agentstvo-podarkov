@@ -187,6 +187,20 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
+ <div class="panel" id="adminStaffPanel" hidden>
+  <h3>🛡️ Должности и права доступа</h3>
+  <p class="notice">Управление доступно владельцу. Модератору можно выдавать и отзывать каждое разрешение отдельно.</p>
+  <div class="admin-search">
+   <input id="adminStaffTelegramId" type="text" inputmode="numeric" maxlength="64" placeholder="Telegram ID пользователя">
+   <select id="adminStaffRole" aria-label="Должность">
+    <option value="moderator">Модератор</option><option value="owner">Владелец</option><option value="client">Клиент</option>
+   </select>
+   <button class="primary" type="button" onclick="saveAdminStaffRole()">Назначить должность</button>
+  </div>
+  <p id="adminStaffStatus" class="notice" aria-live="polite">Список сотрудников загружается…</p>
+  <div id="adminStaffList"></div>
+  <div id="adminStaffPermissionEditor" class="admin-user-detail hidden"></div>
+ </div>
  <div class="sectionhead"><h3>Обзор Агентства</h3><button class="secondary" type="button" id="adminRefreshBtn" onclick="loadAdminDashboard()">↻ Обновить</button></div>
  <div class="admin-metrics" id="adminMetrics">
   <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
@@ -1435,16 +1449,93 @@ async function deleteAdminProduct(product){
  }catch(error){toast(error.message||'Не удалось удалить товар.');}
 }
 
+let adminSession = null;
+let adminStaffSelected = null;
+const adminPermissionLabels = {
+ dashboard_view:'Обзор и показатели',users_view:'Просмотр пользователей и профилей',
+ users_balance:'Начисление и списание баллов',users_ban:'Блокировка пользователей',
+ users_unban:'Снятие блокировки пользователей',orders_view:'Просмотр заказов',
+ orders_manage:'Изменение заказов и уведомления',catalog_view:'Просмотр каталога',
+ catalog_manage:'Управление товарами',support_view:'Просмотр переписок и обращений',
+ support_reply:'Ответы и управление поддержкой',campaigns_manage:'Рассылки',
+ announcements_manage:'Объявления',promos_manage:'Промокоды',analytics_view:'Аналитика',
+ backup_manage:'Резервные копии',system_manage:'Технический центр и настройки'
+};
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card || !initData) return;
  card.classList.add('hidden');
  try {
   const result = await apiFetch('/api/admin/session');
-  if (result && result.owner === true) card.classList.remove('hidden');
+  adminSession = result || null;
+  if (result && ['owner','moderator'].includes(result.role)) {
+   card.classList.remove('hidden');
+   const title=document.querySelector('#adminPanelView .sectionhead h2');
+   if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
+   const staffPanel=document.getElementById('adminStaffPanel');
+   if(staffPanel) staffPanel.hidden=!(result.root_owner || result.role==='owner');
+   if(!staffPanel?.hidden) loadAdminStaff();
+  }
  } catch(e) {
+  adminSession = null;
   card.classList.add('hidden');
  }
+}
+async function loadAdminStaff(){
+ const status=document.getElementById('adminStaffStatus'),root=document.getElementById('adminStaffList');
+ if(!status||!root)return;
+ status.textContent='Загружаем должности…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/staff');
+  (data.staff||[]).forEach(member=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=(member.first_name||member.username||member.telegram_id)+' · '+member.role;
+   const meta=document.createElement('small');meta.textContent='ID: '+member.telegram_id+' · '+member.status;
+   info.append(name,meta);
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Права';edit.addEventListener('click',()=>openAdminStaffPermissions(member));
+   row.append(info,edit);root.append(row);
+  });
+  status.textContent='Сотрудников: '+(data.staff||[]).length+'. Основной владелец защищён отдельно.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить должности.';}
+}
+async function saveAdminStaffRole(){
+ const id=document.getElementById('adminStaffTelegramId')?.value.trim()||'';
+ const role=document.getElementById('adminStaffRole')?.value||'moderator';
+ if(!/^\d{3,64}$/.test(id)){toast('Введите корректный Telegram ID.');return;}
+ const roleNames={owner:'владельцем',moderator:'модератором',client:'клиентом'};
+ if(!confirm('Назначить пользователя '+id+' должность «'+roleNames[role]+'»?'))return;
+ try{
+  await apiFetch('/api/admin/staff/role',{method:'POST',body:JSON.stringify({telegram_id:id,role})});
+  toast('Должность обновлена.');await loadAdminStaff();
+ }catch(e){toast(e.message||'Не удалось изменить должность.');}
+}
+function openAdminStaffPermissions(member){
+ adminStaffSelected=member;
+ const box=document.getElementById('adminStaffPermissionEditor');if(!box)return;
+ box.replaceChildren();box.classList.remove('hidden');
+ const title=document.createElement('h4');title.textContent='Права модератора · '+member.telegram_id;box.append(title);
+ if(member.role!=='moderator'){
+  const note=document.createElement('p');note.className='notice';note.textContent='Индивидуальные права настраиваются только для должности «Модератор». Для владельца действует полный доступ, клиент не имеет административных прав.';box.append(note);return;
+ }
+ let permissions={};try{permissions=JSON.parse(member.permissions_json||'{}');}catch{}
+ Object.entries(adminPermissionLabels).forEach(([key,label])=>{
+  const line=document.createElement('label');line.className='admin-detail-line';
+  const input=document.createElement('input');input.type='checkbox';input.checked=permissions[key]!==false;input.dataset.permission=key;
+  const text=document.createElement('span');text.textContent=label;line.append(input,text);box.append(line);
+ });
+ const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Сохранить права';
+ save.addEventListener('click',saveAdminStaffPermissions);box.append(save);
+}
+async function saveAdminStaffPermissions(){
+ if(!adminStaffSelected)return;
+ const box=document.getElementById('adminStaffPermissionEditor');
+ const permissions={};
+ box?.querySelectorAll('input[data-permission]').forEach(input=>permissions[input.dataset.permission]=input.checked);
+ try{
+  await apiFetch('/api/admin/staff/permissions',{method:'POST',body:JSON.stringify({telegram_id:adminStaffSelected.telegram_id,permissions})});
+  toast('Права модератора сохранены.');await loadAdminStaff();
+ }catch(e){toast(e.message||'Не удалось сохранить права.');}
 }
 
 async function apiFetch(path,options={}) {
