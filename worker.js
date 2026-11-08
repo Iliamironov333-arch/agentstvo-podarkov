@@ -189,48 +189,28 @@ async function deliverOrderImages(env, orderId, telegramId) {
     .bind(orderId).all();
   const rows = rowsResult.results || [];
   if (!rows.length) {
-    await notifyOwner(env, "⚠️ Заказ " + orderId + " оплачен, но в order_items нет товаров. Отправка открытки остановлена.");
+    await notifyOwner(env, "⚠️ Заказ " + orderId + " оплачен, но в order_items нет товаров. Отправка уведомления остановлена.");
     return false;
   }
   if (rows.every(row => row.delivery_status === "sent")) return true;
 
-  // Claim the order's pending delivery rows to prevent two webhook retries from sending two postcards.
+  // Claim pending rows so webhook retries cannot send duplicate confirmations.
   const claim = await env.DB.prepare("UPDATE order_items SET delivery_status='sending',delivery_started_at=CURRENT_TIMESTAMP WHERE order_id=? AND (delivery_status='pending' OR (delivery_status='sending' AND (delivery_started_at IS NULL OR delivery_started_at < datetime('now','-10 minutes'))))")
     .bind(orderId).run();
   if (!claim.meta || claim.meta.changes < 1) return false;
 
   try {
-    const assetUrl = "https://raw.githubusercontent.com/Iliamironov333-arch/agentstvo-podarkov/main/assets/thank-you.jpg.b64";
-    const assetResponse = await fetch(assetUrl, { cf: { cacheTtl: 3600 } });
-    if (!assetResponse.ok) throw new Error("Не удалось получить открытку из GitHub: HTTP " + assetResponse.status);
-    const base64 = (await assetResponse.text()).trim();
-    if (!base64.startsWith("/9j/") || base64.length < 1000) throw new Error("Файл открытки повреждён или имеет неверный формат.");
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-    const form = new FormData();
-    form.append("chat_id", String(telegramId));
-    form.append("caption", "🎁 Спасибо за покупку! Ваш заказ оплачен. Саму работу Илья доставит отдельно.");
-    form.append("photo", new Blob([bytes], { type: "image/jpeg" }), "thank-you.jpg");
-    const telegramResponse = await fetch("https://api.telegram.org/bot" + env.BOT_TOKEN + "/sendPhoto", {
-      method: "POST",
-      body: form
-    });
-    const telegramResult = await telegramResponse.json();
-    if (!telegramResponse.ok || !telegramResult.ok) {
-      throw new Error("Telegram sendPhoto: " + (telegramResult.description || telegramResponse.status));
-    }
+    const message = "🎁 Спасибо за покупку в «Агентстве подарков»!\n\n✅ Оплата успешно получена. Ваш заказ оформлен.\n\nСаму работу Илья доставит отдельно. Спасибо, что выбрали нас! 💛";
+    await telegram(env, "sendMessage", { chat_id: String(telegramId), text: message });
 
     await env.DB.prepare("UPDATE order_items SET delivery_status='sent',delivered_at=CURRENT_TIMESTAMP,delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
       .bind(orderId).run();
-    // The postcard is delivered automatically; the actual artwork is delivered manually by the seller.
-    // Keep the order in awaiting_delivery until the seller completes the artwork delivery.
+    // Text payment confirmation is delivered automatically; the actual artwork is delivered manually by the seller.
     return true;
   } catch (error) {
     await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=CURRENT_TIMESTAMP WHERE order_id=? AND delivery_status='sending'")
       .bind(orderId).run();
-    await notifyOwner(env, "⚠️ Не удалось отправить открытку покупателю\nЗаказ: " + orderId + "\nОшибка: " + String(error).slice(0, 500));
+    await notifyOwner(env, "⚠️ Не удалось отправить подтверждение оплаты покупателю\nЗаказ: " + orderId + "\nОшибка: " + String(error).slice(0, 500));
     return false;
   }
 }
