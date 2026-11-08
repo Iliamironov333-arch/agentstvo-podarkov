@@ -338,7 +338,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
-  <label>Промокод<input id="promoCodeInput" maxlength="32" autocomplete="off" placeholder="Введите код"></label>
+  <label>Промокод<input id="promoCodeInput" maxlength="32" autocomplete="off" placeholder="Введите код" oninput="activePromo=null;document.getElementById('promoStatus').textContent='Код изменён. Нажмите «Применить промокод» снова.';drawCart()"></label>
   <button class="secondary" id="applyPromoButton" type="button" onclick="applyPromoCode()">Применить промокод</button>
   <p class="notice" id="promoStatus" aria-live="polite">Скидка по каталогу уже учтена. Промокод — дополнительная акция.</p>
   <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
@@ -1063,6 +1063,7 @@ async function loadAnnouncements() {
 
 async function loadAdminDashboard() {
  loadAdminPromos();
+ loadAdminAnalytics();
  const status = document.getElementById('adminDashboardStatus');
  const button = document.getElementById('adminRefreshBtn');
  if (!status) return;
