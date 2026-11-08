@@ -1973,7 +1973,7 @@ async function checkout() {
   if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
   if(data.paid){
    quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
-   if(statusBox)statusBox.textContent='Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
+   if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Заказ оплачен с баланса. Самовывоз: Новаторов, 8 · доставка бесплатно.':'Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
    toast('Заказ оплачен с баланса! 🎁');
    return;
   }
