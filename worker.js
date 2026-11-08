@@ -257,7 +257,7 @@ async function createPaymentIntent(env, data) {
 }
 
 async function calculateDeliveryQuote(address, priority) {
-  const clean = String(address || "").trim().replace(/\\s+/g," ").slice(0,350);
+  const clean = String(address || "").trim().replace(/\s+/g," ").slice(0,350);
   if (clean.length < 8) throw new Error("Укажите полный адрес доставки: улицу и номер дома.");
   const headers = { "User-Agent": "AgentstvoPodarkov/1.1 (delivery calculation)", "Accept-Language": "ru" };
   const queries = [
