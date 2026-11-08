@@ -329,10 +329,13 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <p class="muted">Состояние базы и основных компонентов. Проверки выполняются безопасными запросами чтения; данные покупателей и заказы не изменяются.</p>
    <p id="adminTechnicalStatus" class="notice" aria-live="polite">Проверяем подключение…</p>
    <div class="admin-user-detail">
-    <h4>🗄️ Резервная копия базы</h4>
-    <p class="muted">Создаёт файл JSON со структурой и данными таблиц D1. Файл может содержать личные данные покупателей и приватные заметки — храните его в безопасном месте.</p>
-    <button class="secondary" id="adminBackupDownloadButton" type="button" onclick="downloadAdminBackup()">Скачать резервную копию D1</button>
-    <p id="adminBackupStatus" class="notice" aria-live="polite">Ручной экспорт доступен владельцу. Автоматическое хранение и восстановление подключаются отдельно.</p>
+    <h4>🗄️ Резервные копии и восстановление D1</h4>
+    <p class="muted">Cloudflare D1 Time Travel автоматически сохраняет точки восстановления базы. Доступный период зависит от тарифа Cloudflare. Это восстановление состояния базы за прошлое время, а не отдельный файл для скачивания.</p>
+    <p id="adminBackupTimeTravelStatus" class="notice" aria-live="polite">Проверяем доступность точки восстановления…</p>
+    <button class="secondary" id="adminBackupRefreshButton" type="button" onclick="loadAdminBackupStatus()">↻ Проверить точку восстановления</button>
+    <p class="muted">Дополнительно можно скачать независимый JSON-экспорт со структурой и данными таблиц. Он может содержать личные данные покупателей и приватные заметки — храните файл в безопасном месте.</p>
+    <button class="secondary" id="adminBackupDownloadButton" type="button" onclick="downloadAdminBackup()">Скачать резервную копию D1 (JSON)</button>
+    <p id="adminBackupStatus" class="notice" aria-live="polite">Ручной экспорт доступен владельцу.</p>
    </div>
    <div class="admin-metrics" id="adminTechnicalMetrics"></div>
    <h4>Компоненты базы данных</h4><div id="adminTechnicalTables"></div>
@@ -652,6 +655,7 @@ async function openAdminUser(telegramId) {
   addLine('Имя',u.first_name);addLine('Username',u.username?'@'+u.username:'—');
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть единую CRM-карточку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
   const orders=Array.isArray(data.orders)?data.orders:[];
   addLine('Заказов',orders.length);
   orders.forEach(o=>addLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
@@ -794,6 +798,34 @@ async function downloadAdminBackup(){
  finally{button.disabled=false;}
 }
 
+async function loadAdminBackupStatus(){
+ const status=document.getElementById('adminBackupTimeTravelStatus'),button=document.getElementById('adminBackupRefreshButton');
+ if(!status)return;
+ if(button)button.disabled=true;
+ status.textContent='Проверяем точку восстановления D1…';
+ try{
+  const data=await apiFetch('/api/admin/backup/status');
+  if(!data.time_travel_available||!data.bookmark){
+   status.textContent='Cloudflare Time Travel сейчас не подтвердил доступность точки восстановления. Используйте ручной JSON-экспорт и проверьте состояние D1 в Cloudflare.';
+   return;
+  }
+  status.replaceChildren();
+  const label=document.createElement('span');
+  label.textContent='Точка восстановления доступна · проверено '+formatDate(data.checked_at);
+  const code=document.createElement('code');
+  code.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px';
+  code.textContent=data.bookmark;
+  const copy=document.createElement('button');
+  copy.type='button';copy.className='secondary';copy.textContent='Скопировать bookmark';
+  copy.addEventListener('click',async()=>{
+   try{await navigator.clipboard.writeText(data.bookmark);toast('Bookmark скопирован.');}
+   catch(e){toast('Не удалось скопировать автоматически. Выделите bookmark вручную.');}
+  });
+  status.append(label,code,copy);
+ }catch(e){status.textContent=e.message||'Не удалось проверить Time Travel.';}
+ finally{if(button)button.disabled=false;}
+}
+
 async function loadAdminTechnicalCenter(){
  const status=document.getElementById('adminTechnicalStatus');if(!status)return;status.textContent='Проверяем базу и компоненты…';
  try{
@@ -803,7 +835,7 @@ async function loadAdminTechnicalCenter(){
   const tables=document.getElementById('adminTechnicalTables');tables.replaceChildren();
   const integrations=document.createElement('div');integrations.className='notice';const integrationLabels={telegram_bot:'Telegram Bot API',telegram_webhook:'Webhook Telegram',openai:'OpenAI API'};Object.entries(d.integrations||{}).forEach(([key,ready])=>{const line=document.createElement('div');line.textContent=integrationLabels[key]+': '+(ready?'настроено':'не настроено');integrations.append(line);});tables.append(integrations);
   Object.entries(d.tables||{}).forEach(([name,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=name;const right=document.createElement('b');right.textContent=ready?'Подключена':'Нужна миграция';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
-  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog()]);
+  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminBackupStatus()]);
  }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
 }
 async function loadAdminFeatureFlags(){
