@@ -1262,6 +1262,7 @@ async function loadAdminAiSettings() {
 }
 async function saveAdminAiDraft() {
  const status=document.getElementById('adminAiStatus');
+ adminAiDraftSaved=false;adminAiTestPassed=false;
  try{
   await apiFetch('/api/admin/ai-draft',{method:'POST',body:JSON.stringify(readAdminAiForm())});
   adminAiDraftSaved=true;adminAiTestPassed=false;
@@ -1742,12 +1743,12 @@ async function subscribeVip(planType) {
 
 async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
 
-function renderSupportMessages(messages) {
+function renderSupportMessages(messages,greeting) {
  const root = document.getElementById('supportChatLog');
  root.replaceChildren();
  if (!messages.length) {
   const empty = document.createElement('p'); empty.className = 'muted';
-  empty.textContent = 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
+  empty.textContent = greeting || 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
   root.appendChild(empty); return;
  }
  for (const item of messages) {
@@ -1767,7 +1768,7 @@ async function loadSupportHistory() {
  if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
   const data = await apiFetch('/api/support/chat');
-  renderSupportMessages(data.messages || []);
+  renderSupportMessages(data.messages || [],data.greeting);
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
