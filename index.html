@@ -231,6 +231,26 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminOrdersList"></div>
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
+  <div class="panel" id="adminAiPanel">
+   <div class="sectionhead"><h3>🤖 Управление ИИ</h3><button class="secondary" type="button" onclick="loadAdminAiSettings()">↻ Обновить</button></div>
+   <p class="muted">Изменения сначала сохраняются как черновик. Затем обязательно запускается тест, и только после успешного теста настройки можно опубликовать.</p>
+   <p id="adminAiStatus" class="notice" aria-live="polite">Загружаем настройки ИИ…</p>
+   <label class="row-actions"><input id="adminAiEnabled" type="checkbox" checked> ИИ-помощник включён</label>
+   <label>Модель OpenAI<input id="adminAiModel" maxlength="80" value="gpt-4o-mini" placeholder="gpt-4o-mini"></label>
+   <label>Приветствие покупателю<textarea id="adminAiGreeting" maxlength="500" rows="2" placeholder="Здравствуйте! Чем могу помочь?"></textarea></label>
+   <label>Дополнительные системные инструкции<textarea id="adminAiInstructions" maxlength="8000" rows="6" placeholder="Правила и особенности ответов помощника…"></textarea></label>
+   <label>Разрешённые темы (через запятую)<input id="adminAiTopics" maxlength="800" value="catalog, orders, payments, balance, support, vip, custom_orders"></label>
+   <p class="muted">Например: catalog, orders, payments, support. Список ограничивает тематику ответов.</p>
+   <div class="row-actions">
+    <button class="secondary" type="button" id="adminAiSaveButton" onclick="saveAdminAiDraft()">Сохранить черновик</button>
+    <button class="secondary" type="button" id="adminAiTestButton" onclick="testAdminAiDraft()">Проверить ИИ</button>
+    <button class="primary" type="button" id="adminAiPublishButton" onclick="publishAdminAiDraft()">Опубликовать</button>
+   </div>
+   <div class="divider"></div>
+   <h4>Использование API за 30 дней</h4>
+   <p id="adminAiUsage" class="notice">Статистика загружается…</p>
+   <p id="adminAiTestResult" class="notice" aria-live="polite"></p>
+  </div>
   <div class="panel" id="adminBackupPanel">
    <div class="sectionhead"><h3>🛡️ Резервные копии D1</h3><button class="secondary" type="button" onclick="loadAdminBackupStatus()">↻ Проверить</button></div>
    <p class="muted">Cloudflare D1 Time Travel хранит точки восстановления автоматически в рамках срока хранения вашего тарифа. SQL-экспорт создаёт отдельный файл с временной ссылкой. Во время экспорта база может временно быть недоступна.</p>
@@ -1206,10 +1226,90 @@ async function loadAnnouncements() {
  }catch(error){console.warn('Announcements unavailable:',error);}
 }
 
+let adminAiDraftSaved = false;
+let adminAiTestPassed = false;
+function readAdminAiForm() {
+ const topics=(document.getElementById('adminAiTopics')?.value||'').split(',').map(x=>x.trim()).filter(Boolean);
+ return {
+  enabled:!!document.getElementById('adminAiEnabled')?.checked,
+  model:(document.getElementById('adminAiModel')?.value||'').trim(),
+  greeting:(document.getElementById('adminAiGreeting')?.value||'').trim(),
+  instructions:(document.getElementById('adminAiInstructions')?.value||'').trim(),
+  allowed_topics:topics
+ };
+}
+function fillAdminAiForm(config) {
+ if(!config)return;
+ document.getElementById('adminAiEnabled').checked=config.enabled!==false;
+ document.getElementById('adminAiModel').value=config.model||'gpt-4o-mini';
+ document.getElementById('adminAiGreeting').value=config.greeting||'';
+ document.getElementById('adminAiInstructions').value=config.instructions||'';
+ document.getElementById('adminAiTopics').value=Array.isArray(config.allowed_topics)?config.allowed_topics.join(', '):'';
+}
+async function loadAdminAiSettings() {
+ const status=document.getElementById('adminAiStatus');if(!status)return;
+ status.textContent='Загружаем настройки…';
+ try{
+  const data=await apiFetch('/api/admin/ai-settings');
+  fillAdminAiForm(data.draft||data.active);
+  adminAiDraftSaved=!!data.draft;adminAiTestPassed=false;
+  status.textContent=data.draft?'Загружен черновик. Перед публикацией его нужно протестировать.':'Активны текущие настройки. Можно создать новый черновик.';
+  const u=data.usage;
+  document.getElementById('adminAiUsage').textContent=u
+   ? 'Запросов: '+Number(u.requests||0).toLocaleString('ru-RU')+' · Входные токены: '+Number(u.input_tokens||0).toLocaleString('ru-RU')+' · Выходные токены: '+Number(u.output_tokens||0).toLocaleString('ru-RU')+' · Всего: '+Number(u.total_tokens||0).toLocaleString('ru-RU')
+   : 'Статистика появится после установки миграции 0016 и первых запросов.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить настройки ИИ.';}
+}
+async function saveAdminAiDraft() {
+ const status=document.getElementById('adminAiStatus');
+ try{
+  await apiFetch('/api/admin/ai-draft',{method:'POST',body:JSON.stringify(readAdminAiForm())});
+  adminAiDraftSaved=true;adminAiTestPassed=false;
+  status.textContent='Черновик сохранён. Теперь запустите проверку ИИ.';
+  document.getElementById('adminAiTestResult').textContent='';
+  toast('Черновик настроек ИИ сохранён.');
+ }catch(e){status.textContent=e.message||'Не удалось сохранить черновик.';}
+}
+async function testAdminAiDraft() {
+ const status=document.getElementById('adminAiStatus'),result=document.getElementById('adminAiTestResult');
+ await saveAdminAiDraft();
+ if(!adminAiDraftSaved)return;
+ status.textContent='Отправляем тестовый запрос выбранной модели…';result.textContent='';
+ try{
+  const data=await apiFetch('/api/admin/ai-test',{method:'POST',body:'{}'});
+  adminAiTestPassed=data.test_passed===true;
+  result.textContent=(adminAiTestPassed?'Тест пройден: ':'Тест не пройден: ')+(data.answer||'Модель ответила.');
+  status.textContent=adminAiTestPassed?'Тест успешен. Теперь можно опубликовать именно этот черновик.':'Тест не пройден. Публикация недоступна.';
+  await loadAdminAiUsageOnly();
+ }catch(e){adminAiTestPassed=false;status.textContent=e.message||'Тест ИИ не прошёл.';}
+}
+async function loadAdminAiUsageOnly() {
+ try{
+  const data=await apiFetch('/api/admin/ai-settings'),u=data.usage;
+  document.getElementById('adminAiUsage').textContent=u
+   ? 'Запросов: '+Number(u.requests||0).toLocaleString('ru-RU')+' · Входные токены: '+Number(u.input_tokens||0).toLocaleString('ru-RU')+' · Выходные токены: '+Number(u.output_tokens||0).toLocaleString('ru-RU')+' · Всего: '+Number(u.total_tokens||0).toLocaleString('ru-RU')
+   : 'Статистика пока недоступна.';
+ }catch(e){}
+}
+async function publishAdminAiDraft() {
+ const status=document.getElementById('adminAiStatus');
+ if(!adminAiDraftSaved){status.textContent='Сначала сохраните черновик.';return;}
+ if(!adminAiTestPassed){status.textContent='Сначала успешно протестируйте черновик.';return;}
+ if(!confirm('Опубликовать протестированные настройки ИИ?'))return;
+ try{
+  const data=await apiFetch('/api/admin/ai-publish',{method:'POST',body:'{}'});
+  fillAdminAiForm(data.active);adminAiDraftSaved=false;adminAiTestPassed=false;
+  status.textContent='Настройки ИИ опубликованы и теперь действуют.';
+  toast('Настройки ИИ опубликованы.');
+  await loadAdminAiSettings();
+ }catch(e){status.textContent=e.message||'Не удалось опубликовать настройки.';}
+}
+
 async function loadAdminDashboard() {
  loadAdminPromos();
  loadAdminAnalytics();
  loadAdminBackupStatus();
+ loadAdminAiSettings();
  const status = document.getElementById('adminDashboardStatus');
  const button = document.getElementById('adminRefreshBtn');
  if (!status) return;
