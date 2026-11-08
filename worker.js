@@ -1486,12 +1486,13 @@ export default {
           const testResponse=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:config.model,instructions:testInstructions,input:"Проверь, что модель отвечает.",max_output_tokens:80})});
           const testData=await testResponse.json().catch(()=>({}));
           if(!testResponse.ok){await logAiUsage(env,"admin_test",config.model,testData.usage,"error");return json({error:"Тест модели не прошёл. Проверьте модель и подключение API.",provider_status:testResponse.status},502,origin);}
+          const testAnswer=typeof testData.output_text==="string"?testData.output_text.trim():"";
+          if(!testAnswer){await logAiUsage(env,"admin_test",config.model,testData.usage,"error");return json({error:"Модель вернула пустой ответ. Черновик не отмечен как протестированный."},502,origin);}
           const hash=await aiConfigFingerprint(config);
           await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_draft_test_hash',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(hash).run();
           await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_draft_tested_at',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(new Date().toISOString()).run();
           await logAiUsage(env,"admin_test",config.model,testData.usage);
-          const answer=typeof testData.output_text==="string"?testData.output_text:"Тестовый запрос выполнен.";
-          return json({ok:true,test_passed:true,answer:answer.slice(0,500),usage:testData.usage||null},200,origin);
+          return json({ok:true,test_passed:true,answer:testAnswer.slice(0,500),usage:testData.usage||null},200,origin);
         }
         if (path === "/api/admin/ai-publish" && method === "POST") {
           const row=await env.DB.prepare("SELECT value FROM app_settings WHERE key='ai_draft_config'").first();
