@@ -1478,14 +1478,14 @@ function applyAdminPermissionVisibility(){
   if(panel)panel.hidden=!allowed;
   else if(node)node.hidden=!allowed;
  };
- showPanel('#adminUserSearch',adminHasPermission('users_view'));
- showPanel('#adminOrderSearch',adminHasPermission('orders_view'));
+ showPanel('#adminUserSearch',['users_view','users_balance','users_ban','users_unban'].some(adminHasPermission));
+ showPanel('#adminOrderSearch',adminHasPermission('orders_view')||adminHasPermission('orders_manage'));
  showPanel('#adminBackupPanel',adminHasPermission('backup_manage'));
  showPanel('#adminPromosPanel',adminHasPermission('promos_manage'));
  showPanel('#adminCatalogPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
  showPanel('#adminSystemControlsPanel',adminHasPermission('system_manage'));
  showPanel('#adminAnalyticsPanel',adminHasPermission('analytics_view'));
- showPanel('#adminSupportPanel',adminHasPermission('support_view'));
+ showPanel('#adminSupportPanel',adminHasPermission('support_view')||adminHasPermission('support_reply'));
  showPanel('#adminAnnouncementsPanel',adminHasPermission('announcements_manage'));
  showPanel('#adminMailingPanel',adminHasPermission('campaigns_manage'));
  showPanel('#adminTechnicalCenterPanel',adminHasPermission('system_manage'));
