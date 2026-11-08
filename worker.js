@@ -1111,7 +1111,17 @@ export default {
           if(old){
             await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(id,String(c.telegram_id)).run();
             await env.DB.prepare("UPDATE orders SET price_stars=?,total_stars=?,product_title=? WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(price,price,"Индивидуальная работа: "+c.subject,id,String(c.telegram_id)).run();
-            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status='pending' WHERE id=?").bind(price,id).run();
+            const u=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(String(c.telegram_id)).first();
+            const want=Math.min(price,Math.max(0,Number(u?.balance_stars||0)));let used=0;
+            if(want>0){
+              const d=await env.DB.batch([
+                env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?").bind(want,String(c.telegram_id),want),
+                env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'custom_order_payment',?,? WHERE changes()=1").bind(String(c.telegram_id),-want,"Оплата индивидуального заказа "+id,"custom-order-payment:"+id+":"+makeId())
+              ]);
+              if(d[0]?.meta?.changes===1)used=want;
+            }
+            await env.DB.prepare("UPDATE orders SET balance_applied_stars=?,payment_status=CASE WHEN ?=total_stars THEN 'paid' ELSE 'pending' END,fulfillment_status=CASE WHEN ?=total_stars THEN 'awaiting_delivery' ELSE 'awaiting_payment' END,paid_at=CASE WHEN ?=total_stars THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(used,used,used,used,id,String(c.telegram_id)).run();
+            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(price,used,id).run();
           }else{
             await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,balance_applied_stars) VALUES (?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',0)").bind(id,String(c.telegram_id),"Индивидуальная работа: "+c.subject,price,price).run();
             const u=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(String(c.telegram_id)).first();
