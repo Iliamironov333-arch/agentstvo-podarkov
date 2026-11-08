@@ -1411,7 +1411,7 @@ async function loadAdminOrders() {
    const info=document.createElement('div');info.className='admin-user-info';
    const name=document.createElement('strong');name.textContent=(order.order_type==='custom'?'🎨 ':'📦 ')+(order.title||'Заказ');
    const meta=document.createElement('small');
-   meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+(labels[order.admin_status]||order.admin_status||'Статус неизвестен')+' · '+(order.created_at||'');
+   meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+(labels[order.admin_status]||order.admin_status||'Статус неизвестен')+' · '+(order.created_at||'')+(Number(order.priority_delivery)===1?' · ⚡ ПРИОРИТЕТ':'');
    info.append(name,meta);
    const detail=document.createElement('button');detail.type='button';detail.className='secondary';detail.textContent='Подробнее';
    detail.addEventListener('click',()=>openAdminOrder(order.id,order.order_type));
