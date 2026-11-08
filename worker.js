@@ -418,6 +418,25 @@ async function processCampaignBatch(env, limit = 15) {
 }
 
 
+async function releaseExpiredPromoReservations(env) {
+  try {
+    if (!env.DB || !(await tableExists(env,"promo_codes")) || !(await tableExists(env,"promo_redemptions"))) return { released: 0, skipped: true };
+    const expired=await env.DB.prepare("SELECT COUNT(*) AS total FROM promo_redemptions r JOIN orders o ON o.id=r.order_id WHERE r.status='reserved' AND o.payment_status='pending' AND o.created_at<datetime('now','-1 day')").first();
+    const count=Number(expired?.total||0);
+    if(!count)return {released:0};
+    await env.DB.batch([
+      env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-(SELECT COUNT(*) FROM promo_redemptions r JOIN orders o ON o.id=r.order_id WHERE r.code=promo_codes.code AND r.status='reserved' AND o.payment_status='pending' AND o.created_at<datetime('now','-1 day')),updated_at=CURRENT_TIMESTAMP"),
+      env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE status='reserved' AND order_id IN (SELECT id FROM orders WHERE payment_status='pending' AND created_at<datetime('now','-1 day'))"),
+      env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE payment_status='pending' AND created_at<datetime('now','-1 day') AND id IN (SELECT order_id FROM promo_redemptions WHERE status='released')"),
+      env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE status='pending' AND created_at<datetime('now','-1 day') AND payload IN (SELECT order_id FROM promo_redemptions WHERE status='released')")
+    ]);
+    return {released:count};
+  } catch(error) {
+    console.error("Expired promo reservation cleanup failed:",String(error).slice(0,300));
+    return {released:0,error:true};
+  }
+}
+
 async function writeSystemError(env, error, path) {
   try {
     if (!env.DB) return;
@@ -432,6 +451,7 @@ async function writeSystemError(env, error, path) {
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
+    ctx.waitUntil(releaseExpiredPromoReservations(env));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
