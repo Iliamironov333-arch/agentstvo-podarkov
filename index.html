@@ -1391,16 +1391,24 @@ async function openAdminOrder(orderId,orderType) {
   }else{
    addLine('Тема',order.subject);
    addLine('Статус заявки',order.status);
+   addLine('Оплата',order.payment_status||'Цена ещё не назначена');
+   addLine('Списано с внутреннего баланса',Number(order.balance_applied_stars||0)+' ⭐');
    let answers=order.answers_json||'';
    try{answers=JSON.stringify(JSON.parse(answers),null,2);}catch(e){}
    addLine('Ответы и пожелания',answers);
+   const p=document.createElement('div');p.className='panel';
+   const t=document.createElement('h4');t.textContent='💳 Итоговая цена индивидуальной работы';p.append(t);
+   const input=document.createElement('input');input.type='number';input.min='1';input.max='100000';input.step='1';input.inputMode='numeric';input.placeholder='Цена в Telegram Stars';input.value=String(order.total_stars||'');input.setAttribute('aria-label','Итоговая цена в Telegram Stars');p.append(input);
+   const hint=document.createElement('p');hint.className='notice';hint.textContent='ИИ предлагает предварительную оценку. Здесь можно назначить окончательную цену. Сервер сначала использует внутренний баланс клиента, а счёт создаст только на остаток.';p.append(hint);
+   const set=document.createElement('button');set.type='button';set.className='primary';set.textContent='Назначить цену и открыть оплату';
+   set.addEventListener('click',async()=>{const value=Number(input.value);if(!Number.isSafeInteger(value)||value<1||value>100000){toast('Введите цену от 1 до 100 000 Stars.');return;}if(!confirm('Назначить итоговую цену '+value+' ⭐? Сервер проверит баланс клиента.'))return;set.disabled=true;try{const result=await apiFetch('/api/admin/custom-order-price',{method:'POST',body:JSON.stringify({order_id:String(order.id),price_stars:value})});toast(result.invoice_amount_stars===0?'Цена назначена, заказ оплачен с баланса.':'Цена назначена. Остаток: '+result.invoice_amount_stars+' ⭐');await openAdminOrder(orderId,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось назначить цену.');}finally{set.disabled=false;}});p.append(set);box.append(p);
   }
   const section=document.createElement('div');section.className='admin-order-actions';
   const heading=document.createElement('h4');heading.textContent='Управление заказом';section.append(heading);
   const statusLabel=document.createElement('label');statusLabel.textContent='Статус';
   const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','Новый статус заказа');
   const currentStatus=data.admin_status||'new';
-  const isUnpaid=orderType==='product'&&order.payment_status==='pending';
+  const isUnpaid=order.payment_status==='pending'||(orderType==='custom'&&!order.payment_status);
   const isCancelled=orderType==='product'&&order.payment_status==='cancelled';
   if(isUnpaid){
    const opt=document.createElement('option');opt.value='unpaid';opt.textContent='Не оплачен — ожидает оплаты';statusSelect.append(opt);
@@ -1928,8 +1936,8 @@ async function checkout() {
  }
 }
 
-async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else{toast('Оплата не завершена.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}}
-async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');loadMe();loadBalance();}catch(e){toast(e.message||'Не удалось отменить заказ.');}}
+async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else{toast('Оплата не завершена.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
+async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 async function loadMe() {
  try {
   const [me,od]=await Promise.all([apiFetch('/api/me'),apiFetch('/api/orders')]),points=Number(me.points??me.balance_stars??0);
@@ -1941,8 +1949,8 @@ async function loadMe() {
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{
-  const pending=o.order_type==='product'&&o.status==='pending';
-  const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status);
+  const pending=o.status==='pending';
+  const state=o.order_type==='custom'?(o.status==='new'?'Принят • ожидает обработки':o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status);
   const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
   const actions=pending?'<div class="order-actions"><button class="primary order-action-btn" onclick="payExistingOrder(\''+id+'\')">Оплатить</button><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':'';
   return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
