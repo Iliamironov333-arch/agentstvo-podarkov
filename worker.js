@@ -497,6 +497,28 @@ export default {
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
         }
+        if (path === "/api/admin/backup/export" && method === "GET") {
+          const listed = await env.DB.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+          const tables = listed.results || [];
+          const backupTables = [];
+          let totalRows = 0;
+          for (const table of tables) {
+            const safeName = String(table.name || "");
+            if (!safeName || safeName.includes("\u0000")) continue;
+            const quoted = '"' + safeName.replace(/"/g, '""') + '"';
+            const countRow = await env.DB.prepare("SELECT COUNT(*) AS total FROM " + quoted).first();
+            const count = Number(countRow?.total || 0);
+            totalRows += count;
+            if (totalRows > 20000) return json({error:"Резервная копия слишком большая для одного файла ("+totalRows+" строк). Нужен поэтапный экспорт."},413,origin);
+            const rows = await env.DB.prepare("SELECT * FROM " + quoted).all();
+            backupTables.push({name:safeName,create_sql:table.sql||null,row_count:count,rows:rows.results||[]});
+          }
+          const payload = {format:"agentstvo-podarkov-d1-backup",version:1,created_at:new Date().toISOString(),table_count:backupTables.length,total_rows:totalRows,tables:backupTables};
+          const serialized = JSON.stringify(payload);
+          if (new TextEncoder().encode(serialized).byteLength > 12*1024*1024) return json({error:"Резервная копия превышает 12 МБ. Нужен поэтапный экспорт."},413,origin);
+          const filename = "agentstvo-podarkov-backup-" + new Date().toISOString().replace(/[:.]/g,"-") + ".json";
+          return new Response(serialized,{status:200,headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":'attachment; filename="'+filename+'"',...corsHeaders(origin)}});
+        }
         if(path==="/api/admin/promos"&&method==="GET"){
           if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true},200,origin);
           const rows=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100").all();
