@@ -1647,6 +1647,19 @@ export default {
           orders: orders.results || [], vip: vip || null }, 200, origin);
       }
 
+      if (path === "/api/orders/pay" && method === "POST") {
+        const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
+        if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+        const order=await env.DB.prepare("SELECT id,product_title,total_stars,payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        if(!order)return json({error:"Заказ не найден."},404,origin);
+        if(order.payment_status!=="pending")return json({error:"Заказ уже оплачен или отменён."},409,origin);
+        const due=Math.max(0,Number(order.total_stars||0)-Number(order.balance_applied_stars||0));
+        if(!due)return json({error:"Заказ уже полностью покрыт балансом. Обновите список заказов."},409,origin);
+        const payload=orderId+":retry:"+makeId();
+        const invoice_url=await createPaymentIntent(env,{payload,telegram_id:telegramId,kind:"order",reference_id:orderId,amount_stars:due,title:"Оплата заказа "+orderId.slice(0,8),description:String(order.product_title||"Заказ").slice(0,150)+"; остаток "+due+" Stars"});
+        return json({ok:true,invoice_url,order_id:orderId,invoice_amount_stars:due,balance_used_stars:Number(order.balance_applied_stars||0)},200,origin);
+      }
+
       if (path === "/api/orders/cancel" && method === "POST") {
         const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
