@@ -902,7 +902,7 @@ export default {
             env.DB.prepare("UPDATE user_blocks SET status='lifted',unblocked_by=?,unblocked_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND status='active'")
               .bind(telegramId, targetId),
             env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'user_unblock',? WHERE changes()=1")
-              .bind(telegramId, targetId, JSON.stringify({ reason: "Разблокировка владельцем" }))
+              .bind(telegramId, targetId, JSON.stringify({ reason: "Разблокировка администратором" }))
           ]);
           if (!results[0]?.meta || results[0].meta.changes !== 1) {
             return json({ error: "Активная блокировка не найдена." }, 404, origin);
