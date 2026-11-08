@@ -415,13 +415,10 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
 </section>
 <section id="aiWorkshopView" class="hidden">
- <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Опишите задумку — помощник разработает оригинальную идею поделки и объяснит, как её создать.</p></div>
- <div class="panel"><h3>Создать идею поделки</h3><label class="muted" for="craftTheme" style="display:block;margin:10px 0 6px">Что хотите сделать?</label><textarea id="craftTheme" rows="3" maxlength="1200" placeholder="Например: необычный подарок из бумаги в осенней тематике…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
- <label class="muted" for="craftMaterial" style="display:block;margin:12px 0 6px">Предпочтительные материалы</label><select id="craftMaterial" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><option value="На усмотрение помощника">На усмотрение помощника</option><option>Бумага и картон</option><option>Пластилин</option><option>Природные материалы</option><option>Ткань и нитки</option><option>Краски и карандаши</option><option>Подручные материалы</option></select>
- <label class="muted" for="craftLevel" style="display:block;margin:12px 0 6px">Сложность</label><select id="craftLevel" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><option value="Простая">Простая</option><option value="Средняя" selected>Средняя</option><option value="Сложная">Сложная</option></select>
- <button class="primary" id="craftGenerateBtn" onclick="generateCraft()">✨ Придумать поделку</button><p class="notice" id="craftResultStatus" aria-live="polite">Помощник предложит название, материалы и последовательность изготовления.</p></div>
- <div class="panel hidden" id="craftResultPanel"><h3 id="craftResultTitle">Ваша идея</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
-</section>
+  <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
+  <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник задаёт вопросы по одному и не спешит с готовой инструкцией.</p></div>
+  <div class="panel hidden" id="craftResultPanel"><h3>Предложение мастерской</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
+ </section>
 <section id="vipSupportView" class="hidden"><div class="sectionhead"><h2>👑 VIP-помощь Агентства</h2><span id="vipHelpStatus">Проверка подписки…</span></div><div class="panel"><p class="muted">Персональная помощь для владельцев действующей VIP-подписки. Опишите вопрос — помощник учтёт VIP-статус и при необходимости передаст обращение владельцу.</p><textarea id="vipSupportMessage" rows="4" maxlength="2000" placeholder="Опишите, с чем нужна помощь…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="vipSupportSendBtn" onclick="sendVipSupport()">Отправить в VIP-поддержку</button><p class="notice" id="vipSupportResult" aria-live="polite"></p></div></section>
 <section id="balanceView" class="hidden">
  <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
@@ -531,7 +528,7 @@ async function buyProductNow(productId){
  finally{if(button){button.disabled=false;button.textContent='⚡ Купить сразу';}}
 }
 
-function showView(id) {
+function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCraftConversation();
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
@@ -1707,7 +1704,41 @@ function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),
 async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку: '+(e.message||'ошибка сервера')+'. Обновите приложение.';}}
 function openVipSupport(){if(!vipActive){toast('Для VIP-помощи нужна действующая подписка.');return;}showView('vipSupportView');}
 async function sendVipSupport(){const i=document.getElementById('vipSupportMessage'),r=document.getElementById('vipSupportResult'),b=document.getElementById('vipSupportSendBtn'),message=i.value.trim();if(!message){r.textContent='Опишите вопрос перед отправкой.';return;}b.disabled=true;r.textContent='VIP-помощник готовит ответ…';try{const d=await apiFetch('/api/vip/support',{method:'POST',body:JSON.stringify({message})});i.value='';r.textContent=d.reply||'Обращение обработано.';}catch(e){r.textContent=e.message||'Не удалось отправить обращение.';}finally{b.disabled=false;}}
-async function generateCraft(){const theme=document.getElementById('craftTheme').value.trim(),material=document.getElementById('craftMaterial').value,level=document.getElementById('craftLevel').value,b=document.getElementById('craftGenerateBtn'),s=document.getElementById('craftResultStatus'),p=document.getElementById('craftResultPanel');if(theme.length<3){s.textContent='Опишите задумку хотя бы несколькими словами.';return;}b.disabled=true;b.textContent='Создаём идею…';s.textContent='ИИ-мастерская разрабатывает поделку…';p.classList.add('hidden');try{const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({theme,material,level})});document.getElementById('craftResultTitle').textContent=d.title||'Ваша идея поделки';document.getElementById('craftResultText').textContent=d.answer||'Помощник не вернул описание.';p.classList.remove('hidden');s.textContent='Готово! Идея создана.';}catch(e){s.textContent=e.message||'Не удалось создать идею. Попробуйте ещё раз.';}finally{b.disabled=false;b.textContent='✨ Придумать поделку';}}
+let craftMessages=[];
+let craftQuestionCount=0;
+let craftConversationReady=false;
+function renderCraftChat(){
+ const root=document.getElementById('craftChatLog');if(!root)return;root.replaceChildren();
+ craftMessages.forEach(m=>{const bubble=document.createElement('div');bubble.style.cssText='max-width:94%;align-self:'+(m.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(m.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5';const label=document.createElement('b');label.textContent=m.role==='user'?'Ты':'ИИ-мастер';label.style.display='block';label.style.marginBottom='4px';const body=document.createElement('span');body.textContent=m.content;bubble.append(label,body);root.append(bubble);});
+ root.scrollTop=root.scrollHeight;
+ const count=document.getElementById('craftQuestionCount');if(count)count.textContent=craftQuestionCount+' / 16 вопросов';
+}
+function resetCraftConversation(){
+ craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем поделку или подарок. Сначала расскажи, что примерно хочется создать — даже если идея пока очень общая.'}];
+ craftQuestionCount=0;craftConversationReady=false;
+ const panel=document.getElementById('craftResultPanel');if(panel)panel.classList.add('hidden');
+ const input=document.getElementById('craftChatInput');if(input)input.value='';
+ const button=document.getElementById('craftSendBtn');if(button){button.disabled=false;button.textContent='Отправить ответ';}
+ const status=document.getElementById('craftResultStatus');if(status)status.textContent='Помощник задаёт вопросы по одному и не спешит с готовой инструкцией.';
+ renderCraftChat();
+}
+async function sendCraftMessage(){
+ const input=document.getElementById('craftChatInput'),button=document.getElementById('craftSendBtn'),status=document.getElementById('craftResultStatus'),message=input.value.trim();
+ if(!message){status.textContent='Напиши ответ, чтобы продолжить.';return;}
+ if(!craftMessages.length)resetCraftConversation();
+ if(craftConversationReady){status.textContent='Итог уже готов. Начни новый диалог, если хочешь придумать другую работу.';return;}
+ if(craftQuestionCount>=16)craftMessages.push({role:'user',content:'Не задавай больше вопросов. Используй собранные ответы, сделай итоговый вариант и явно укажи все допущения.'});
+ craftMessages.push({role:'user',content:message});input.value='';button.disabled=true;button.textContent='Мастер думает…';status.textContent='Анализируем пожелания и бюджет…';
+ try{
+  const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages})});
+  craftMessages.push({role:'assistant',content:d.reply||'Помощник не вернул сообщение.'});
+  if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предварительный проект готов. Окончательную стоимость работы подтвердит владелец.';}
+  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем консультацию. Ответь на следующий вопрос.';}
+  renderCraftChat();
+ }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуй ещё раз.';input.value=message;}
+ finally{button.disabled=craftConversationReady;button.textContent=craftConversationReady?'Проект готов':'Отправить ответ';}
+}
+
 
 const customSteps=[
 {key:'style',title:'Какой стиль работы вы предпочитаете?',hint:'Перспектива — это изображение пространства, в котором линии визуально сходятся в одной точке вдали, например дорога уходит к горизонту.',options:[['classic','Классический',0],['watercolor','Акварельный',80],['perspective','С перспективой',120],['autumn','Осенний',40],['realistic','Реалистичный',150],['artist_choice','На усмотрение',0]]},
