@@ -1482,7 +1482,7 @@ export default {
           if(!row?.value)return json({error:"Сначала сохраните черновик настроек."},409,origin);
           let config;try{config=validateAiConfig(JSON.parse(row.value));}catch(e){return json({error:e.message||"Черновик настроек повреждён."},400,origin);}
           if(!env.OPENAI_API_KEY)return json({error:"OPENAI_API_KEY не подключён в Cloudflare Worker Secrets."},503,origin);
-          const testInstructions=["Проверка конфигурации ИИ Агентства подарков. Ответь по-русски одной короткой фразой: «Тест пройден».",config.instructions].filter(Boolean).join("\n\n");
+          const testInstructions=["Проверка конфигурации ИИ Агентства подарков. Ответь по-русски одной короткой фразой: «Тест пройден».","Состояние помощника: "+(config.enabled?"включён":"выключен"),"Приветствие: "+config.greeting,"Разрешённые темы: "+config.allowed_topics.join(", "),config.instructions].filter(Boolean).join("\n\n");
           const testResponse=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:config.model,instructions:testInstructions,input:"Проверь, что модель отвечает.",max_output_tokens:80})});
           const testData=await testResponse.json().catch(()=>({}));
           if(!testResponse.ok){await logAiUsage(env,"admin_test",config.model,testData.usage,"error");return json({error:"Тест модели не прошёл. Проверьте модель и подключение API.",provider_status:testResponse.status},502,origin);}
