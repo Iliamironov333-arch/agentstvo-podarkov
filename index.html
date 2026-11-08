@@ -1766,7 +1766,7 @@ async function subscribeVip(planType) {
  try{const d=await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})});
  if(d.paid){toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
  if(!d.invoice_url)throw new Error('Сервер не вернул счёт VIP.');
- openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending')toast('Платёж VIP обрабатывается.');else toast('Оплата не завершена.');});
+ openInvoice(d.invoice_url,async s=>{if(s==='paid'){toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending'){toast('Платёж VIP обрабатывается.');}else{try{if(d.payload)await apiFetch('/api/vip/cancel',{method:'POST',body:JSON.stringify({payload:d.payload})});}catch(e){console.warn('Не удалось вернуть внутренний баланс VIP:',e);}toast('Оплата не завершена. Если часть суммы была списана с баланса, она возвращена.');loadMe();loadBalance();}});
  }catch(e){toast(e.message||'Не удалось оформить VIP.');}
 }
 
