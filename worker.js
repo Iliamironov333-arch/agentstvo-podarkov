@@ -852,7 +852,7 @@ export default {
             .bind(targetId).first();
           if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
           const operationId = makeId();
-          const description = "Операция владельца: " + reason;
+          const description = "Операция администратора: " + reason;
           const results = await env.DB.batch([
             env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars+?>=0")
               .bind(amount, targetId, amount),
@@ -867,7 +867,7 @@ export default {
             return json({ error: "Недостаточно баллов для списания или операция не выполнена. Баланс не изменён.", balance: Number(latest.balance_stars || 0) }, 409, origin);
           }
           const updated = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
-          await notifyOwner(env, "⭐ Изменение баланса владельцем\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
+          await notifyOwner(env, "⭐ Изменение баланса администратором\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
           return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
         }
         if (path === "/api/admin/block-user" && method === "POST") {
