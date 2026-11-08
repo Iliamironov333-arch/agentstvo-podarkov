@@ -311,7 +311,10 @@ async function handleWebhook(request, env) {
   if (!chargeId) return json({ ok: true });
 
   if (intent.kind === "order") {
-    const order = await env.DB.prepare("SELECT id,product_title,total_stars,payment_status,promo_code FROM orders WHERE id=? AND telegram_id=?")
+    const promoSchemaReady = await tableExists(env,"promo_codes");
+    const order = await env.DB.prepare(promoSchemaReady
+      ? "SELECT id,product_title,total_stars,payment_status,promo_code FROM orders WHERE id=? AND telegram_id=?"
+      : "SELECT id,product_title,total_stars,payment_status,NULL AS promo_code FROM orders WHERE id=? AND telegram_id=?")
       .bind(intent.reference_id, telegramId).first();
     if (!order) return json({ ok: true });
     const earned = Math.floor(Number(intent.amount_stars) / 3);
@@ -715,8 +718,10 @@ export default {
             if (orderType === "product" && status === "cancelled") {
               statements.push(env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId));
               statements.push(env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId));
-              statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId));
-              statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId));
+              if(await tableExists(env,"promo_codes")){
+                statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId));
+                statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId));
+              }
             } else if (orderType === "custom") {
               statements.push(env.DB.prepare("UPDATE custom_orders SET status=? WHERE id=?").bind(status, orderId));
             }
@@ -1300,8 +1305,9 @@ export default {
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         let discount = 0, promoCode = null, discountPercent = 0;
         const requestedPromo = typeof body.promo_code === "string" ? body.promo_code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32) : "";
+        const promoSchemaReady = await tableExists(env,"promo_codes");
         if(requestedPromo){
-          if(!(await tableExists(env,"promo_codes")))return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
+          if(!promoSchemaReady)return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
           const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(requestedPromo).first();
           if(!promo||!promo.is_active)return json({error:"Промокод не найден или отключён."},404,origin);
           if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
@@ -1312,10 +1318,13 @@ export default {
         const total = subtotal-discount;
         const orderId = makeId();
         const title = items.map(item => item.title + " × " + item.qty).join("; ");
+        const orderInsert = promoSchemaReady
+          ? env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?)")
+              .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title, items.reduce((sum, item) => sum + item.qty, 0), subtotal, discountPercent, total, promoCode, discount)
+          : env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
+              .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title, items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total);
         const orderStatements = [
-          env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?)")
-            .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title,
-              items.reduce((sum, item) => sum + item.qty, 0), subtotal, discountPercent, total, promoCode, discount),
+          orderInsert,
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
             .bind(orderId, item.id, item.title, item.qty, item.image_url))
         ];
