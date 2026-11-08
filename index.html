@@ -595,10 +595,10 @@ function showAdminCategory(key){
 
 
 function buyProductNow(productId){
- quickBuyMode=true;
  const product=products.find(p=>String(p[0])===String(productId));
  if(!product||product[2]==null)return toast('Цена этой работы пока уточняется.');
  if(Object.values(cart).some(q=>Number(q)>0)&&!confirm('Быстрая покупка оформляет только выбранную работу. Очистить текущую корзину и продолжить?'))return;
+ quickBuyMode=true;
  cart={};cart[product[0]]=1;activePromo=null;persistCart();drawProducts();drawCart();showView('cartView');
  const address=document.getElementById('deliveryAddress');if(address)address.focus();
  toast('Работа добавлена к быстрому оформлению. Укажи адрес доставки.');
