@@ -610,8 +610,8 @@ export default {
         if (!rootOwner && requiredPermission && requiredPermission !== "staff_manage" && permissions[requiredPermission] !== true) {
           return json({ error: "У этой должности нет разрешения на данное действие: " + requiredPermission }, 403, origin);
         }
-        if (!rootOwner && requiredPermission === "staff_manage" && staff?.role !== "owner") {
-          return json({ error: "Управление должностями доступно только владельцу." }, 403, origin);
+        if (!rootOwner && requiredPermission === "staff_manage") {
+          return json({ error: "Управление должностями доступно только основному владельцу." }, 403, origin);
         }
         if (path === "/api/admin/staff" && method === "GET") {
           const rows = await env.DB.prepare("SELECT s.telegram_id,s.role,s.permissions_json,s.status,s.created_at,s.updated_at,u.username,u.first_name FROM admin_staff s LEFT JOIN users u ON u.telegram_id=s.telegram_id ORDER BY s.created_at DESC").all();
