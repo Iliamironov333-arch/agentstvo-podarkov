@@ -498,6 +498,43 @@ async function writeSystemError(env, error, path) {
 }
 
 
+
+const ADMIN_PERMISSION_KEYS = [
+  "dashboard_view","users_view","users_balance","users_ban","users_unban",
+  "orders_view","orders_manage","catalog_view","catalog_manage",
+  "support_view","support_reply","campaigns_manage","announcements_manage",
+  "promos_manage","analytics_view","backup_manage","system_manage"
+];
+function adminPermissionForPath(path, method) {
+  if (path === "/api/admin/session") return null;
+  if (path.startsWith("/api/admin/staff")) return "staff_manage";
+  if (path === "/api/admin/users" || path === "/api/admin/user") return "users_view";
+  if (path === "/api/admin/balance-adjust") return "users_balance";
+  if (path === "/api/admin/block-user") return "users_ban";
+  if (path === "/api/admin/unblock-user") return "users_unban";
+  if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
+  if (path === "/api/admin/order-update" || path === "/api/admin/order-notify") return "orders_manage";
+  if (path === "/api/admin/products") return "catalog_view";
+  if (path.startsWith("/api/admin/product-")) return "catalog_manage";
+  if (path.startsWith("/api/admin/support/")) {
+    if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes"].includes(path)) return "support_reply";
+    return "support_view";
+  }
+  if (path.startsWith("/api/admin/campaign")) return "campaigns_manage";
+  if (path.startsWith("/api/admin/announcement")) return "announcements_manage";
+  if (path.startsWith("/api/admin/promo")) return "promos_manage";
+  if (path === "/api/admin/analytics") return "analytics_view";
+  if (path.startsWith("/api/admin/backup")) return "backup_manage";
+  if (path === "/api/admin/dashboard") return "dashboard_view";
+  if (path === "/api/admin/error-log" || path === "/api/admin/error-resolve" ||
+      path === "/api/admin/feature-flags" || path === "/api/admin/system-controls" ||
+      path === "/api/admin/technical-status") return "system_manage";
+  return "owner_only";
+}
+function defaultAdminPermissions() {
+  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, true]));
+}
+
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
@@ -536,13 +573,78 @@ export default {
         return json({ ok: true, announcements: rows.results || [] }, 200, origin);
       }
 
-      // Every owner endpoint is protected on the server, not merely hidden in the Mini App.
+      // Administrative access is checked on the server for every request.
       if (path.startsWith("/api/admin/")) {
         const ownerId = String(env.ADMIN_TELEGRAM_ID || "").trim();
         if (!ownerId) return json({ error: "Owner access is not configured." }, 503, origin);
-        if (telegramId !== ownerId) return json({ error: "Owner access required." }, 403, origin);
+        const rootOwner = telegramId === ownerId;
+        let staff = null;
+        if (!rootOwner) {
+          try {
+            staff = await env.DB.prepare("SELECT telegram_id,role,permissions_json,status FROM admin_staff WHERE telegram_id=?")
+              .bind(telegramId).first();
+          } catch (error) {
+            if (isMissingTableError(error, "admin_staff")) return json({ error: "Система должностей ещё не установлена. Требуется миграция 0015_admin_staff.sql." }, 503, origin);
+            throw error;
+          }
+          if (!staff || staff.status !== "active" || !["moderator","owner"].includes(staff.role)) {
+            return json({ error: "Административный доступ не предоставлен." }, 403, origin);
+          }
+        }
+        let permissions = rootOwner || staff?.role === "owner" ? defaultAdminPermissions() : {};
+        if (!rootOwner && staff?.role === "moderator") {
+          try { permissions = { ...defaultAdminPermissions(), ...JSON.parse(staff.permissions_json || "{}") }; }
+          catch { permissions = {}; }
+          for (const key of Object.keys(permissions)) permissions[key] = permissions[key] === true;
+        }
         if (path === "/api/admin/session" && method === "GET") {
-          return json({ ok: true, owner: true }, 200, origin);
+          return json({ ok: true, owner: rootOwner || staff?.role === "owner", root_owner: rootOwner,
+            role: rootOwner ? "owner" : staff.role, permissions }, 200, origin);
+        }
+        const requiredPermission = adminPermissionForPath(path, method);
+        if (!rootOwner && requiredPermission === "owner_only") return json({ error: "Это действие доступно только владельцу." }, 403, origin);
+        if (!rootOwner && requiredPermission && requiredPermission !== "staff_manage" && permissions[requiredPermission] !== true) {
+          return json({ error: "У этой должности нет разрешения на данное действие: " + requiredPermission }, 403, origin);
+        }
+        if (!rootOwner && requiredPermission === "staff_manage" && staff?.role !== "owner") {
+          return json({ error: "Управление должностями доступно только владельцу." }, 403, origin);
+        }
+        if (path === "/api/admin/staff" && method === "GET") {
+          const rows = await env.DB.prepare("SELECT s.telegram_id,s.role,s.permissions_json,s.status,s.created_at,s.updated_at,u.username,u.first_name FROM admin_staff s LEFT JOIN users u ON u.telegram_id=s.telegram_id ORDER BY s.created_at DESC").all();
+          return json({ ok: true, staff: rows.results || [], permission_keys: ADMIN_PERMISSION_KEYS }, 200, origin);
+        }
+        if (path === "/api/admin/staff/role" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const role = body.role;
+          if (!targetId || !["owner","moderator","client"].includes(role)) return json({ error: "Укажите Telegram ID и корректную должность." }, 400, origin);
+          if (targetId === ownerId) return json({ error: "Основного владельца нельзя изменить через список сотрудников." }, 409, origin);
+          const target = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if (!target) return json({ error: "Сначала пользователь должен открыть Mini App хотя бы один раз." }, 404, origin);
+          const existing = await env.DB.prepare("SELECT permissions_json FROM admin_staff WHERE telegram_id=?").bind(targetId).first();
+          let savedPermissions = defaultAdminPermissions();
+          if (existing?.permissions_json) { try { savedPermissions = { ...savedPermissions, ...JSON.parse(existing.permissions_json) }; } catch {} }
+          const permissionsJson = JSON.stringify(savedPermissions);
+          await env.DB.prepare("INSERT INTO admin_staff (telegram_id,role,permissions_json,status,created_by,updated_by) VALUES (?,?,?,'active',?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
+            .bind(targetId, role, permissionsJson, telegramId, telegramId).run();
+          await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+            .bind(telegramId,targetId,"staff_role_changed",JSON.stringify({ role })).run();
+          return json({ ok: true, telegram_id: targetId, role }, 200, origin);
+        }
+        if (path === "/api/admin/staff/permissions" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          if (!targetId || !body.permissions || typeof body.permissions !== "object" || Array.isArray(body.permissions)) return json({ error: "Укажите пользователя и список разрешений." }, 400, origin);
+          if (targetId === ownerId) return json({ error: "Права основного владельца нельзя ограничить через этот экран." }, 409, origin);
+          const target = await env.DB.prepare("SELECT role FROM admin_staff WHERE telegram_id=? AND status='active'").bind(targetId).first();
+          if (!target || target.role !== "moderator") return json({ error: "Изменять индивидуальные права можно только действующему модератору." }, 404, origin);
+          const normalized = {};
+          for (const key of ADMIN_PERMISSION_KEYS) normalized[key] = body.permissions[key] === true;
+          await env.DB.prepare("UPDATE admin_staff SET permissions_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?")
+            .bind(JSON.stringify(normalized),telegramId,targetId).run();
+          await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
+            .bind(telegramId,targetId,"staff_permissions_changed",JSON.stringify({ permissions: normalized })).run();
+          return json({ ok: true, telegram_id: targetId, permissions: normalized }, 200, origin);
         }
         if (path === "/api/admin/backup/status" && method === "GET") {
           try {
