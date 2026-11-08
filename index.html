@@ -186,7 +186,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none
 .admin-category-section .admin-user-row,.admin-category-section .admin-order-actions{min-width:0;max-width:100%;flex-wrap:wrap}
 .admin-category-section .admin-user-row>*,.admin-category-section .admin-order-actions>*{min-width:0;max-width:100%}
 body.light-theme .panel textarea,body.light-theme .panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .panel select,body.light-theme .admin-category-section textarea,body.light-theme .admin-category-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .admin-category-section select{background:#fff;color:#382819;border-color:#dfc8a8}
-</style>
+.order-card{padding:12px 0;border-bottom:1px solid var(--line);min-width:0}.order-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px}.order-action-btn,.owner-contact-btn{width:100%;min-width:0;min-height:44px;border-radius:14px!important;padding:10px 12px;line-height:1.25;white-space:normal;overflow-wrap:anywhere}.owner-contact-btn{margin-top:10px}#adminPanelView input,#adminPanelView textarea,#adminPanelView select{box-sizing:border-box;width:100%;max-width:100%;min-width:0}#adminPanelView .admin-category-section button{border-radius:13px;min-height:44px;line-height:1.25;white-space:normal;overflow-wrap:anywhere;word-break:normal;padding:10px 12px}#adminPanelView .admin-category-section .row-actions,#adminPanelView .admin-category-section .admin-product-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px}#adminPanelView .admin-category-section .row-actions button,#adminPanelView .admin-category-section .admin-product-actions button{width:100%;min-width:0}#adminPanelView input[type=date]{width:100%;min-width:0}</style>
 </head>
 <body>
 <header>
@@ -470,7 +470,7 @@ body.light-theme .panel textarea,body.light-theme .panel input:not([type="checkb
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>💬 Поддержка</h2></div>
  <div class="panel" id="vipHelpCard"><h3>👑 Помощь Агентства VIP</h3><p class="muted" id="vipHelpDescription">Проверяем действующую подписку…</p><button class="primary" id="vipHelpButton" onclick="openVipSupport()" disabled>🔒 VIP-помощь заблокирована</button></div>
- <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p></div>
+ <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p><button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button></div>
 </section>
 <section id="aiWorkshopView" class="hidden">
   <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
@@ -1755,9 +1755,11 @@ async function topUp(amount) {
 }
 
 async function subscribeVip(planType) {
- try { const data = await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})}); if (!data.invoice_url) throw new Error('Сервер не вернул счёт VIP.');
-  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Оплата VIP подтверждена!'); loadVip(); loadMe(); refreshVipHelpCard(); } else if(status==='pending') toast('Платёж VIP обрабатывается.'); else if(status==='failed') toast('Не удалось провести оплату VIP.'); });
- } catch(e) { toast(e.message || 'Не удалось оформить VIP.'); }
+ try{const d=await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})});
+ if(d.paid){toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
+ if(!d.invoice_url)throw new Error('Сервер не вернул счёт VIP.');
+ openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending')toast('Платёж VIP обрабатывается.');else toast('Оплата не завершена.');});
+ }catch(e){toast(e.message||'Не удалось оформить VIP.');}
 }
 
 async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
@@ -1791,6 +1793,7 @@ async function loadSupportHistory() {
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
+function openOwnerChat(){const url='https://t.me/Iliya_Mironov_33';if(window.Telegram?.WebApp?.openTelegramLink)window.Telegram.WebApp.openTelegramLink(url);else window.open(url,'_blank','noopener');}
 async function sendSupport() {
  const input = document.getElementById('supportMessage');
  const result = document.getElementById('supportResult');
@@ -1925,6 +1928,8 @@ async function checkout() {
  }
 }
 
+async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else{toast('Оплата не завершена.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}}
+async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');loadMe();loadBalance();}catch(e){toast(e.message||'Не удалось отменить заказ.');}}
 async function loadMe() {
  try {
   const [me,od]=await Promise.all([apiFetch('/api/me'),apiFetch('/api/orders')]),points=Number(me.points??me.balance_stars??0);
@@ -1935,7 +1940,13 @@ async function loadMe() {
   const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
-  const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status);return `<div class="lineitem"><span><b>${o.title||o.order_id}</b><br><small>${o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога'} · ${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${state}</small></b></div>`;}).join(''):'<p class="muted">Пока заказов нет.</p>';
+  const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{
+  const pending=o.order_type==='product'&&o.status==='pending';
+  const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status);
+  const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
+  const actions=pending?'<div class="order-actions"><button class="primary order-action-btn" onclick="payExistingOrder(\''+id+'\')">Оплатить</button><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':'';
+  return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
+}).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
 }
 async function openCase() {
