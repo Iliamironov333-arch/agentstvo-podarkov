@@ -235,11 +235,11 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div class="sectionhead"><h3>🤖 Управление ИИ-помощником</h3><button class="secondary" type="button" onclick="loadAdminAiSettings()">↻ Обновить</button></div>
    <p class="muted">Эти настройки управляют обычной поддержкой покупателей. Изменения сначала сохраняются как черновик, затем тестируются и только после успешного теста публикуются. ИИ-мастерская и VIP-помощь пока используют отдельные инструкции.</p>
    <p id="adminAiStatus" class="notice" aria-live="polite">Загружаем настройки ИИ…</p>
-   <label class="row-actions"><input id="adminAiEnabled" type="checkbox" checked> ИИ-помощник включён</label>
-   <label>Модель OpenAI<input id="adminAiModel" maxlength="80" value="gpt-4o-mini" placeholder="gpt-4o-mini"></label>
-   <label>Приветствие покупателю<textarea id="adminAiGreeting" maxlength="500" rows="2" placeholder="Здравствуйте! Чем могу помочь?"></textarea></label>
-   <label>Дополнительные системные инструкции<textarea id="adminAiInstructions" maxlength="8000" rows="6" placeholder="Правила и особенности ответов помощника…"></textarea></label>
-   <label>Разрешённые темы (через запятую)<input id="adminAiTopics" maxlength="800" value="catalog, orders, payments, balance, support, vip, custom_orders"></label>
+   <label class="row-actions"><input id="adminAiEnabled" type="checkbox" checked onchange="markAdminAiDirty()"> ИИ-помощник включён</label>
+   <label>Модель OpenAI<input id="adminAiModel" maxlength="80" value="gpt-4o-mini" placeholder="gpt-4o-mini" oninput="markAdminAiDirty()"></label>
+   <label>Приветствие покупателю<textarea id="adminAiGreeting" maxlength="500" rows="2" placeholder="Здравствуйте! Чем могу помочь?" oninput="markAdminAiDirty()"></textarea></label>
+   <label>Дополнительные системные инструкции<textarea id="adminAiInstructions" maxlength="8000" rows="6" placeholder="Правила и особенности ответов помощника…" oninput="markAdminAiDirty()"></textarea></label>
+   <label>Разрешённые темы (через запятую)<input id="adminAiTopics" maxlength="800" value="catalog, orders, payments, balance, support, vip, custom_orders" oninput="markAdminAiDirty()"></label>
    <p class="muted">Например: catalog, orders, payments, support. Список задаёт тематические ограничения в инструкциях модели; это не отдельный технический фильтр запросов.</p>
    <div class="row-actions">
     <button class="secondary" type="button" id="adminAiSaveButton" onclick="saveAdminAiDraft()">Сохранить черновик</button>
@@ -1228,6 +1228,14 @@ async function loadAnnouncements() {
 
 let adminAiDraftSaved = false;
 let adminAiTestPassed = false;
+function markAdminAiDirty() {
+ adminAiDraftSaved=false;
+ adminAiTestPassed=false;
+ const status=document.getElementById('adminAiStatus');
+ if(status)status.textContent='Настройки изменены. Сохраните новый черновик и запустите тест перед публикацией.';
+ const result=document.getElementById('adminAiTestResult');
+ if(result)result.textContent='Предыдущий результат теста больше не относится к текущим полям.';
+}
 function readAdminAiForm() {
  const topics=(document.getElementById('adminAiTopics')?.value||'').split(',').map(x=>x.trim()).filter(Boolean);
  return {
