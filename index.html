@@ -383,15 +383,34 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
+  <h3>🚚 Данные доставки</h3>
+  <p class="notice">По Екатеринбургу от ул. Новаторов, 8: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.</p>
+  <label for="deliveryAddress">Адрес (улица и номер дома)
+   <input id="deliveryAddress" maxlength="350" autocomplete="street-address" placeholder="Екатеринбург, улица, дом" style="width:100%;box-sizing:border-box">
+  </label>
+  <label for="deliveryDetails">Подъезд, этаж и квартира (необязательно)
+   <input id="deliveryDetails" maxlength="180" placeholder="Подъезд, этаж, квартира" style="width:100%;box-sizing:border-box">
+  </label>
+  <label for="deliveryNote">Комментарий курьеру (необязательно)
+   <textarea id="deliveryNote" rows="2" maxlength="500" placeholder="Ориентир или удобное время" style="width:100%;box-sizing:border-box"></textarea>
+  </label>
+  <label style="display:flex;align-items:center;gap:9px;margin:12px 0">
+   <input id="priorityDelivery" type="checkbox" style="width:auto">
+   <span>⚡ Приоритетная доставка <b>+100 ⭐</b></span>
+  </label>
+  <p id="deliveryCalcStatus" class="notice" aria-live="polite">Точную стоимость рассчитаем по адресу при оформлении.</p>
+ </div>
+ <div class="panel">
   <label>Промокод<input id="promoCodeInput" maxlength="32" autocomplete="off" placeholder="Введите код" oninput="activePromo=null;document.getElementById('promoStatus').textContent='Код изменён. Нажмите «Применить промокод» снова.';drawCart()"></label>
   <button class="secondary" id="applyPromoButton" type="button" onclick="applyPromoCode()">Применить промокод</button>
   <p class="notice" id="promoStatus" aria-live="polite">Скидка по каталогу уже учтена. Промокод — дополнительная акция.</p>
   <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
   <div class="lineitem"><span>Скидка</span><b id="discount">Уже учтена в каталоге</b></div>
+  <div class="lineitem"><span>Доставка</span><b id="deliveryCost">По адресу</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
-  <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
-  <p class="notice" id="deliveryNotice">После подтверждения оплаты бот отправит открытку. Саму работу ты доставишь покупателю отдельно.</p>
-  <p class="notice">Счёт создаётся сервером. Товар считается оплаченным только после подтверждения Telegram.</p>
+  <button class="primary" id="checkoutBtn" onclick="checkout()">Оформить заказ 🎁</button>
+  <p class="notice" id="deliveryNotice">Сначала используем звёзды с внутреннего баланса. Если их не хватит, Telegram-счёт будет только на остаток.</p>
+  <p class="notice">Если неоплаченный заказ отменится, списанные с баланса звёзды вернутся.</p>
  </div>
 </section>
 <section id="ordersView" class="hidden">
@@ -518,14 +537,12 @@ let activeFilter = 'all';
 
 const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
-async function buyProductNow(productId){
+function buyProductNow(productId){
  const product=products.find(p=>String(p[0])===String(productId));
  if(!product||product[2]==null)return toast('Цена этой работы пока уточняется.');
- const buttons=document.querySelectorAll('.buy-now');let button=null;buttons.forEach(b=>{if(b.dataset.productId===String(productId))button=b;});
- if(button){button.disabled=true;button.textContent='Создаём счёт…';}
- try{const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({items:[{id:product[0],qty:1}]})});if(!data.invoice_url)throw new Error('Сервер не вернул ссылку на счёт.');openInvoice(data.invoice_url,status=>{if(status==='paid'){toast('Оплата подтверждена! Заказ оформлен 🎁');loadMe();loadBalance();}else if(status==='pending'){toast('Платёж обрабатывается. Проверь «Мои заказы».');loadMe();}else if(status==='failed')toast('Оплата не прошла. Попробуй ещё раз.');else toast('Оплата отменена. Можно попробовать снова.');});}
- catch(e){toast(e.message||'Не удалось создать счёт.');}
- finally{if(button){button.disabled=false;button.textContent='⚡ Купить сразу';}}
+ cart={};cart[product[0]]=1;activePromo=null;persistCart();drawProducts();drawCart();showView('cartView');
+ const address=document.getElementById('deliveryAddress');if(address)address.focus();
+ toast('Работа добавлена к быстрому оформлению. Укажи адрес доставки.');
 }
 
 function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCraftConversation();
@@ -627,13 +644,14 @@ function drawCart() {
 
  document.getElementById('subtotal').textContent = money(subtotal);
  document.getElementById('discount').textContent = discountAmount ? '-'+money(discountAmount)+' ('+activePromo.code+')' : 'Уже учтена в каталоге';
+ document.getElementById('deliveryCost').textContent = 'По адресу';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
  const notice = document.getElementById('deliveryNotice');
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
-  : 'После оплаты бот отправит открытку. Саму работу ты доставишь отдельно.';
+  : 'Сначала списываем доступные ⭐ с баланса; при нехватке Telegram-счёт выставляется только на остаток.';
  document.getElementById('checkoutBtn').disabled = !entries.length || !catalogLoaded;
 }
 
@@ -1768,35 +1786,52 @@ async function applyPromoCode(){
  }catch(e){activePromo=null;status.textContent=e.message||'Промокод не применён.';drawCart();}finally{button.disabled=false;}
 }
 async function checkout() {
- const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
- if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
- if (!entries.length) return toast('Корзина пустая.');
- if (!catalogLoaded) return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
- if (entries.some(p => p[2] == null)) return toast('У одной из работ ещё не указана цена.');
-
- const btn = document.getElementById('checkoutBtn');
- btn.disabled = true;
- btn.textContent = 'Создаём счёт…';
-
- try {
-  const data = await apiFetch('/api/orders',{
-   method:'POST',
-   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])})),promo_code:activePromo?.code||''})
+ const entries=products.filter(p=>Number(cart[p[0]]||0)>0);
+ if(entries.some(p=>Number(cart[p[0]])>10))return toast('Максимум 10 штук одного товара.');
+ if(!entries.length)return toast('Корзина пуста.');
+ if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
+ if(entries.some(p=>p[2]==null))return toast('У одной из работ ещё не указана цена.');
+ const address=document.getElementById('deliveryAddress')?.value.trim()||'';
+ if(address.length<8)return toast('Укажи полный адрес доставки в Екатеринбурге.');
+ const btn=document.getElementById('checkoutBtn'),statusBox=document.getElementById('deliveryCalcStatus');
+ btn.disabled=true;btn.textContent='Рассчитываем доставку…';
+ if(statusBox)statusBox.textContent='Проверяем адрес и автомобильный маршрут…';
+ try{
+  const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
+   items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])})),
+   promo_code:activePromo?.code||'',
+   delivery_address:address,
+   delivery_details:document.getElementById('deliveryDetails')?.value.trim()||'',
+   delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
+   priority_delivery:!!document.getElementById('priorityDelivery')?.checked
+  })});
+  const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
+  if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
+  if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
+  if(data.paid){
+   cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
+   if(statusBox)statusBox.textContent='Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
+   toast('Заказ оплачен с баланса! 🎁');
+   return;
+  }
+  if(!data.invoice_url)throw new Error('Сервер не вернул ссылку на счёт.');
+  if(statusBox)statusBox.textContent='Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
+  openInvoice(data.invoice_url,status=>{
+   if(status==='paid'){
+    cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
+   }else if(status==='pending'){
+    toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');loadMe();
+   }else{
+    apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:data.order_id})})
+     .then(()=>{loadBalance();loadMe();toast('Неоплаченный заказ отменён. Списанные ⭐ возвращены на баланс.');})
+     .catch(()=>toast('Платёж не завершён. Проверь статус заказа и баланс.'));
+   }
   });
-
-  if (!data.invoice_url) throw new Error('Сервер не вернул ссылку на счёт.');
-
-  openInvoice(data.invoice_url,status => {
-   if (status === 'paid') { cart = {}; activePromo=null; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
-   else if (status === 'pending') { toast('Платёж ещё обрабатывается. Проверь «Мои заказы».'); loadMe(); }
-   else if (status === 'failed') toast('Оплата не прошла. Попробуй ещё раз.');
-   else toast('Оплата отменена. Корзина сохранена.');
-  });
- } catch(e) {
-  toast(e.message || 'Не удалось создать счёт.');
- } finally {
-  btn.disabled = false;
-  btn.textContent = 'Оплатить через Telegram 🎁';
+ }catch(e){
+  if(statusBox)statusBox.textContent=e.message||'Не удалось оформить заказ.';
+  toast(e.message||'Не удалось оформить заказ.');
+ }finally{
+  btn.disabled=false;btn.textContent='Оформить заказ 🎁';
  }
 }
 
