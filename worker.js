@@ -256,28 +256,85 @@ async function createPaymentIntent(env, data) {
   }
 }
 
+async function readAiConfig(env) {
+  const row = await env.DB.prepare("SELECT value FROM app_settings WHERE key='ai_active_config'").first();
+  if (!row?.value) return {
+    enabled: true,
+    model: env.OPENAI_MODEL || "gpt-4o-mini",
+    greeting: "Здравствуйте! Я ИИ-помощник Агентства подарков. Чем могу помочь?",
+    instructions: "",
+    allowed_topics: ["catalog","orders","payments","balance","support","vip","custom_orders"]
+  };
+  try {
+    const config = JSON.parse(row.value);
+    return {
+      enabled: config.enabled !== false,
+      model: typeof config.model === "string" ? config.model : (env.OPENAI_MODEL || "gpt-4o-mini"),
+      greeting: typeof config.greeting === "string" ? config.greeting : "",
+      instructions: typeof config.instructions === "string" ? config.instructions : "",
+      allowed_topics: Array.isArray(config.allowed_topics) ? config.allowed_topics : []
+    };
+  } catch {
+    throw new Error("Настройки ИИ повреждены. Проверьте раздел управления ИИ.");
+  }
+}
+function validateAiConfig(input) {
+  const value = input && typeof input === "object" ? input : {};
+  const model = typeof value.model === "string" ? value.model.trim() : "";
+  const greeting = typeof value.greeting === "string" ? value.greeting.trim() : "";
+  const instructions = typeof value.instructions === "string" ? value.instructions.trim() : "";
+  const topics = Array.isArray(value.allowed_topics) ? value.allowed_topics : [];
+  if (!/^[a-zA-Z0-9._-]{2,80}$/.test(model)) throw new Error("Укажите корректное название модели.");
+  if (greeting.length > 500) throw new Error("Приветствие не должно превышать 500 символов.");
+  if (instructions.length > 8000) throw new Error("Инструкции не должны превышать 8000 символов.");
+  if (topics.length > 20 || topics.some(x => typeof x !== "string" || x.length > 40)) throw new Error("Проверьте список разрешённых тем.");
+  return { enabled: value.enabled !== false, model, greeting, instructions,
+    allowed_topics: [...new Set(topics)] };
+}
+async function aiConfigFingerprint(config) {
+  const bytes = new TextEncoder().encode(JSON.stringify(config));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2,"0")).join("");
+}
+async function logAiUsage(env, feature, model, usage, status="success") {
+  try {
+    if (!await tableExists(env, "ai_usage_log")) return;
+    const input = Math.max(0, Number(usage?.input_tokens || 0));
+    const output = Math.max(0, Number(usage?.output_tokens || 0));
+    await env.DB.prepare("INSERT INTO ai_usage_log (feature,model,input_tokens,output_tokens,total_tokens,request_status) VALUES (?,?,?,?,?,?)")
+      .bind(String(feature).slice(0,40),String(model).slice(0,80),input,output,input+output,String(status).slice(0,20)).run();
+  } catch (error) { console.error("AI usage log unavailable:",String(error).slice(0,250)); }
+}
+
 async function createSupportAnswer(env, history, isVip) {
-  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
-  const instructions = [
+  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён.");
+  const config = await readAiConfig(env);
+  if (!config.enabled) return "ИИ-помощник временно отключён владельцем. Напишите оператору поддержки.";
+  const baseInstructions = [
     "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
     "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
     "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
     "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
-    isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу."
-  ].join("\n");
+    isVip ? "Пользователь VIP: да. Давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу."
+  ];
+  if (config.allowed_topics.length) baseInstructions.push("Разрешённые темы поддержки: " + config.allowed_topics.join(", ") + ". Если вопрос вне этих тем, вежливо сообщи, что помощник консультирует только по вопросам Агентства.");
+  if (config.instructions) baseInstructions.push("Дополнительные инструкции владельца:\n" + config.instructions);
+  const instructions = baseInstructions.join("\n");
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
+    body: JSON.stringify({ model: config.model || env.OPENAI_MODEL || "gpt-4o-mini", instructions,
       input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 500 })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     console.error("OpenAI support request failed:", response.status, JSON.stringify(data).slice(0, 1000));
+    await logAiUsage(env,"support",config.model,{}, "error");
     throw new Error("Сервис помощника временно недоступен. Попробуй позже.");
   }
+  await logAiUsage(env,"support",config.model,data.usage);
   let answer = typeof data.output_text === "string" ? data.output_text : "";
   if (!answer && Array.isArray(data.output)) {
     answer = data.output.flatMap(item => Array.isArray(item.content) ? item.content : [])
@@ -1405,6 +1462,49 @@ export default {
         }
 
 
+        if (path === "/api/admin/ai-settings" && method === "GET") {
+          const [activeRow,draftRow,usage]=await Promise.all([
+            env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ai_active_config'").first(),
+            env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ai_draft_config'").first(),
+            (async()=>{try{return await env.DB.prepare("SELECT COUNT(*) AS requests,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(total_tokens),0) AS total_tokens FROM ai_usage_log WHERE created_at>=datetime('now','-30 days')").first()}catch(e){if(isMissingTableError(e,"ai_usage_log"))return null;throw e;}})()
+          ]);
+          const parse=(row)=>{try{return row?.value?JSON.parse(row.value):null}catch{return null}};
+          return json({ok:true,active:parse(activeRow)||{enabled:true,model:env.OPENAI_MODEL||"gpt-4o-mini",greeting:"Здравствуйте! Я ИИ-помощник Агентства подарков. Чем могу помочь?",instructions:"",allowed_topics:["catalog","orders","payments","balance","support","vip","custom_orders"]},draft:parse(draftRow),active_updated_at:activeRow?.updated_at||null,draft_updated_at:draftRow?.updated_at||null,usage:usage?{period_days:30,...usage}:null,usage_table_ready:!!usage},200,origin);
+        }
+        if (path === "/api/admin/ai-draft" && method === "POST") {
+          let config;try{config=validateAiConfig(await readJson(request));}catch(e){return json({error:e.message||"Проверьте настройки ИИ."},400,origin);}
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_draft_config',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(config)).run();
+          await env.DB.prepare("DELETE FROM app_settings WHERE key IN ('ai_draft_test_hash','ai_draft_tested_at')").run();
+          return json({ok:true,draft_saved:true,test_required:true},200,origin);
+        }
+        if (path === "/api/admin/ai-test" && method === "POST") {
+          const row=await env.DB.prepare("SELECT value FROM app_settings WHERE key='ai_draft_config'").first();
+          if(!row?.value)return json({error:"Сначала сохраните черновик настроек."},409,origin);
+          let config;try{config=validateAiConfig(JSON.parse(row.value));}catch(e){return json({error:e.message||"Черновик настроек повреждён."},400,origin);}
+          if(!env.OPENAI_API_KEY)return json({error:"OPENAI_API_KEY не подключён в Cloudflare Worker Secrets."},503,origin);
+          const testInstructions=["Проверка конфигурации ИИ Агентства подарков. Ответь по-русски одной короткой фразой: «Тест пройден».","Состояние помощника: "+(config.enabled?"включён":"выключен"),"Приветствие: "+config.greeting,"Разрешённые темы: "+config.allowed_topics.join(", "),config.instructions].filter(Boolean).join("\n\n");
+          const testResponse=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:config.model,instructions:testInstructions,input:"Проверь, что модель отвечает.",max_output_tokens:80})});
+          const testData=await testResponse.json().catch(()=>({}));
+          if(!testResponse.ok){await logAiUsage(env,"admin_test",config.model,testData.usage,"error");return json({error:"Тест модели не прошёл. Проверьте модель и подключение API.",provider_status:testResponse.status},502,origin);}
+          const testAnswer=typeof testData.output_text==="string"?testData.output_text.trim():"";
+          if(!testAnswer){await logAiUsage(env,"admin_test",config.model,testData.usage,"error");return json({error:"Модель вернула пустой ответ. Черновик не отмечен как протестированный."},502,origin);}
+          const hash=await aiConfigFingerprint(config);
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_draft_test_hash',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(hash).run();
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_draft_tested_at',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(new Date().toISOString()).run();
+          await logAiUsage(env,"admin_test",config.model,testData.usage);
+          return json({ok:true,test_passed:true,answer:testAnswer.slice(0,500),usage:testData.usage||null},200,origin);
+        }
+        if (path === "/api/admin/ai-publish" && method === "POST") {
+          const row=await env.DB.prepare("SELECT value FROM app_settings WHERE key='ai_draft_config'").first();
+          const tested=await env.DB.prepare("SELECT value FROM app_settings WHERE key='ai_draft_test_hash'").first();
+          if(!row?.value||!tested?.value)return json({error:"Сначала сохраните и успешно протестируйте черновик."},409,origin);
+          let config;try{config=validateAiConfig(JSON.parse(row.value));}catch(e){return json({error:e.message||"Черновик настроек повреждён."},400,origin);}
+          if(await aiConfigFingerprint(config)!==tested.value)return json({error:"Черновик изменился после теста. Проведите тест повторно."},409,origin);
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ai_active_config',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(config)).run();
+          await env.DB.prepare("DELETE FROM app_settings WHERE key IN ('ai_draft_test_hash','ai_draft_tested_at')").run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"ai_config_published",JSON.stringify({model:config.model,enabled:config.enabled})).run();
+          return json({ok:true,published:true,active:config},200,origin);
+        }
         if (path === "/api/admin/technical-status" && method === "GET") {
           const [users,products,orders,pendingPayments,errors,settings]=await Promise.all([
             env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
@@ -1435,7 +1535,8 @@ export default {
             "0012_system_monitoring":tableChecks.system_error_log,
             "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars"),
             "0014_promo_code_scopes":await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids"),
-            "0015_admin_staff":tableChecks.admin_staff&&await columnExists(env,"admin_staff","permissions_json")&&await columnExists(env,"admin_staff","status")
+            "0015_admin_staff":tableChecks.admin_staff&&await columnExists(env,"admin_staff","permissions_json")&&await columnExists(env,"admin_staff","status"),
+            "0016_ai_usage_log":await tableExists(env,"ai_usage_log")
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
@@ -1721,7 +1822,8 @@ export default {
           .bind(telegramId).all();
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
-        return json({ messages: (rows.results || []).reverse(), vip: !!vip }, 200, origin);
+        const aiConfig = await readAiConfig(env);
+        return json({ messages: (rows.results || []).reverse(), vip: !!vip, greeting: aiConfig.greeting || "Здравствуйте! Я помощник Агентства подарков. Чем могу помочь?" }, 200, origin);
       }
 
       if (path === "/api/support/chat" && method === "POST") {
