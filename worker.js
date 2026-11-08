@@ -421,6 +421,21 @@ async function processCampaignBatch(env, limit = 15) {
 }
 
 
+async function cloudflareD1Api(env, endpoint, options = {}) {
+  const token=env.CLOUDFLARE_API_TOKEN;
+  if(!token)throw new Error("Не настроен секрет CLOUDFLARE_API_TOKEN. Добавьте API-токен Cloudflare с правами D1 Read и D1 Write.");
+  const accountId="ec1e70a15ecba9cd22cabb6ad865c986";
+  const databaseId="077f0476-4ec0-4ddb-8236-be3575182b0a";
+  const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+accountId+"/d1/database/"+databaseId+endpoint,{
+    method:options.method||"GET",
+    headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+    body:options.body?JSON.stringify(options.body):undefined
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.success)throw new Error((data.errors||[]).map(x=>x.message).join("; ")||("Cloudflare API вернул HTTP "+response.status));
+  return data.result||{};
+}
+
 async function releaseExpiredPromoReservations(env) {
   try {
     if (!env.DB || !(await tableExists(env,"promo_codes")) || !(await tableExists(env,"promo_redemptions"))) return { released: 0, skipped: true };
@@ -518,6 +533,30 @@ export default {
           if (new TextEncoder().encode(serialized).byteLength > 12*1024*1024) return json({error:"Резервная копия превышает 12 МБ. Нужен поэтапный экспорт."},413,origin);
           const filename = "agentstvo-podarkov-backup-" + new Date().toISOString().replace(/[:.]/g,"-") + ".json";
           return new Response(serialized,{status:200,headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":'attachment; filename="'+filename+'"',...corsHeaders(origin)}});
+        }
+        if(path==="/api/admin/backup-status"&&method==="GET"){
+          try{
+            const result=await cloudflareD1Api(env,"/time_travel/bookmark");
+            return json({ok:true,bookmark:result.bookmark||null,provider:"Cloudflare D1 Time Travel",automatic:true},200,origin);
+          }catch(error){return json({error:String(error.message||error).slice(0,500),configured:!!env.CLOUDFLARE_API_TOKEN},env.CLOUDFLARE_API_TOKEN?502:503,origin);}
+        }
+        if(path==="/api/admin/backup-export"&&method==="POST"){
+          try{
+            const body=await readJson(request),currentBookmark=typeof body.current_bookmark==="string"?body.current_bookmark.trim().slice(0,120):"";
+            const result=await cloudflareD1Api(env,"/export",{method:"POST",body:{output_format:"polling",dump_options:{compatibility:"d1"},...(currentBookmark?{current_bookmark:currentBookmark}:{})}});
+            return json({ok:true,status:result.status||"unknown",at_bookmark:result.at_bookmark||null,filename:result.result?.filename||null,signed_url:result.result?.signed_url||null,messages:result.messages||[]},200,origin);
+          }catch(error){return json({error:String(error.message||error).slice(0,500)},502,origin);}
+        }
+        if(path==="/api/admin/backup-restore"&&method==="POST"){
+          const body=await readJson(request),bookmark=typeof body.bookmark==="string"?body.bookmark.trim().slice(0,120):"",timestamp=typeof body.timestamp==="string"?body.timestamp.trim().slice(0,40):"";
+          if(body.confirmation!=="RESTORE D1"||(!bookmark&&!timestamp)|| (bookmark&&timestamp))return json({error:"Для восстановления укажите одну точку времени и введите RESTORE D1."},400,origin);
+          try{
+            const before=await cloudflareD1Api(env,"/time_travel/bookmark");
+            const query=bookmark?"?bookmark="+encodeURIComponent(bookmark):"?timestamp="+encodeURIComponent(timestamp);
+            const restored=await cloudflareD1Api(env,"/time_travel/restore"+query,{method:"POST"});
+            if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"d1_time_travel_restore",JSON.stringify({previous_bookmark:before.bookmark||null,target_bookmark:bookmark||null,target_timestamp:timestamp||null,new_bookmark:restored.bookmark||null})).run();
+            return json({ok:true,message:restored.message||"D1 восстановлена.",previous_bookmark:restored.previous_bookmark||before.bookmark||null,new_bookmark:restored.bookmark||null},200,origin);
+          }catch(error){return json({error:String(error.message||error).slice(0,500)},502,origin);}
         }
         if(path==="/api/admin/promos"&&method==="GET"){
           if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true},200,origin);
