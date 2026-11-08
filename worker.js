@@ -1850,11 +1850,32 @@ export default {
         const planType = body.plan_type === "monthly" ? "subscription" : body.plan_type;
         if (!Object.prototype.hasOwnProperty.call(VIP_PRICES, planType)) return json({ error: "Неизвестный VIP-тариф" }, 400, origin);
         const amount = VIP_PRICES[planType];
+        const current = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
+        const balanceUsed = Math.min(amount,Math.max(0,Number(current?.balance_stars||0)));
+        if(balanceUsed>0){
+          const debit=await env.DB.batch([
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?").bind(balanceUsed,telegramId,balanceUsed),
+            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'vip_payment',?,? WHERE changes()=1").bind(telegramId,-balanceUsed,"Оплата VIP "+planType,"vip-payment:"+telegramId+":"+makeId())
+          ]);
+          if(debit[0]?.meta?.changes!==1)return json({error:"Баланс изменился. Обновите страницу."},409,origin);
+        }
+        const remainder=amount-balanceUsed;
+        if(remainder===0){
+          await env.DB.prepare("INSERT INTO vip_subscriptions (telegram_id,plan_type,status,starts_at,expires_at) VALUES (?,?,'active',CURRENT_TIMESTAMP,CASE WHEN ?='subscription' THEN datetime(CURRENT_TIMESTAMP,'+30 days') ELSE NULL END)").bind(telegramId,planType,planType).run();
+          await notifyOwner(env,"VIP оформлен с внутреннего баланса. Пользователь: "+telegramId+". Списано: "+balanceUsed+" Stars.");
+          return json({ok:true,paid:true,balance_used_stars:balanceUsed,plan_type:planType},200,origin);
+        }
         const payload = "vip:" + telegramId + ":" + makeId();
-        const invoiceUrl = await createPaymentIntent(env, { payload, telegram_id: telegramId, kind: "vip",
-          plan_type: planType, amount_stars: amount, title: planType === "lifetime" ? "VIP навсегда" : "VIP на месяц",
-          description: planType === "lifetime" ? "Постоянный VIP-доступ" : "VIP-доступ на 30 дней" });
-        return json({ ok: true, invoice_url: invoiceUrl, plan_type: planType }, 200, origin);
+        try{
+          const invoiceUrl=await createPaymentIntent(env,{payload,telegram_id:telegramId,kind:"vip",plan_type:planType,amount_stars:remainder,title:planType==="lifetime"?"VIP навсегда":"VIP на месяц",description:"Остаток VIP после баланса: "+remainder+" Stars"});
+          return json({ok:true,invoice_url:invoiceUrl,plan_type:planType,balance_used_stars:balanceUsed,invoice_amount_stars:remainder},200,origin);
+        }catch(error){
+          if(balanceUsed>0)await env.DB.batch([
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(balanceUsed,telegramId),
+            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES (?,?,'vip_refund',?,?)").bind(telegramId,balanceUsed,"Возврат: не удалось создать счёт VIP","vip-refund:"+payload)
+          ]);
+          throw error;
+        }
       }
 
       if (path === "/api/craft/create" && method === "POST") {
