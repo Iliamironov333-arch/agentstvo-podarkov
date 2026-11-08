@@ -257,26 +257,41 @@ async function createPaymentIntent(env, data) {
 }
 
 async function calculateDeliveryQuote(address, priority) {
-  const clean = String(address || "").trim().replace(/\s+/g," ").slice(0,350);
+  const clean = String(address || "").trim().replace(/\\s+/g," ").slice(0,350);
   if (clean.length < 8) throw new Error("Укажите полный адрес доставки: улицу и номер дома.");
-  const query = encodeURIComponent(clean + ", Екатеринбург, Свердловская область, Россия");
-  const geoResponse = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=ru&q=" + query, {
-    headers: { "User-Agent": "AgentstvoPodarkov/1.0 (delivery calculation)", "Accept-Language": "ru" }
-  });
-  if (!geoResponse.ok) throw new Error("Не удалось проверить адрес. Попробуйте ещё раз чуть позже.");
-  const geocoded = await geoResponse.json();
-  const place = Array.isArray(geocoded) ? geocoded[0] : null;
-  if (!place || !place.address) throw new Error("Адрес не найден. Уточните улицу и номер дома.");
-  const city = [place.address.city,place.address.town,place.address.municipality,place.address.city_district]
-    .filter(Boolean).join(" ").toLowerCase();
-  if (!city.includes("екатеринбург")) throw new Error("Доставка доступна только по Екатеринбургу.");
+  const headers = { "User-Agent": "AgentstvoPodarkov/1.1 (delivery calculation)", "Accept-Language": "ru" };
+  const queries = [
+    clean + ", Екатеринбург, Свердловская область, Россия",
+    clean + ", Екатеринбург, Россия",
+    clean + ", Екатеринбург"
+  ];
+  let candidates = [];
+  for (const textQuery of queries) {
+    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=ru&q=" + encodeURIComponent(textQuery);
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error("Сервис проверки адреса временно недоступен. Попробуйте ещё раз чуть позже.");
+    const results = await response.json();
+    if (Array.isArray(results)) candidates = candidates.concat(results);
+    if (candidates.length) break;
+  }
+  const cityMatch = place => {
+    const a = place?.address || {};
+    const cityText = [a.city,a.town,a.municipality,a.city_district,a.county,place?.display_name]
+      .filter(Boolean).join(" ").toLowerCase();
+    return cityText.includes("екатеринбург");
+  };
+  const place = candidates.find(cityMatch) || null;
+  if (!place) {
+    if (candidates.length) throw new Error("Доставка доступна только по Екатеринбургу. Проверьте город в адресе.");
+    throw new Error("Адрес не найден. Укажите улицу и номер дома в Екатеринбурге.");
+  }
   const lat = Number(place.lat), lon = Number(place.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Не удалось определить координаты адреса.");
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Не удалось определить координаты адреса. Уточните адрес.");
   const routeResponse = await fetch("https://router.project-osrm.org/route/v1/driving/60.601094,56.908881;" + lon + "," + lat + "?overview=false&steps=false&alternatives=false");
-  if (!routeResponse.ok) throw new Error("Сервис маршрутов временно недоступен. Попробуйте ещё раз.");
+  if (!routeResponse.ok) throw new Error("Сервис расчёта маршрута временно недоступен. Попробуйте ещё раз.");
   const routeData = await routeResponse.json();
   const meters = Number(routeData.routes?.[0]?.distance);
-  if (!routeData.routes?.length || !Number.isFinite(meters) || meters <= 0) throw new Error("Не удалось построить автомобильный маршрут до адреса.");
+  if (!routeData.routes?.length || !Number.isFinite(meters) || meters <= 0) throw new Error("Не удалось построить автомобильный маршрут до адреса. Проверьте номер дома.");
   const distanceKm = Math.round((meters / 1000) * 100) / 100;
   const deliveryStars = Math.min(450, Math.ceil(distanceKm * 23));
   const priorityStars = priority ? 100 : 0;
@@ -327,6 +342,7 @@ async function createSupportAnswer(env, history, isVip) {
     "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
     "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
     "Если клиент обсуждает свою будущую работу или индивидуальный заказ, проведи консультацию максимум из 16 вопросов за весь диалог: задавай по одному вопросу, не повторяй уже известное, выясни задумку, получателя, повод, бюджет, размер, стиль, цвета, материалы/технику, детализацию и срок.",
+    "Для индивидуального заказа уточняй бюджет только в рублях. Никогда не спрашивай, предпочитает ли клиент рубли или Telegram Stars, и не предлагай выбор валюты/способа оплаты в ходе консультации. Не путай бюджет в рублях с оплатой товаров каталога через Telegram Stars.",
     "При подборе индивидуальной работы предложи 2–3 варианта готового заказа, предварительно оцени стоимость и подстрой предложение под бюджет. Чётко говори, что цена ориентировочная и окончательно подтверждается владельцем.",
     "Не превращай консультацию в мастер-класс: не объясняй, как самостоятельно изготовить работу, и не выдавай пошаговые инструкции. Помогай выбрать и заказать готовую работу Агентства.",
     "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
@@ -365,7 +381,7 @@ async function createCraftAnswer(env,messages){
  const instructions=[
   "Ты — консультант по индивидуальным заказам Агентства подарков. Твоя задача — помочь клиенту выбрать и заказать готовую авторскую работу у Агентства, а НЕ научить клиента делать поделку самостоятельно.",
   "Главная цель диалога: понять задумку и бюджет клиента, предложить подходящие варианты готовых работ, рассчитать предварительную стоимость заказа и подготовить понятное резюме для владельца.",
-  "Сначала уточни идею, для кого подарок и по какому поводу. Затем последовательно уточни бюджет (в Telegram Stars или рублях), размер, стиль, желаемые цвета, материалы/технику, уровень детализации, важные элементы и желаемый срок. Не задавай вопрос, если ответ уже есть в переписке.",
+  "Сначала уточни идею, для кого подарок и по какому поводу. Затем последовательно уточни бюджет только в рублях, размер, стиль, желаемые цвета, материалы/технику, уровень детализации, важные элементы и желаемый срок. Не спрашивай, в какой валюте считать, и не предлагай выбирать между рублями и Telegram Stars: бюджет индивидуальной работы обсуждается в рублях. Не задавай вопрос, если ответ уже есть в переписке.",
   "Задавай строго ОДИН короткий вопрос за сообщение. Если клиент не знает, чего хочет, предложи 2–3 конкретные идеи на выбор. Не превращай беседу в анкету: вопросы должны быть естественными и относиться к заказу.",
   "Не более 16 вопросов консультанта за весь диалог. Первое приветствие не считается вопросом. Если уже задано 16 вопросов, больше ничего не спрашивай — сразу подготовь итог по имеющимся данным и явно отметь неизвестные детали.",
   "Когда данных достаточно, предложи 2–3 варианта заказа: название/концепция, что будет входить в готовую работу, чем варианты отличаются и предварительная цена каждого. Сравни цены с бюджетом клиента и выбери лучший вариант в пределах бюджета. Если ни один не помещается, предложи более доступный вариант или честно сообщи о разнице.",
@@ -1719,7 +1735,15 @@ export default {
           if(eligibleSubtotal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
           promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*discountPercent/100));
         }
-        const delivery = await calculateDeliveryQuote(deliveryAddress,priorityDelivery);
+        let delivery;
+        try {
+          delivery = await calculateDeliveryQuote(deliveryAddress,priorityDelivery);
+        } catch (deliveryError) {
+          const message = String(deliveryError?.message || "Не удалось рассчитать доставку.");
+          const clientInputError = /Адрес не найден|Доставка доступна только|Укажите полный адрес|Уточните адрес|Проверьте номер дома/i.test(message);
+          console.warn("Delivery quote rejected:",message.slice(0,250));
+          return json({error:message},clientInputError?422:503,origin);
+        }
         const goodsTotal = subtotal-discount;
         const total = goodsTotal+delivery.total_delivery_stars;
         if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
