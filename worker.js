@@ -1941,6 +1941,10 @@ export default {
         const planType = body.plan_type === "monthly" ? "subscription" : body.plan_type;
         if (!Object.prototype.hasOwnProperty.call(VIP_PRICES, planType)) return json({ error: "Неизвестный VIP-тариф" }, 400, origin);
         const amount = VIP_PRICES[planType];
+        const activeVip = await env.DB.prepare("SELECT id FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        if (activeVip) return json({ error: "У вас уже действует VIP-подписка." }, 409, origin);
+        const pendingVip = await env.DB.prepare("SELECT payload FROM payment_intents WHERE telegram_id=? AND kind='vip' AND status='pending' LIMIT 1").bind(telegramId).first();
+        if (pendingVip) return json({ error: "У вас уже есть незавершённый счёт VIP. Завершите или отмените его перед созданием нового." }, 409, origin);
         const current = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const balanceUsed = Math.min(amount,Math.max(0,Number(current?.balance_stars||0)));
         if(balanceUsed>0){
@@ -1959,7 +1963,7 @@ export default {
         const payload = "vip:" + telegramId + ":" + makeId();
         try{
           const invoiceUrl=await createPaymentIntent(env,{payload,telegram_id:telegramId,kind:"vip",plan_type:planType,amount_stars:remainder,title:planType==="lifetime"?"VIP навсегда":"VIP на месяц",description:"Остаток VIP после баланса: "+remainder+" Stars"});
-          return json({ok:true,invoice_url:invoiceUrl,plan_type:planType,balance_used_stars:balanceUsed,invoice_amount_stars:remainder},200,origin);
+          return json({ok:true,invoice_url:invoiceUrl,payload,plan_type:planType,balance_used_stars:balanceUsed,invoice_amount_stars:remainder},200,origin);
         }catch(error){
           if(balanceUsed>0)await env.DB.batch([
             env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(balanceUsed,telegramId),
@@ -1967,6 +1971,23 @@ export default {
           ]);
           throw error;
         }
+      }
+
+      if (path === "/api/vip/cancel" && method === "POST") {
+        const body = await readJson(request);
+        const payload = typeof body.payload === "string" ? body.payload.trim().slice(0,160) : "";
+        if (!payload) return json({ error: "Не найден идентификатор счёта VIP." }, 400, origin);
+        const intent = await env.DB.prepare("SELECT plan_type,amount_stars FROM payment_intents WHERE payload=? AND telegram_id=? AND kind='vip' AND status='pending'").bind(payload,telegramId).first();
+        if (!intent) return json({ ok:true, refunded:false, message:"Счёт уже обработан или отменён." },200,origin);
+        const fullPrice = Number(VIP_PRICES[intent.plan_type] || 0);
+        const refund = Math.max(0,fullPrice-Number(intent.amount_stars||0));
+        const results = await env.DB.batch([
+          env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND telegram_id=? AND kind='vip' AND status='pending'").bind(payload,telegramId),
+          env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'vip_refund',?,? WHERE changes()=1 AND ?>0").bind(telegramId,refund,"Возврат внутреннего баланса за отменённый счёт VIP","vip-refund:"+payload,refund),
+          env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1").bind(refund,telegramId)
+        ]);
+        if (!results[0]?.meta || results[0].meta.changes !== 1) return json({ ok:true, refunded:false },200,origin);
+        return json({ ok:true, refunded:refund>0, refunded_stars:refund },200,origin);
       }
 
       if (path === "/api/craft/create" && method === "POST") {
