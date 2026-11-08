@@ -527,7 +527,7 @@ async function handleWebhook(request, env) {
       const deliveryInfo=await env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(order.id).first();
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
         "\nИтого заказа: " + order.total_stars + " ⭐\nСписано с баланса: " + Number(order.balance_applied_stars||0) + " ⭐\nОплата Telegram: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title +
-        (deliveryInfo ? "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритет: +100 ⭐" : "") : ""));
+        (deliveryInfo ? (String(deliveryInfo.address || "").startsWith("Самовывоз") ? "\n" + deliveryInfo.address + "\nДоставка: бесплатно" : "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритет: +100 ⭐" : "")) : ""));
     } else if (intent.status !== "paid" || String(intent.charge_id || "") !== chargeId || order.payment_status !== "paid") {
       return json({ ok: true });
     }
