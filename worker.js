@@ -321,6 +321,8 @@ async function releaseExpiredOrderReservations(env) {
 
 async function createSupportAnswer(env, history, isVip) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
+  const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\\?/g) || []).length : 0), 0);
+  const forceFinal = questionsUsed >= 16;
   const instructions = [
     "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
     "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
@@ -331,8 +333,9 @@ async function createSupportAnswer(env, history, isVip) {
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
     "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
-    isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу."
-  ].join("\n");
+    isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
+    forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
+  ].filter(Boolean).join("\n");
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
