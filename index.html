@@ -1949,10 +1949,10 @@ async function loadMe() {
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{
-  const pending=o.status==='pending';
-  const state=o.order_type==='custom'?(o.status==='new'?'Принят • ожидает обработки':o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status);
+  const pending=o.status==='pending',cancelOnly=o.order_type==='custom'&&o.status==='awaiting_price';
+  const state=o.order_type==='custom'?(o.status==='awaiting_price'?'Ожидает назначения цены':o.status==='new'?'Принят • ожидает обработки':o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status==='cancelled'?'Отменён':o.status);
   const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
-  const actions=pending?'<div class="order-actions"><button class="primary order-action-btn" onclick="payExistingOrder(\''+id+'\')">Оплатить</button><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':'';
+  const actions=pending?'<div class="order-actions"><button class="primary order-action-btn" onclick="payExistingOrder(\''+id+'\')">Оплатить</button><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':cancelOnly?'<div class="order-actions"><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':'';
   return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
 }).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
