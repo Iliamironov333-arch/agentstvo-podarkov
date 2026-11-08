@@ -256,6 +256,69 @@ async function createPaymentIntent(env, data) {
   }
 }
 
+async function calculateDeliveryQuote(address, priority) {
+  const clean = String(address || "").trim().replace(/\s+/g," ").slice(0,350);
+  if (clean.length < 8) throw new Error("Укажите полный адрес доставки: улицу и номер дома.");
+  const query = encodeURIComponent(clean + ", Екатеринбург, Свердловская область, Россия");
+  const geoResponse = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=ru&q=" + query, {
+    headers: { "User-Agent": "AgentstvoPodarkov/1.0 (delivery calculation)", "Accept-Language": "ru" }
+  });
+  if (!geoResponse.ok) throw new Error("Не удалось проверить адрес. Попробуйте ещё раз чуть позже.");
+  const geocoded = await geoResponse.json();
+  const place = Array.isArray(geocoded) ? geocoded[0] : null;
+  if (!place || !place.address) throw new Error("Адрес не найден. Уточните улицу и номер дома.");
+  const city = [place.address.city,place.address.town,place.address.municipality,place.address.city_district]
+    .filter(Boolean).join(" ").toLowerCase();
+  if (!city.includes("екатеринбург")) throw new Error("Доставка доступна только по Екатеринбургу.");
+  const lat = Number(place.lat), lon = Number(place.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Не удалось определить координаты адреса.");
+  const routeResponse = await fetch("https://router.project-osrm.org/route/v1/driving/60.601094,56.908881;" + lon + "," + lat + "?overview=false&steps=false&alternatives=false");
+  if (!routeResponse.ok) throw new Error("Сервис маршрутов временно недоступен. Попробуйте ещё раз.");
+  const routeData = await routeResponse.json();
+  const meters = Number(routeData.routes?.[0]?.distance);
+  if (!routeData.routes?.length || !Number.isFinite(meters) || meters <= 0) throw new Error("Не удалось построить автомобильный маршрут до адреса.");
+  const distanceKm = Math.round((meters / 1000) * 100) / 100;
+  const deliveryStars = Math.min(450, Math.ceil(distanceKm * 23));
+  const priorityStars = priority ? 100 : 0;
+  return { address: clean, distance_km: distanceKm, delivery_stars: deliveryStars, priority_delivery: !!priority, priority_stars: priorityStars, total_delivery_stars: deliveryStars + priorityStars };
+}
+
+async function cancelPendingOrderAndRefund(env, orderId, telegramId) {
+  const order = await env.DB.prepare("SELECT balance_applied_stars FROM orders WHERE id=? AND telegram_id=? AND payment_status='pending'")
+    .bind(orderId,telegramId).first();
+  if (!order) return false;
+  const amount = Math.max(0,Number(order.balance_applied_stars || 0));
+  const statements = [
+    env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=?")
+      .bind(orderId,telegramId,amount),
+    env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'order_refund',?,? WHERE changes()=1 AND ?>0")
+      .bind(telegramId,amount,"Возврат баланса за отменённый заказ "+orderId,"order-refund:"+orderId,amount),
+    env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS (SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
+      .bind(amount,telegramId,"order-refund:"+orderId),
+    env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId),
+  ];
+  if (await tableExists(env,"promo_codes") && await tableExists(env,"promo_redemptions")) {
+    statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId));
+    statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId));
+  }
+  const results = await env.DB.batch(statements);
+  return !!results[0]?.meta?.changes;
+}
+
+async function releaseExpiredOrderReservations(env) {
+  try {
+    const expired = await env.DB.prepare("SELECT id,telegram_id FROM orders WHERE payment_status='pending' AND created_at<datetime('now','-1 day') ORDER BY created_at LIMIT 100").all();
+    let released = 0;
+    for (const order of expired.results || []) {
+      if (await cancelPendingOrderAndRefund(env,order.id,String(order.telegram_id))) released++;
+    }
+    return {released};
+  } catch (error) {
+    console.error("Expired order cleanup failed:",String(error).slice(0,300));
+    return {released:0,error:true};
+  }
+}
+
 async function createSupportAnswer(env, history, isVip) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
   const instructions = [
@@ -355,11 +418,11 @@ async function handleWebhook(request, env) {
   if (intent.kind === "order") {
     const promoSchemaReady = await tableExists(env,"promo_codes");
     const order = await env.DB.prepare(promoSchemaReady
-      ? "SELECT id,product_title,total_stars,payment_status,promo_code FROM orders WHERE id=? AND telegram_id=?"
-      : "SELECT id,product_title,total_stars,payment_status,NULL AS promo_code FROM orders WHERE id=? AND telegram_id=?")
+      ? "SELECT id,product_title,total_stars,payment_status,promo_code,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?"
+      : "SELECT id,product_title,total_stars,payment_status,NULL AS promo_code,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?")
       .bind(intent.reference_id, telegramId).first();
     if (!order) return json({ ok: true });
-    const earned = Math.floor(Number(intent.amount_stars) / 3);
+    const earned = Math.floor(Number(order.total_stars || intent.amount_stars) / 3);
     if (intent.status === "pending") {
       const statements = [
         env.DB.prepare("UPDATE payment_intents SET status='paid',charge_id=?,paid_at=CURRENT_TIMESTAMP WHERE payload=? AND status='pending' AND telegram_id=? AND amount_stars=?")
@@ -549,6 +612,7 @@ export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
+    ctx.waitUntil(releaseExpiredOrderReservations(env));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1023,14 +1087,15 @@ export default {
           const orderType = url.searchParams.get("order_type");
           if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
           if (orderType === "product") {
-            const [order, items, payment] = await Promise.all([
+            const [order, items, payment, delivery] = await Promise.all([
               env.DB.prepare("SELECT o.*,u.first_name,u.username FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE o.id=?").bind(orderId).first(),
               env.DB.prepare("SELECT product_title,quantity,image_url,delivery_status,delivered_at FROM order_items WHERE order_id=? ORDER BY id").bind(orderId).all(),
-              env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first()
+              env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(orderId).first()
             ]);
             if (!order) return json({ error: "Заказ не найден." }, 404, origin);
             const meta = await getAdminOrderMeta(env, orderType, order);
-            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
           }
           const order = await env.DB.prepare("SELECT * FROM custom_orders WHERE id=?").bind(orderId).first();
           if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
@@ -1592,14 +1657,17 @@ export default {
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
         if (!Array.isArray(body.items) || !body.items.length || body.items.length > 43) return json({ error: "Корзина пуста или некорректна" }, 400, origin);
+        const deliveryAddress = typeof body.delivery_address === "string" ? body.delivery_address.trim().slice(0,350) : "";
+        const deliveryDetails = typeof body.delivery_details === "string" ? body.delivery_details.trim().slice(0,180) : "";
+        const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
+        const priorityDelivery = body.priority_delivery === true;
+        if (deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
         for (const item of body.items) {
           const id = String(item.id ?? "");
           const qty = Number(item.qty);
-          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !catalog.some(p => String(p.id) === id)) {
-            return json({ error: "Некорректный товар или количество" }, 400, origin);
-          }
+          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !catalog.some(p => String(p.id) === id)) return json({ error: "Некорректный товар или количество" }, 400, origin);
           quantities.set(id, (quantities.get(id) || 0) + qty);
           if (quantities.get(id) > 10) return json({ error: "Максимум 10 единиц одного товара" }, 400, origin);
         }
@@ -1607,12 +1675,11 @@ export default {
           const product = catalog.find(p => String(p.id) === id);
           return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
-        // The customer receives the shared payment-confirmation postcard; the seller delivers the artwork separately.
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         let discount = 0, promoCode = null, discountPercent = 0;
         const requestedPromo = typeof body.promo_code === "string" ? body.promo_code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32) : "";
-        const promoSchemaReady = await tableExists(env,"promo_codes");
+        const promoSchemaReady = await tableExists(env,"promo_codes") && await tableExists(env,"promo_redemptions");
         if(requestedPromo){
           if(!promoSchemaReady)return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
           const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
@@ -1627,18 +1694,22 @@ export default {
           if(eligibleSubtotal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
           promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*discountPercent/100));
         }
-        const total = subtotal-discount;
+        const delivery = await calculateDeliveryQuote(deliveryAddress,priorityDelivery);
+        const goodsTotal = subtotal-discount;
+        const total = goodsTotal+delivery.total_delivery_stars;
+        if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
+        const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
+        const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
         const title = items.map(item => item.title + " × " + item.qty).join("; ");
-        const orderInsert = promoSchemaReady
-          ? env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?)")
-              .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title, items.reduce((sum, item) => sum + item.qty, 0), subtotal, discountPercent, total, promoCode, discount)
-          : env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment')")
-              .bind(orderId, telegramId, items.length === 1 ? items[0].id : null, title, items.reduce((sum, item) => sum + item.qty, 0), subtotal, DISCOUNT_PERCENT, total);
+        const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?)")
+          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
         const orderStatements = [
           orderInsert,
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
-            .bind(orderId, item.id, item.title, item.qty, item.image_url))
+            .bind(orderId,item.id,item.title,item.qty,item.image_url)),
+          env.DB.prepare("INSERT INTO order_delivery (order_id,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars) VALUES (?,?,?,?,?,?,?,?,?)")
+            .bind(orderId,telegramId,delivery.address,deliveryDetails,deliveryNote,delivery.distance_km,delivery.delivery_stars,priorityDelivery?1:0,delivery.priority_stars)
         ];
         if(promoCode){
           const reservation=await env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode).run();
@@ -1654,17 +1725,42 @@ export default {
           ]);
           throw orderError;
         }
-        try {
-          const invoiceUrl = await createPaymentIntent(env, { payload: orderId, telegram_id: telegramId,
-            kind: "order", reference_id: orderId, amount_stars: total, title: "Заказ " + orderId.slice(0, 8),
-            description: title });
-          return json({ ok: true, invoice_url: invoiceUrl, order_id: orderId }, 200, origin);
-        } catch (error) {
-          await env.DB.batch([
-            env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled' WHERE id=? AND payment_status='pending'").bind(orderId),
-            env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId),
-            env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId)
+        let balanceUsed = 0;
+        if(requestedBalanceUse>0){
+          const debitResults=await env.DB.batch([
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?")
+              .bind(requestedBalanceUse,telegramId,requestedBalanceUse),
+            env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'order_payment',?,? WHERE changes()=1")
+              .bind(telegramId,-requestedBalanceUse,"Оплата заказа "+orderId,"order-payment:"+orderId)
           ]);
+          if(debitResults[0]?.meta?.changes===1) balanceUsed=requestedBalanceUse;
+          else await env.DB.prepare("UPDATE orders SET balance_applied_stars=0 WHERE id=? AND payment_status='pending'").bind(orderId).run();
+        }
+        if(balanceUsed===total){
+          const paid=await env.DB.prepare("UPDATE orders SET payment_status='paid',fulfillment_status='awaiting_delivery',paid_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=?")
+            .bind(orderId,telegramId,total).run();
+          if(!paid.meta||paid.meta.changes!==1){await cancelPendingOrderAndRefund(env,orderId,telegramId);return json({error:"Не удалось завершить оплату с баланса. Попробуйте ещё раз."},409,origin);}
+          const earned=Math.floor(total/3);
+          if(earned>0)await env.DB.batch([
+            env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'purchase_reward',?,? WHERE changes()=1 OR EXISTS (SELECT 1 FROM orders WHERE id=? AND payment_status='paid')")
+              .bind(telegramId,earned,"Баллы за покупку: "+title,"purchase:"+orderId,orderId),
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
+              .bind(earned,telegramId)
+          ]);
+          if(promoCode)await env.DB.batch([
+            env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
+            env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved'").bind(orderId)
+          ]);
+          await notifyOwner(env,"🎁 НОВЫЙ ОПЛАЧЕННЫЙ ЗАКАЗ С БАЛАНСА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nТовары: "+title+"\nАдрес: "+delivery.address+"\nДистанция: "+delivery.distance_km+" км\nДоставка: "+delivery.delivery_stars+" ⭐"+(priorityDelivery?"\nПриоритет: +100 ⭐":"")+"\nИтого: "+total+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐");
+          try{await deliverOrderImages(env,orderId,telegramId);}catch(deliveryError){console.error("Balance-paid order delivery failed:",String(deliveryError).slice(0,300));}
+          return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+        }
+        const invoiceAmount=total-balanceUsed;
+        try{
+          const invoiceUrl=await createPaymentIntent(env,{payload:orderId,telegram_id:telegramId,kind:"order",reference_id:orderId,amount_stars:invoiceAmount,title:"Заказ "+orderId.slice(0,8),description:title+". Доставка "+delivery.total_delivery_stars+" ⭐; списание с баланса "+balanceUsed+" ⭐."});
+          return json({ok:true,invoice_url:invoiceUrl,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,invoice_amount_stars:invoiceAmount,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+        }catch(error){
+          await cancelPendingOrderAndRefund(env,orderId,telegramId);
           throw error;
         }
       }
