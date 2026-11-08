@@ -552,6 +552,7 @@ let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
 let activePromo = null;
 let vipActive = false;
 let activeFilter = 'all';
+let quickBuyMode=false;
 
 const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
@@ -594,6 +595,7 @@ function showAdminCategory(key){
 
 
 function buyProductNow(productId){
+ quickBuyMode=true;
  const product=products.find(p=>String(p[0])===String(productId));
  if(!product||product[2]==null)return toast('Цена этой работы пока уточняется.');
  if(Object.values(cart).some(q=>Number(q)>0)&&!confirm('Быстрая покупка оформляет только выбранную работу. Очистить текущую корзину и продолжить?'))return;
@@ -709,7 +711,7 @@ function drawCart() {
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
   : 'Сначала списываем доступные ⭐ с баланса; при нехватке Telegram-счёт выставляется только на остаток.';
- document.getElementById('checkoutBtn').disabled = !entries.length || !catalogLoaded;
+ const checkoutButton=document.getElementById('checkoutBtn');checkoutButton.disabled = !entries.length || !catalogLoaded;checkoutButton.textContent=quickBuyMode?'Перейти к оплате →':'Оформить заказ 🎁';
 }
 
 function changeQty(id,d) {
@@ -1876,7 +1878,7 @@ async function checkout() {
   if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
   if(data.paid){
-   cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
+   quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
    if(statusBox)statusBox.textContent='Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
    toast('Заказ оплачен с баланса! 🎁');
    return;
@@ -1885,11 +1887,11 @@ async function checkout() {
   if(statusBox)statusBox.textContent='Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
-    cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
+    quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
-    toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');loadMe();
+    quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');loadMe();
    }else{
-    apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:data.order_id})})
+    quickBuyMode=false;apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:data.order_id})})
      .then(()=>{loadBalance();loadMe();toast('Неоплаченный заказ отменён. Списанные ⭐ возвращены на баланс.');})
      .catch(()=>toast('Платёж не завершён. Проверь статус заказа и баланс.'));
    }
@@ -1898,7 +1900,7 @@ async function checkout() {
   if(statusBox)statusBox.textContent=e.message||'Не удалось оформить заказ.';
   toast(e.message||'Не удалось оформить заказ.');
  }finally{
-  btn.disabled=false;btn.textContent='Оформить заказ 🎁';
+  btn.disabled=false;btn.textContent=quickBuyMode?'Перейти к оплате →':'Оформить заказ 🎁';
  }
 }
 
