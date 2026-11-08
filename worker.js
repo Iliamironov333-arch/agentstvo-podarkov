@@ -68,6 +68,31 @@ async function columnExists(env, tableName, columnName) {
     return (result.results || []).some(column => column.name === columnName);
   } catch { return false; }
 }
+function promoScopeValues(value) {
+  let items = [];
+  if (Array.isArray(value)) items = value;
+  else if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      items = Array.isArray(parsed) ? parsed : value.split(",");
+    } catch { items = value.split(","); }
+  }
+  return [...new Set(items.map(item => String(item || "").trim().slice(0,100)).filter(Boolean))].slice(0,100);
+}
+function promoEligibleSubtotal(catalog, quantities, promo) {
+  const productIds = promoScopeValues(promo.product_ids);
+  const categoryIds = promoScopeValues(promo.category_ids);
+  const scoped = productIds.length > 0 || categoryIds.length > 0;
+  let eligible = 0;
+  for (const [id, qty] of quantities) {
+    const product = catalog.find(item => String(item.id) === String(id));
+    if (!product) continue;
+    if (!scoped || productIds.includes(String(id)) || categoryIds.includes(String(product.category || ""))) {
+      eligible += Number(product.price_stars) * Number(qty);
+    }
+  }
+  return eligible;
+}
 async function getAdminOrderMeta(env, orderType, order) {
   const result = await optionalTableRows(
     env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND action_type IN ('order_status_changed','order_comment') ORDER BY id DESC LIMIT 100")
@@ -595,9 +620,12 @@ export default {
           }catch(error){return json({error:String(error.message||error).slice(0,500)},502,origin);}
         }
         if(path==="/api/admin/promos"&&method==="GET"){
-          if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true},200,origin);
-          const rows=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100").all();
-          return json({ok:true,promos:rows.results||[]},200,origin);
+          if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true,scope_migration_pending:true},200,origin);
+          const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
+          const rows=await env.DB.prepare(scopeReady
+            ? "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,product_ids,category_ids,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100"
+            : "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,'[]' AS product_ids,'[]' AS category_ids,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100").all();
+          return json({ok:true,promos:rows.results||[],scope_migration_pending:!scopeReady},200,origin);
         }
         if(path==="/api/admin/promo-save"&&method==="POST"){
           if(!(await tableExists(env,"promo_codes")))return json({error:"Требуется миграция 0013_promo_codes.sql."},503,origin);
@@ -606,10 +634,24 @@ export default {
           const starts=typeof body.starts_at==="string"&&body.starts_at.trim()?body.starts_at.trim().replace("T"," ").slice(0,19).padEnd(19,":00"):null;
           const ends=typeof body.ends_at==="string"&&body.ends_at.trim()?body.ends_at.trim().replace("T"," ").slice(0,19).padEnd(19,":00"):null;
           const active=body.is_active===true||body.is_active===1?1:0;
+          const productIds=promoScopeValues(body.product_ids),categoryIds=promoScopeValues(body.category_ids);
           if(!/^[A-Z0-9_-]{3,32}$/.test(code)||!Number.isSafeInteger(percent)||percent<1||percent>90||(maxUses!==null&&(!Number.isSafeInteger(maxUses)||maxUses<1)))return json({error:"Проверьте код, скидку 1–90% и лимит использований."},400,origin);
           if(starts&&ends&&Date.parse(starts)>=Date.parse(ends))return json({error:"Дата окончания должна быть позже даты начала."},400,origin);
-          await env.DB.prepare("INSERT INTO promo_codes (code,discount_percent,max_uses,starts_at,ends_at,is_active) VALUES (?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET discount_percent=excluded.discount_percent,max_uses=excluded.max_uses,starts_at=excluded.starts_at,ends_at=excluded.ends_at,is_active=excluded.is_active,updated_at=CURRENT_TIMESTAMP")
-            .bind(code,percent,maxUses,starts,ends,active).run();
+          const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
+          if((productIds.length||categoryIds.length)&&!scopeReady)return json({error:"Для ограничений по товарам и категориям требуется миграция 0014_promo_code_scopes.sql."},503,origin);
+          if(productIds.length||categoryIds.length){
+            const catalogRows=await env.DB.prepare("SELECT id,category FROM products").all();
+            const knownIds=new Set((catalogRows.results||[]).map(row=>String(row.id)));
+            const knownCategories=new Set((catalogRows.results||[]).map(row=>String(row.category||"")).filter(Boolean));
+            if(productIds.some(id=>!knownIds.has(id))||categoryIds.some(category=>!knownCategories.has(category)))return json({error:"Проверьте ID товаров и названия категорий: найдены значения, которых нет в каталоге."},400,origin);
+          }
+          if(scopeReady){
+            await env.DB.prepare("INSERT INTO promo_codes (code,discount_percent,max_uses,starts_at,ends_at,is_active,product_ids,category_ids) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET discount_percent=excluded.discount_percent,max_uses=excluded.max_uses,starts_at=excluded.starts_at,ends_at=excluded.ends_at,is_active=excluded.is_active,product_ids=excluded.product_ids,category_ids=excluded.category_ids,updated_at=CURRENT_TIMESTAMP")
+              .bind(code,percent,maxUses,starts,ends,active,JSON.stringify(productIds),JSON.stringify(categoryIds)).run();
+          }else{
+            await env.DB.prepare("INSERT INTO promo_codes (code,discount_percent,max_uses,starts_at,ends_at,is_active) VALUES (?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET discount_percent=excluded.discount_percent,max_uses=excluded.max_uses,starts_at=excluded.starts_at,ends_at=excluded.ends_at,is_active=excluded.is_active,updated_at=CURRENT_TIMESTAMP")
+              .bind(code,percent,maxUses,starts,ends,active).run();
+          }
           if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"promo_code_saved",JSON.stringify({code,discount_percent:percent,max_uses:maxUses,is_active:active})).run();
           return json({ok:true,code},200,origin);
         }
@@ -1274,7 +1316,8 @@ export default {
             "0010_announcements":tableChecks.announcements,
             "0011_mass_mailing":tableChecks.campaigns&&tableChecks.campaign_recipients,
             "0012_system_monitoring":tableChecks.system_error_log,
-            "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars")
+            "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars"),
+            "0014_promo_code_scopes":await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids")
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
@@ -1400,7 +1443,10 @@ export default {
           const body=await readJson(request),code=String(body.code||"").trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32);
           if(!code)return json({error:"Введите промокод."},400,origin);
           if(!(await tableExists(env,"promo_codes")))return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
-          const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(code).first();
+          const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
+          const promo=await env.DB.prepare(scopeReady
+            ? "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,product_ids,category_ids FROM promo_codes WHERE code=?"
+            : "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,'[]' AS product_ids,'[]' AS category_ids FROM promo_codes WHERE code=?").bind(code).first();
           if(!promo||!promo.is_active)return json({error:"Промокод не найден или отключён."},404,origin);
           if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
           if(promo.ends_at&&Date.parse(promo.ends_at)<Date.now())return json({error:"Срок действия промокода закончился."},400,origin);
@@ -1410,8 +1456,10 @@ export default {
           for(const item of body.items){const id=String(item.id??""),qty=Number(item.qty);if(!Number.isSafeInteger(qty)||qty<1||qty>10)return json({error:"Некорректное количество товара."},400,origin);quantities.set(id,(quantities.get(id)||0)+qty);}
           let subtotal=0;for(const [id,qty] of quantities){const product=catalog.find(p=>String(p.id)===id);if(!product)return json({error:"Товар больше недоступен."},409,origin);subtotal+=Number(product.price_stars)*qty;}
           if(!Number.isSafeInteger(subtotal)||subtotal<1)return json({error:"Некорректная сумма."},400,origin);
-          const discount=Math.min(subtotal-1,Math.floor(subtotal*Number(promo.discount_percent)/100));
-          return json({ok:true,code:promo.code,discount_percent:Number(promo.discount_percent),subtotal,discount_stars:discount,total_stars:subtotal-discount},200,origin);
+          const eligibleSubtotal=promoEligibleSubtotal(catalog,quantities,promo);
+          if(eligibleSubtotal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
+          const discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*Number(promo.discount_percent)/100));
+          return json({ok:true,code:promo.code,discount_percent:Number(promo.discount_percent),subtotal,eligible_subtotal:eligibleSubtotal,discount_stars:discount,total_stars:subtotal-discount},200,origin);
         }
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
@@ -1439,12 +1487,17 @@ export default {
         const promoSchemaReady = await tableExists(env,"promo_codes");
         if(requestedPromo){
           if(!promoSchemaReady)return json({error:"Промокоды ещё не подключены: требуется миграция 0013_promo_codes.sql."},503,origin);
-          const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(requestedPromo).first();
+          const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
+          const promo=await env.DB.prepare(scopeReady
+            ? "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,product_ids,category_ids FROM promo_codes WHERE code=?"
+            : "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,'[]' AS product_ids,'[]' AS category_ids FROM promo_codes WHERE code=?").bind(requestedPromo).first();
           if(!promo||!promo.is_active)return json({error:"Промокод не найден или отключён."},404,origin);
           if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
           if(promo.ends_at&&Date.parse(promo.ends_at)<Date.now())return json({error:"Срок действия промокода закончился."},400,origin);
           if(promo.max_uses!==null&&Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)>=Number(promo.max_uses))return json({error:"Лимит использований промокода исчерпан."},409,origin);
-          promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(subtotal-1,Math.floor(subtotal*discountPercent/100));
+          const eligibleSubtotal=promoEligibleSubtotal(catalog,quantities,promo);
+          if(eligibleSubtotal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
+          promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*discountPercent/100));
         }
         const total = subtotal-discount;
         const orderId = makeId();
