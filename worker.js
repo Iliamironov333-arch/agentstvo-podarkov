@@ -228,11 +228,26 @@ async function deliverOrderImages(env, orderId, telegramId) {
     // Keep the order in awaiting_delivery until the seller completes the artwork delivery.
     return true;
   } catch (error) {
-    await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=NULL WHERE order_id=? AND delivery_status='sending'")
+    await env.DB.prepare("UPDATE order_items SET delivery_status='pending',delivery_started_at=CURRENT_TIMESTAMP WHERE order_id=? AND delivery_status='sending'")
       .bind(orderId).run();
     await notifyOwner(env, "⚠️ Не удалось отправить открытку покупателю\nЗаказ: " + orderId + "\nОшибка: " + String(error).slice(0, 500));
     return false;
   }
+}
+
+async function processPendingOrderPostcards(env, limit = 10) {
+  const rows = await env.DB.prepare(
+    "SELECT DISTINCT o.id AS order_id,o.telegram_id FROM orders o INNER JOIN order_items i ON i.order_id=o.id WHERE o.payment_status='paid' AND i.delivery_status='pending' AND (i.delivery_started_at IS NULL OR i.delivery_started_at < datetime('now','-15 minutes')) ORDER BY o.paid_at ASC LIMIT ?"
+  ).bind(Math.max(1,Math.min(25,Number(limit)||10))).all();
+  let delivered = 0;
+  for (const row of rows.results || []) {
+    try {
+      if (await deliverOrderImages(env, row.order_id, String(row.telegram_id))) delivered++;
+    } catch (error) {
+      console.error("Pending postcard retry failed:", row.order_id, String(error).slice(0,300));
+    }
+  }
+  return { attempted: (rows.results || []).length, delivered };
 }
 
 async function getProducts(env) {
@@ -697,6 +712,7 @@ export default {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
+    ctx.waitUntil(processPendingOrderPostcards(env, 10).catch(error => console.error("Pending postcard processor failed:", String(error).slice(0,500))));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
