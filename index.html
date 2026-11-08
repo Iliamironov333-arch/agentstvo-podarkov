@@ -217,6 +217,20 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminOrdersList"></div>
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
+  <div class="panel" id="adminBackupPanel">
+   <div class="sectionhead"><h3>🛡️ Резервные копии D1</h3><button class="secondary" type="button" onclick="loadAdminBackupStatus()">↻ Проверить</button></div>
+   <p class="muted">Cloudflare D1 Time Travel хранит точки восстановления автоматически в рамках срока хранения вашего тарифа. SQL-экспорт создаёт отдельный файл с временной ссылкой. Во время экспорта база может временно быть недоступна.</p>
+   <p id="adminBackupStatus" class="notice" aria-live="polite">Проверяем доступность резервного копирования…</p>
+   <div class="row-actions"><button class="primary" type="button" id="adminBackupExportButton" onclick="createAdminBackup()">Создать SQL-копию</button><button class="secondary" type="button" id="adminBackupPollButton" onclick="createAdminBackup(true)" disabled>Продолжить экспорт</button></div>
+   <div id="adminBackupDownload"></div>
+   <div class="divider"></div>
+   <h4>Восстановление D1</h4>
+   <p class="notice">Восстановление откатывает рабочую базу и может удалить изменения, сделанные после выбранной точки. Используйте только при необходимости.</p>
+   <label>Bookmark (точка восстановления)<input id="adminBackupRestoreBookmark" maxlength="120" placeholder="Вставьте bookmark Cloudflare"></label>
+   <label>Или дата и время ISO 8601<input id="adminBackupRestoreTimestamp" maxlength="40" placeholder="2026-11-08T10:30:00Z"></label>
+   <label>Подтверждение<input id="adminBackupRestoreConfirm" maxlength="20" placeholder="Введите RESTORE D1"></label>
+   <button class="secondary" type="button" id="adminBackupRestoreButton" onclick="restoreAdminBackup()">Восстановить базу</button>
+  </div>
   <div class="panel" id="adminPromosPanel">
    <div class="sectionhead"><h3>🏷️ Промокоды и акции</h3><button class="secondary" type="button" onclick="loadAdminPromos()">↻ Обновить</button></div>
    <p class="muted">Дополнительная скидка применяется только по введённому коду. Итоговую цену всегда рассчитывает Worker.</p>
@@ -818,6 +832,35 @@ async function toggleAdminSalesPause(){
  try{await apiFetch('/api/admin/system-controls',{method:'POST',body:JSON.stringify({sales_paused:next})});toast(next?'Новые продажи приостановлены.':'Продажи возобновлены.');await loadAdminSystemControls();}
  catch(e){toast(e.message||'Не удалось изменить режим продаж.');if(button)button.disabled=false;}
 }
+let adminBackupBookmark = null;
+async function loadAdminBackupStatus(){
+ const status=document.getElementById('adminBackupStatus');if(!status)return;
+ status.textContent='Проверяем Cloudflare D1 Time Travel…';
+ try{const data=await apiFetch('/api/admin/backup-status');status.textContent='Time Travel доступен. Текущая точка: '+(data.bookmark||'Cloudflare не вернул bookmark')+'. Секрет API подключён.';}
+ catch(e){status.textContent=e.message||'Для резервного центра требуется секрет CLOUDFLARE_API_TOKEN с правами D1 Read и D1 Write.';}
+}
+async function createAdminBackup(continueExport=false){
+ const status=document.getElementById('adminBackupStatus'),download=document.getElementById('adminBackupDownload'),start=document.getElementById('adminBackupExportButton'),poll=document.getElementById('adminBackupPollButton');
+ if(start)start.disabled=true;if(poll)poll.disabled=true;status.textContent=continueExport?'Проверяем состояние экспорта…':'Запускаем экспорт D1. Во время экспорта база может временно не отвечать.';
+ try{
+  const data=await apiFetch('/api/admin/backup-export',{method:'POST',body:JSON.stringify({current_bookmark:continueExport?adminBackupBookmark:''})});
+  adminBackupBookmark=data.at_bookmark||adminBackupBookmark;
+  if(data.status==='active'){status.textContent='Экспорт выполняется. Нажмите «Продолжить экспорт» через некоторое время.';if(poll)poll.disabled=false;}
+  else if(data.status==='complete'&&data.signed_url){status.textContent='SQL-копия готова: '+(data.filename||'backup.sql')+'. Ссылка Cloudflare действует ограниченное время.';download.replaceChildren();const link=document.createElement('a');link.href=data.signed_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Скачать резервную копию SQL';download.append(link);adminBackupBookmark=null;}
+  else{status.textContent='Состояние экспорта: '+String(data.status||'неизвестно')+'. '+(data.messages||[]).join(' ');if(data.at_bookmark&&poll)poll.disabled=false;}
+ }catch(e){status.textContent=e.message||'Не удалось создать SQL-копию.';}
+ finally{if(start)start.disabled=false;}
+}
+async function restoreAdminBackup(){
+ const bookmark=document.getElementById('adminBackupRestoreBookmark').value.trim(),timestamp=document.getElementById('adminBackupRestoreTimestamp').value.trim(),confirmation=document.getElementById('adminBackupRestoreConfirm').value.trim();
+ if((!bookmark&&!timestamp)||(bookmark&&timestamp)){toast('Укажите либо bookmark, либо дату и время.');return;}
+ if(confirmation!=='RESTORE D1'){toast('Введите точное подтверждение RESTORE D1.');return;}
+ if(!confirm('ВНИМАНИЕ: восстановление откатит рабочую базу D1. Продолжить?'))return;
+ const button=document.getElementById('adminBackupRestoreButton'),status=document.getElementById('adminBackupStatus');button.disabled=true;status.textContent='Восстанавливаем D1…';
+ try{const data=await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({bookmark,timestamp,confirmation})});status.textContent=(data.message||'База восстановлена.')+' Предыдущая точка: '+(data.previous_bookmark||'—')+'. Новая точка: '+(data.new_bookmark||'—')+'.';toast('Восстановление D1 завершено.');}
+ catch(e){status.textContent=e.message||'Не удалось восстановить D1.';toast(status.textContent);}
+ finally{button.disabled=false;}
+}
 async function loadAdminPromos(){
  const status=document.getElementById('adminPromosStatus'),root=document.getElementById('adminPromosList');if(!status||!root)return;
  status.textContent='Загружаем промокоды…';root.replaceChildren();
@@ -1091,6 +1134,7 @@ async function loadAnnouncements() {
 async function loadAdminDashboard() {
  loadAdminPromos();
  loadAdminAnalytics();
+ loadAdminBackupStatus();
  const status = document.getElementById('adminDashboardStatus');
  const button = document.getElementById('adminRefreshBtn');
  if (!status) return;
