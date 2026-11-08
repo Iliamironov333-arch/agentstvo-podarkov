@@ -323,7 +323,7 @@ async function cancelPendingOrderAndRefund(env, orderId, telegramId) {
       .bind(telegramId,amount,"Возврат баланса за отменённый заказ "+orderId,"order-refund:"+orderId,amount),
     env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS (SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
       .bind(amount,telegramId,"order-refund:"+orderId),
-    env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(orderId),
+    env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(orderId,telegramId),
   ];
   if (await tableExists(env,"promo_codes") && await tableExists(env,"promo_redemptions")) {
     statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved')").bind(orderId));
@@ -1773,7 +1773,11 @@ export default {
         if(!order)return json({error:"Заказ не найден."},404,origin);
         if(order.payment_status!=="pending")return json({error:"Заказ уже оплачен или отменён."},409,origin);
         const due=Math.max(0,Number(order.total_stars||0)-Number(order.balance_applied_stars||0));
-        if(!due)return json({error:"Заказ уже полностью покрыт балансом. Обновите список заказов."},409,origin);
+        if(!due){
+          const paid=await env.DB.prepare("UPDATE orders SET payment_status='paid',fulfillment_status='awaiting_delivery',paid_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars>=total_stars").bind(orderId,telegramId).run();
+          if(paid.meta?.changes===1)return json({ok:true,paid:true,order_id:orderId},200,origin);
+          return json({error:"Не удалось подтвердить оплату с баланса. Обновите список заказов."},409,origin);
+        }
         const payload=orderId+":retry:"+makeId();
         const invoice_url=await createPaymentIntent(env,{payload,telegram_id:telegramId,kind:"order",reference_id:orderId,amount_stars:due,title:"Оплата заказа "+orderId.slice(0,8),description:String(order.product_title||"Заказ").slice(0,150)+"; остаток "+due+" Stars"});
         return json({ok:true,invoice_url,order_id:orderId,invoice_amount_stars:due,balance_used_stars:Number(order.balance_applied_stars||0)},200,origin);
@@ -1995,8 +1999,16 @@ export default {
         const amount = VIP_PRICES[planType];
         const activeVip = await env.DB.prepare("SELECT id FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
         if (activeVip) return json({ error: "У вас уже действует VIP-подписка." }, 409, origin);
-        const pendingVip = await env.DB.prepare("SELECT payload FROM payment_intents WHERE telegram_id=? AND kind='vip' AND status='pending' LIMIT 1").bind(telegramId).first();
-        if (pendingVip) return json({ error: "У вас уже есть незавершённый счёт VIP. Завершите или отмените его перед созданием нового." }, 409, origin);
+        const pendingVipRows = await env.DB.prepare("SELECT payload,plan_type,amount_stars FROM payment_intents WHERE telegram_id=? AND kind='vip' AND status='pending' ORDER BY created_at DESC").bind(telegramId).all();
+        for (const pendingVip of (pendingVipRows.results || [])) {
+          const fullPrice = Number(VIP_PRICES[pendingVip.plan_type] || 0);
+          const refund = Math.max(0,fullPrice-Number(pendingVip.amount_stars||0));
+          await env.DB.batch([
+            env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND telegram_id=? AND kind='vip' AND status='pending'").bind(pendingVip.payload,telegramId),
+            env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'vip_refund',?,? WHERE changes()=1 AND ?>0").bind(telegramId,refund,"Возврат внутреннего баланса за устаревший счёт VIP","vip-refund:"+pendingVip.payload,refund),
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1").bind(refund,telegramId)
+          ]);
+        }
         const current = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const balanceUsed = Math.min(amount,Math.max(0,Number(current?.balance_stars||0)));
         if(balanceUsed>0){
