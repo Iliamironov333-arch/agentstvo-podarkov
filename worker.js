@@ -1740,13 +1740,21 @@ export default {
       if (path === "/api/orders/cancel" && method === "POST") {
         const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+        const linked=await env.DB.prepare("SELECT id,payment_status FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        if(!linked){
+          const custom=await env.DB.prepare("SELECT id,status FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+          if(custom&&!["cancelled","canceled"].includes(String(custom.status))){
+            await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
+            return json({ok:true,refunded:false},200,origin);
+          }
+        }
         const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
         if(!cancelled)return json({error:"Заказ уже оплачен, отменён или не найден."},409,origin);
         await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
         return json({ok:true,refunded:true},200,origin);
       }
       if (path === "/api/orders" && method === "GET") {
-        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE c.status END AS status,o.fulfillment_status,o.balance_applied_stars,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
+        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,o.balance_applied_stars,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
           .bind(telegramId, telegramId).all();
         return json({ orders: result.results || [] }, 200, origin);
       }
