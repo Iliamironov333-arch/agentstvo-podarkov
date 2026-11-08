@@ -223,6 +223,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <p id="adminBackupStatus" class="notice" aria-live="polite">Проверяем доступность резервного копирования…</p>
    <div class="row-actions"><button class="primary" type="button" id="adminBackupExportButton" onclick="createAdminBackup()">Создать SQL-копию</button><button class="secondary" type="button" id="adminBackupPollButton" onclick="createAdminBackup(true)" disabled>Продолжить экспорт</button></div>
    <div id="adminBackupDownload"></div>
+   <h4>История резервных операций</h4><div id="adminBackupHistory" class="notice">История загружается…</div>
    <div class="divider"></div>
    <h4>Восстановление D1</h4>
    <p class="notice">Восстановление откатывает рабочую базу и может удалить изменения, сделанные после выбранной точки. Используйте только при необходимости.</p>
@@ -868,11 +869,18 @@ async function toggleAdminSalesPause(){
  try{await apiFetch('/api/admin/system-controls',{method:'POST',body:JSON.stringify({sales_paused:next})});toast(next?'Новые продажи приостановлены.':'Продажи возобновлены.');await loadAdminSystemControls();}
  catch(e){toast(e.message||'Не удалось изменить режим продаж.');if(button)button.disabled=false;}
 }
+async function loadAdminBackupHistory(){
+ const root=document.getElementById('adminBackupHistory');if(!root)return;root.textContent='Загружаем историю…';
+ try{const data=await apiFetch('/api/admin/backup-history');root.replaceChildren();if(data.migration_pending){root.textContent='Для журнала резервных операций требуется миграция 0006_admin_action_log.sql.';return;}
+ const rows=data.history||[];if(!rows.length){root.textContent='Резервных операций пока нет.';return;}
+ rows.forEach(row=>{const item=document.createElement('div');item.className='admin-detail-line';const title=document.createElement('b');title.textContent=(row.action_type==='d1_sql_export_created'?'SQL-экспорт':'Восстановление Time Travel')+' · '+(row.created_at||'');const details=document.createElement('div');let parsed={};try{parsed=JSON.parse(row.details||'{}');}catch(e){}details.textContent=row.action_type==='d1_sql_export_created'?'Файл: '+(parsed.filename||'SQL')+' · Bookmark: '+(parsed.bookmark||'—'):'Целевая точка: '+(parsed.target_bookmark||parsed.target_timestamp||'—')+' · Предыдущая: '+(parsed.previous_bookmark||'—');item.append(title,details);root.append(item);});
+ }catch(e){root.textContent=e.message||'Не удалось загрузить историю.';}
+}
 let adminBackupBookmark = null;
 async function loadAdminBackupStatus(){
  const status=document.getElementById('adminBackupStatus');if(!status)return;
  status.textContent='Проверяем Cloudflare D1 Time Travel…';
- try{const data=await apiFetch('/api/admin/backup-status');status.textContent='Time Travel доступен. Текущая точка: '+(data.bookmark||'Cloudflare не вернул bookmark')+'. Секрет API подключён.';}
+ try{const data=await apiFetch('/api/admin/backup-status');status.textContent='Time Travel доступен. Текущая точка: '+(data.bookmark||'Cloudflare не вернул bookmark')+'. Секрет API подключён.';await loadAdminBackupHistory();}
  catch(e){status.textContent=e.message||'Для резервного центра требуется секрет CLOUDFLARE_API_TOKEN с правами D1 Read и D1 Write.';}
 }
 async function createAdminBackup(continueExport=false){
@@ -882,7 +890,7 @@ async function createAdminBackup(continueExport=false){
   const data=await apiFetch('/api/admin/backup-export',{method:'POST',body:JSON.stringify({current_bookmark:continueExport?adminBackupBookmark:''})});
   adminBackupBookmark=data.at_bookmark||adminBackupBookmark;
   if(data.status==='active'){status.textContent='Экспорт выполняется. Нажмите «Продолжить экспорт» через некоторое время.';if(poll)poll.disabled=false;}
-  else if(data.status==='complete'&&data.signed_url){status.textContent='SQL-копия готова: '+(data.filename||'backup.sql')+'. Ссылка Cloudflare действует ограниченное время.';download.replaceChildren();const link=document.createElement('a');link.href=data.signed_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Скачать резервную копию SQL';download.append(link);adminBackupBookmark=null;}
+  else if(data.status==='complete'&&data.signed_url){status.textContent='SQL-копия готова: '+(data.filename||'backup.sql')+'. Ссылка Cloudflare действует ограниченное время.';await loadAdminBackupHistory();download.replaceChildren();const link=document.createElement('a');link.href=data.signed_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Скачать резервную копию SQL';download.append(link);adminBackupBookmark=null;}
   else{status.textContent='Состояние экспорта: '+String(data.status||'неизвестно')+'. '+(data.messages||[]).join(' ');if(data.at_bookmark&&poll)poll.disabled=false;}
  }catch(e){status.textContent=e.message||'Не удалось создать SQL-копию.';}
  finally{if(start)start.disabled=false;}
@@ -893,7 +901,7 @@ async function restoreAdminBackup(){
  if(confirmation!=='RESTORE D1'){toast('Введите точное подтверждение RESTORE D1.');return;}
  if(!confirm('ВНИМАНИЕ: восстановление откатит рабочую базу D1. Продолжить?'))return;
  const button=document.getElementById('adminBackupRestoreButton'),status=document.getElementById('adminBackupStatus');button.disabled=true;status.textContent='Восстанавливаем D1…';
- try{const data=await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({bookmark,timestamp,confirmation})});status.textContent=(data.message||'База восстановлена.')+' Предыдущая точка: '+(data.previous_bookmark||'—')+'. Новая точка: '+(data.new_bookmark||'—')+'.';toast('Восстановление D1 завершено.');}
+ try{const data=await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({bookmark,timestamp,confirmation})});status.textContent=(data.message||'База восстановлена.')+' Предыдущая точка: '+(data.previous_bookmark||'—')+'. Новая точка: '+(data.new_bookmark||'—')+'.';await loadAdminBackupHistory();toast('Восстановление D1 завершено.');}
  catch(e){status.textContent=e.message||'Не удалось восстановить D1.';toast(status.textContent);}
  finally{button.disabled=false;}
 }
