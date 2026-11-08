@@ -237,7 +237,7 @@ async function deliverOrderImages(env, orderId, telegramId) {
 
 async function processPendingOrderPostcards(env, limit = 10) {
   const rows = await env.DB.prepare(
-    "SELECT DISTINCT o.id AS order_id,o.telegram_id FROM orders o INNER JOIN order_items i ON i.order_id=o.id WHERE o.payment_status='paid' AND i.delivery_status='pending' AND (i.delivery_started_at IS NULL OR i.delivery_started_at < datetime('now','-15 minutes')) ORDER BY o.paid_at ASC LIMIT ?"
+    "SELECT DISTINCT o.id AS order_id,o.telegram_id FROM orders o INNER JOIN order_items i ON i.order_id=o.id WHERE o.payment_status='paid' AND (i.delivery_status='pending' OR (i.delivery_status='sending' AND (i.delivery_started_at IS NULL OR i.delivery_started_at < datetime('now','-10 minutes')))) AND (i.delivery_started_at IS NULL OR i.delivery_started_at < datetime('now','-15 minutes')) ORDER BY o.paid_at ASC LIMIT ?"
   ).bind(Math.max(1,Math.min(25,Number(limit)||10))).all();
   let delivered = 0;
   for (const row of rows.results || []) {
