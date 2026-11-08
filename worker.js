@@ -790,8 +790,13 @@ export default {
           const target = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
           if (!target) return json({ error: "Сначала пользователь должен открыть Mini App хотя бы один раз." }, 404, origin);
           const existing = await env.DB.prepare("SELECT permissions_json FROM admin_staff WHERE telegram_id=?").bind(targetId).first();
-          let savedPermissions = defaultAdminPermissions();
-          if (existing?.permissions_json) { try { savedPermissions = { ...savedPermissions, ...JSON.parse(existing.permissions_json) }; } catch {} }
+          // New moderators receive no permissions until the owner explicitly enables selected ones.
+          let savedPermissions = role === "moderator"
+            ? Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, false]))
+            : defaultAdminPermissions();
+          if (existing?.permissions_json) {
+            try { savedPermissions = { ...savedPermissions, ...JSON.parse(existing.permissions_json) }; } catch {}
+          }
           const permissionsJson = JSON.stringify(savedPermissions);
           await env.DB.prepare("INSERT INTO admin_staff (telegram_id,role,permissions_json,status,created_by,updated_by) VALUES (?,?,?,'active',?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
             .bind(targetId, role, permissionsJson, telegramId, telegramId).run();
