@@ -607,7 +607,17 @@ export default {
           return json({ error: "Все административные права отозваны владельцем." }, 403, origin);
         }
         if (!rootOwner && requiredPermission === "owner_only") return json({ error: "Это действие доступно только владельцу." }, 403, origin);
-        if (!rootOwner && requiredPermission && requiredPermission !== "staff_manage" && permissions[requiredPermission] !== true) {
+        // Action permissions include the read access needed to select a target, but do not grant other write permissions.
+        const permissionFallbacks = {
+          users_view: ["users_balance", "users_ban", "users_unban"],
+          orders_view: ["orders_manage"],
+          catalog_view: ["catalog_manage"],
+          support_view: ["support_reply"]
+        };
+        const hasRequiredPermission = requiredPermission === "staff_manage" ||
+          permissions[requiredPermission] === true ||
+          (permissionFallbacks[requiredPermission] || []).some(key => permissions[key] === true);
+        if (!rootOwner && requiredPermission && !hasRequiredPermission) {
           return json({ error: "У этой должности нет разрешения на данное действие: " + requiredPermission }, 403, origin);
         }
         if (!rootOwner && requiredPermission === "staff_manage") {
