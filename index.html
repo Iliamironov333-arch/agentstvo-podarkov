@@ -101,6 +101,9 @@ body.light-theme .menu-card span{color:var(--muted)}
 body.light-theme .casebox{background:linear-gradient(140deg,#fff0d6,#fffaf3);border-color:#e6c185}
 body.light-theme .toast{background:#fff;border-color:#e0b66f;color:#382819;box-shadow:0 8px 30px #6040141f}
 body.light-theme .leaf-layer{opacity:.38}
+select{appearance:none;-webkit-appearance:none;width:100%;max-width:100%;min-width:0;padding:11px 38px 11px 12px;border:1px solid var(--line);border-radius:11px;background-color:var(--panel2);color:var(--text);font:inherit;line-height:1.35;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select:focus,input:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px}
+#adminPanelView{padding-bottom:30px;scroll-margin-top:12px}
 .row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .row-actions .secondary{flex:1 1 68px}
 .menu-card.about-card{grid-column:1/-1}
@@ -263,7 +266,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    </div>
    <p id="adminPromosStatus" class="notice" aria-live="polite">Список промокодов загружается…</p><div id="adminPromosList"></div>
   </div>
-  <div class="panel" id="adminCatalogPanel">
+  <div class="sectionhead"><h3>🛍️ Магазин</h3><span>Товары и каталог</span></div><div class="panel" id="adminCatalogPanel">
    <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div>
    <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
    <p id="adminProductsStatus" class="notice" aria-live="polite">Каталог загружается…</p>
@@ -281,7 +284,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
     <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
    </div>
   </div>
-  <div class="panel" id="adminSystemControlsPanel">
+  <div class="sectionhead"><h3>🎛️ Чит-панель</h3><span>Переключатели функций</span></div><div class="panel" id="adminSystemControlsPanel">
    <h3>🚦 Экстренное управление</h3>
    <p class="muted">Остановка запрещает новые покупки и оформление заказов. Каталог остаётся доступным, уже оплаченные заказы не затрагиваются.</p>
    <p id="adminSalesPauseStatus" class="notice" aria-live="polite">Проверяем состояние продаж…</p>
@@ -398,7 +401,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 <section id="profileView" class="hidden">
  <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
- <div class="panel"><h3 id="profileName">Пользователь Telegram</h3><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
+ <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill hidden">👑 VIP УЧАСТНИК</span></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
 </section>
 <section id="vipView" class="hidden">
  <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка открывает VIP-поддержку и VIP-ассистента по подбору подарков.</p></div>
@@ -518,6 +521,16 @@ let activeFilter = 'all';
 
 const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
+async function buyProductNow(productId){
+ const product=products.find(p=>String(p[0])===String(productId));
+ if(!product||product[2]==null)return toast('Цена этой работы пока уточняется.');
+ const buttons=document.querySelectorAll('.buy-now');let button=null;buttons.forEach(b=>{if(b.dataset.productId===String(productId))button=b;});
+ if(button){button.disabled=true;button.textContent='Создаём счёт…';}
+ try{const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({items:[{id:product[0],qty:1}]})});if(!data.invoice_url)throw new Error('Сервер не вернул ссылку на счёт.');openInvoice(data.invoice_url,status=>{if(status==='paid'){toast('Оплата подтверждена! Заказ оформлен 🎁');loadMe();loadBalance();}else if(status==='pending'){toast('Платёж обрабатывается. Проверь «Мои заказы».');loadMe();}else if(status==='failed')toast('Оплата не прошла. Попробуй ещё раз.');else toast('Оплата отменена. Можно попробовать снова.');});}
+ catch(e){toast(e.message||'Не удалось создать счёт.');}
+ finally{if(button){button.disabled=false;button.textContent='⚡ Купить сразу';}}
+}
+
 function showView(id) {
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
@@ -583,7 +596,9 @@ function drawProducts() {
   el.className = 'product';
   el.innerHTML = `<div class="art"><span>${p[3]}</span></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
 
-  el.querySelector('.add').onclick = () => {
+  const buyButton=document.createElement('button');buyButton.type='button';buyButton.className='secondary buy-now';buyButton.textContent='⚡ Купить сразу';buyButton.dataset.productId=String(p[0]);buyButton.disabled=p[2]==null;buyButton.style.cssText='width:100%;margin-top:8px';buyButton.onclick=()=>buyProductNow(p[0]);el.querySelector('.productbody').appendChild(buyButton);
+
+   el.querySelector('.add').onclick = () => {
    if (qty) {
     cart[p[0]] = Math.max(0,qty-1);
     if (!cart[p[0]]) delete cart[p[0]];
@@ -1762,6 +1777,7 @@ async function loadMe() {
   setVipUi(!!me.vip);
  const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
+  const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{const state=o.order_type==='custom'?(o.status==='new'?'Получен • ожидает ответа':o.status):(o.status==='paid'?'Оплачен':o.status==='pending'?'Ожидает оплаты':o.status);return `<div class="lineitem"><span><b>${o.title||o.order_id}</b><br><small>${o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога'} · ${formatDate(o.created_at)}</small></span><b>${money(o.amount)}<br><small>${state}</small></b></div>`;}).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
