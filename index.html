@@ -1468,6 +1468,33 @@ const adminPermissionLabels = {
  announcements_manage:'Объявления',promos_manage:'Промокоды',analytics_view:'Аналитика',
  backup_manage:'Резервные копии',system_manage:'Технический центр и настройки'
 };
+function adminHasPermission(key){
+ return !!(adminSession?.root_owner || adminSession?.role==='owner' || adminSession?.permissions?.[key]===true);
+}
+function applyAdminPermissionVisibility(){
+ const showPanel=(selector,allowed)=>{
+  const node=document.querySelector(selector);
+  const panel=node?.closest('.panel');
+  if(panel)panel.hidden=!allowed;
+  else if(node)node.hidden=!allowed;
+ };
+ showPanel('#adminUserSearch',adminHasPermission('users_view'));
+ showPanel('#adminOrderSearch',adminHasPermission('orders_view'));
+ showPanel('#adminBackupPanel',adminHasPermission('backup_manage'));
+ showPanel('#adminPromosPanel',adminHasPermission('promos_manage'));
+ showPanel('#adminCatalogPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
+ showPanel('#adminSystemControlsPanel',adminHasPermission('system_manage'));
+ showPanel('#adminAnalyticsPanel',adminHasPermission('analytics_view'));
+ showPanel('#adminSupportPanel',adminHasPermission('support_view'));
+ showPanel('#adminAnnouncementsPanel',adminHasPermission('announcements_manage'));
+ showPanel('#adminMailingPanel',adminHasPermission('campaigns_manage'));
+ showPanel('#adminTechnicalCenterPanel',adminHasPermission('system_manage'));
+ const metrics=document.getElementById('adminMetrics');
+ if(metrics)metrics.hidden=!adminHasPermission('dashboard_view');
+ for(const id of ['adminUpdatedAt','adminDashboardStatus']){const node=document.getElementById(id);if(node)node.hidden=!adminHasPermission('dashboard_view');}
+ const staffPanel=document.getElementById('adminStaffPanel');
+ if(staffPanel)staffPanel.hidden=!(adminSession?.root_owner===true);
+}
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card || !initData) return;
@@ -1479,9 +1506,8 @@ async function checkOwnerAccess() {
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
-   const staffPanel=document.getElementById('adminStaffPanel');
-   if(staffPanel) staffPanel.hidden=!(result.root_owner || result.role==='owner');
-   if(!staffPanel?.hidden) loadAdminStaff();
+   applyAdminPermissionVisibility();
+   if(result.root_owner) loadAdminStaff();
   }
  } catch(e) {
   adminSession = null;
