@@ -288,17 +288,27 @@ async function createSupportAnswer(env, history, isVip) {
   return answer.trim().slice(0, 4000);
 }
 
-async function createCraftAnswer(env,theme,material,level){
+async function createCraftAnswer(env,messages){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
- const instructions=["Ты — ИИ-мастер Агентства подарков, специалист по оригинальным поделкам ручной работы.","Отвечай по-русски. Создавай конкретную и выполнимую идею, а не общие советы.","Структура: название; концепция; материалы; инструменты; пошаговое изготовление; оформление и персонализация; примерное время; советы по аккуратности и безопасности.","Учитывай материалы и сложность. Если материалы не указаны, предложи доступные и недорогие варианты.","Не предлагай огонь, токсичные вещества, опасные конструкции или рискованные действия. Для потенциально опасных инструментов укажи, что нужна помощь взрослого.","Не выдумывай цены и наличие материалов."].join("\n");
- const input="Задумка: "+theme+"\nМатериалы: "+material+"\nСложность: "+level+"\nРазработай полноценный проект поделки.";
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:900})});
- const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("ИИ-мастерская временно недоступна. Попробуйте позже.");}
- let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула результат.");return a.trim().slice(0,7000);
+ const instructions=[
+  "Ты — консультант ИИ-мастерской Агентства подарков. Веди живой диалог с клиентом и помогай придумать выполнимую поделку или авторский подарок.",
+  "Не выдавай готовую инструкцию в первом сообщении. Сначала выясни идею, назначение и получателя, бюджет в Stars или рублях, материалы и то, что уже есть дома, желаемый размер, стиль, уровень сложности и срок.",
+  "Задавай ровно один понятный вопрос за раз. Не спрашивай повторно то, на что уже ответили. Предлагай 2–3 подходящих варианта, если человеку трудно определиться.",
+  "Проведи не более 16 вопросов консультанта. Когда информации достаточно, кратко подведи итог, предложи подходящую идею, объясни материалы и этапы, укажи ориентировочную стоимость материалов и примерный диапазон цены работы. Не выдавай оценку за официальный прайс Агентства и явно помечай её как предварительную.",
+  "Если бюджет мал, предложи более доступную версию и объясни, что можно заменить или убрать. Если бюджет неизвестен, сначала спроси его. Если точную цену нельзя определить, скажи, что окончательная стоимость согласуется с владельцем.",
+  "Когда готов итоговый проект, начни ответ строго с маркера [READY]. Пока продолжается сбор требований, начни строго с [ASK]. Не используй [READY], пока не выяснил ключевые пожелания и бюджет или пользователь прямо не попросил продолжить без бюджета.",
+  "Учитывай безопасность: не предлагай огонь, токсичные вещества, опасные конструкции, острые/мощные инструменты или рискованные действия. Для потенциально опасных инструментов укажи необходимость помощи взрослого.",
+  "Отвечай по-русски, тепло, без выдумывания наличия материалов, точных сроков и официальных цен."
+ ].join("\n");
+ const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1100})});
+ const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
+ let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула ответ.");
+ a=a.trim();const ready=a.startsWith("[READY]");a=a.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,7000);return {reply:a,ready};
 }
 async function createVipSupportAnswer(env,message){
  const instructions=["Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:600})});
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:1000})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("VIP support failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("VIP-помощь временно недоступна.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
 }
@@ -1703,10 +1713,11 @@ export default {
       }
 
       if (path === "/api/craft/create" && method === "POST") {
-        const b=await readJson(request),theme=typeof b.theme==="string"?b.theme.trim().slice(0,1200):"",material=typeof b.material==="string"?b.material.slice(0,100):"На усмотрение помощника",level=["Простая","Средняя","Сложная"].includes(b.level)?b.level:"Средняя";
-        if(theme.length<3)return json({error:"Опишите задумку поделки подробнее."},400,origin);
-        try{const answer=await createCraftAnswer(env,theme,material,level),title=answer.split("\n").find(x=>x.trim())?.replace(/^#+\s*/,"").slice(0,100)||"Идея поделки";return json({ok:true,title,answer},200,origin);}
-        catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось создать идею поделки."},503,origin);}
+        const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
+        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>1500))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
+        if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
+        try{const result=await createCraftAnswer(env,messages);return json({ok:true,reply:result.reply,ready:result.ready},200,origin);}
+        catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
       }
       if (path === "/api/vip/support" && method === "POST") {
         const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
