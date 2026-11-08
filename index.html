@@ -55,7 +55,7 @@ button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.55)}
 .menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
 .menu-card{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:14px;text-align:left;color:var(--text);min-height:88px}
 .menu-card:first-child{grid-column:1/-1;background:linear-gradient(120deg,#493019,#2b2117);min-height:72px}
-.menu-card:last-child{grid-column:1/-1}
+.menu-card:last-child,.menu-card[onclick="showView('dealsView')"]{grid-column:1/-1}
 .menu-card strong{display:block;font-size:14px;margin-bottom:5px}
 .menu-card span{font-size:12px;color:var(--muted);line-height:1.4}
 .leaf-layer{position:fixed;inset:0;pointer-events:none!important;overflow:hidden;z-index:0;opacity:.5}
@@ -2002,13 +2002,14 @@ async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay'
 async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 async function loadMe() {
  try {
-  const [me,od]=await Promise.all([apiFetch('/api/me'),apiFetch('/api/orders')]),points=Number(me.points??me.balance_stars??0);
+  const me=await apiFetch('/api/me'),points=Number(me.points??me.balance_stars??0);
   document.getElementById('points').textContent=points.toLocaleString('ru-RU');
   const bp=document.getElementById('balancePoints');if(bp)bp.textContent=points.toLocaleString('ru-RU')+' ⭐';
   setVipUi(!!me.vip);
  const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
+  const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{
   const status=String(o.status||'').toLowerCase();
