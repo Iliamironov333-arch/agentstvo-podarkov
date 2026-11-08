@@ -113,9 +113,22 @@ async function getAdminOrderMeta(env, orderType, order) {
     else if (order.payment_status === "cancelled" || order.fulfillment_status === "cancelled") fallbackStatus = "cancelled";
     else if (order.fulfillment_status === "delivered") fallbackStatus = "ready";
   } else if (["cancelled","canceled"].includes(order.status)) fallbackStatus = "cancelled";
+  else if (String(order.status)==="pending") fallbackStatus = "unpaid";
   else if (["ready","completed","done"].includes(order.status)) fallbackStatus = "ready";
   else if (["in_progress","processing","work"].includes(order.status)) fallbackStatus = "in_progress";
   return { admin_status: latestStatus?.details?.status || fallbackStatus, history, migrations_pending: !!result.migration_pending };
+}
+function containsProhibitedLanguage(value) {
+ const tokens=String(value||"").toLowerCase().replace(/ё/g,"е").split(/[^а-яa-z]+/).filter(Boolean);
+ const patterns=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/fuck/i,/shit/i];
+ return tokens.some(token=>patterns.some(pattern=>pattern.test(token)));
+}
+async function extractTextValues(value,depth=0,out=[]) {
+ if(depth>6||out.length>100||value==null)return out;
+ if(typeof value==="string"){out.push(value.slice(0,4000));return out;}
+ if(Array.isArray(value)){for(const item of value)await extractTextValues(item,depth+1,out);return out;}
+ if(typeof value==="object"){for(const item of Object.values(value))await extractTextValues(item,depth+1,out);}
+ return out;
 }
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
@@ -385,7 +398,7 @@ async function createCraftAnswer(env,messages){
   "Задавай строго ОДИН короткий вопрос за сообщение. Если клиент не знает, чего хочет, предложи 2–3 конкретные идеи на выбор. Не превращай беседу в анкету: вопросы должны быть естественными и относиться к заказу.",
   "Не более 16 вопросов консультанта за весь диалог. Первое приветствие не считается вопросом. Если уже задано 16 вопросов, больше ничего не спрашивай — сразу подготовь итог по имеющимся данным и явно отметь неизвестные детали.",
   "Когда данных достаточно, предложи 2–3 варианта заказа: название/концепция, что будет входить в готовую работу, чем варианты отличаются и предварительная цена каждого. Сравни цены с бюджетом клиента и выбери лучший вариант в пределах бюджета. Если ни один не помещается, предложи более доступный вариант или честно сообщи о разнице.",
-  "Рассчитывай цену как предварительную оценку, учитывая размер, сложность, детализацию, материалы и срочность. Не выдумывай точные закупочные цены, наличие материалов или официальный прайс. Показывай диапазон и объясняй, какие факторы влияют на сумму. Окончательную цену подтверждает владелец Агентства.",
+  "Рассчитывай предварительную стоимость готовой работы в Telegram Stars по сложности, размеру, детализации, материалам и срочности. Это ориентир ИИ, а не официальный прайс; не выдумывай закупочные цены и не конвертируй бюджет в рублях в Stars по выдуманному курсу. Покажи диапазон в Stars и объясни факторы. Окончательную цену подтверждает владелец; владелец может назначить её вручную в карточке индивидуального заказа.",
   "ВАЖНО: не пиши инструкцию по изготовлению, список пошаговых действий, мастер-класс, шаблон самостоятельной сборки или советы «сделай сам». Не расписывай этапы изготовления. Вместо этого описывай результат, комплектацию готовой работы и то, что получит заказчик.",
   "Если бюджет неизвестен — сначала спроси его. Если клиент не хочет называть бюджет, можно продолжить с несколькими ценовыми уровнями, не блокируя консультацию.",
   "Когда итоговый подбор готов, начни ответ строго с [READY]. Пока уточняешь пожелания, начни строго с [ASK]. Не используй [READY], пока не предложил подходящий вариант и не оценил стоимость.",
@@ -474,6 +487,12 @@ async function handleWebhook(request, env) {
       statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
       if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
+      const custom=await env.DB.prepare("SELECT id,subject FROM custom_orders WHERE id=? AND telegram_id=?").bind(order.id,telegramId).first();
+      if(custom){
+        await env.DB.prepare("UPDATE custom_orders SET status='new' WHERE id=? AND telegram_id=? AND status='pending'").bind(order.id,telegramId).run();
+        await notifyOwner(env,"🎨 Оплачен индивидуальный заказ\nID: "+order.id+"\nПокупатель: "+telegramId+"\nРабота: "+custom.subject+"\nИтого: "+order.total_stars+" ⭐\nСписано с баланса: "+Number(order.balance_applied_stars||0)+" ⭐\nОплачено Telegram: "+payment.total_amount+" ⭐");
+        return json({ok:true});
+      }
       const deliveryInfo=await env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(order.id).first();
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
         "\nИтого заказа: " + order.total_stars + " ⭐\nСписано с баланса: " + Number(order.balance_applied_stars||0) + " ⭐\nОплата Telegram: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title +
@@ -1049,6 +1068,39 @@ export default {
           await notifyOwner(env, "📨 Повторное уведомление по заказу " + orderId + " отправлено покупателю " + String(order.telegram_id));
           return json({ ok: true, order_id: orderId, notified: true }, 200, origin);
         }
+        if (path === "/api/admin/custom-order-price" && method === "POST") {
+          const b=await readJson(request),id=typeof b.order_id==="string"?b.order_id.trim().slice(0,100):"",price=Number(b.price_stars);
+          if(!id||!Number.isSafeInteger(price)||price<1||price>100000)return json({error:"Укажите итоговую цену от 1 до 100 000 Stars."},400,origin);
+          const c=await env.DB.prepare("SELECT id,telegram_id,subject,status FROM custom_orders WHERE id=?").bind(id).first();
+          if(!c)return json({error:"Индивидуальный заказ не найден."},404,origin);
+          if(["cancelled","canceled"].includes(String(c.status)))return json({error:"Отменённый заказ нельзя выставить на оплату."},409,origin);
+          const old=await env.DB.prepare("SELECT payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(id,String(c.telegram_id)).first();
+          if(old?.payment_status==="paid")return json({error:"Заказ уже оплачен. Изменять цену нельзя."},409,origin);
+          if(old&&Number(old.balance_applied_stars||0)>0)return json({error:"По заказу уже списана часть баланса. Сначала отмените неоплаченный заказ, чтобы вернуть списанные баллы."},409,origin);
+          if(old){
+            await env.DB.prepare("UPDATE orders SET price_stars=?,total_stars=?,product_title=? WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(price,price,"Индивидуальная работа: "+c.subject,id,String(c.telegram_id)).run();
+            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status='pending' WHERE id=?").bind(price,id).run();
+          }else{
+            await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,balance_applied_stars) VALUES (?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',0)").bind(id,String(c.telegram_id),"Индивидуальная работа: "+c.subject,price,price).run();
+            const u=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(String(c.telegram_id)).first();
+            const want=Math.min(price,Math.max(0,Number(u?.balance_stars||0)));let used=0;
+            if(want>0){
+              const d=await env.DB.batch([
+                env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?").bind(want,String(c.telegram_id),want),
+                env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'custom_order_payment',?,? WHERE changes()=1").bind(String(c.telegram_id),-want,"Оплата индивидуального заказа "+id,"custom-order-payment:"+id)
+              ]);
+              if(d[0]?.meta?.changes===1)used=want;
+            }
+            await env.DB.prepare("UPDATE orders SET balance_applied_stars=?,payment_status=CASE WHEN ?=total_stars THEN 'paid' ELSE 'pending' END,fulfillment_status=CASE WHEN ?=total_stars THEN 'awaiting_delivery' ELSE 'awaiting_payment' END,paid_at=CASE WHEN ?=total_stars THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=? AND telegram_id=?").bind(used,used,used,used,id,String(c.telegram_id)).run();
+            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(price,used,id).run();
+          }
+          const final=await env.DB.prepare("SELECT payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(id,String(c.telegram_id)).first();
+          const due=Math.max(0,price-Number(final?.balance_applied_stars||0));
+          await notifyOwner(env,"🎨 Цена индивидуального заказа назначена\nID: "+id+"\nПокупатель: "+c.telegram_id+"\nИтог: "+price+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось: "+due+" ⭐");
+          try{await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Агентство подарков\n\nИтоговая стоимость индивидуальной работы: "+price+" ⭐.\n"+(due===0?"Заказ полностью оплачен с внутреннего баланса.":"Списано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐. Осталось оплатить: "+due+" ⭐. Откройте Mini App → Заказы → Оплатить.")});}catch(e){console.error("Custom price notification failed:",String(e).slice(0,250));}
+          return json({ok:true,order_id:id,price_stars:price,payment_status:final?.payment_status,balance_used_stars:Number(final?.balance_applied_stars||0),invoice_amount_stars:due},200,origin);
+        }
+
         if (path === "/api/admin/order-update" && method === "POST") {
           if (!(await tableExists(env, "admin_action_log"))) return json({ error: "Требуется применить миграцию 0006_admin_action_log.sql перед управлением заказами." }, 503, origin);
           const body = await readJson(request);
@@ -1073,6 +1125,15 @@ export default {
           }
           if (hasStatus && orderType === "product" && order.payment_status !== "paid" && status !== "cancelled") {
             return json({ error: "Сначала дождитесь подтверждения оплаты. Неоплаченный заказ нельзя перевести в рабочие статусы." }, 409, origin);
+          }
+          if (hasStatus && orderType === "custom" && status !== "cancelled") {
+            const linked=await env.DB.prepare("SELECT payment_status FROM orders WHERE id=? AND telegram_id=?").bind(orderId,String(order.telegram_id)).first();
+            if(!linked||linked.payment_status!=="paid")return json({error:"Сначала назначьте цену и дождитесь оплаты индивидуального заказа."},409,origin);
+          }
+          if (hasStatus && orderType === "custom" && status === "cancelled") {
+            const linked=await env.DB.prepare("SELECT payment_status FROM orders WHERE id=? AND telegram_id=?").bind(orderId,String(order.telegram_id)).first();
+            if(linked?.payment_status==="paid")return json({error:"Оплаченный индивидуальный заказ нельзя отменить без подтверждённого возврата."},409,origin);
+            if(linked?.payment_status==="pending")await cancelPendingOrderAndRefund(env,orderId,String(order.telegram_id));
           }
           const previous = await getAdminOrderMeta(env, orderType, order);
           const statements = [];
@@ -1131,7 +1192,7 @@ export default {
             const meta = await getAdminOrderMeta(env, orderType, order);
             return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
           }
-          const order = await env.DB.prepare("SELECT * FROM custom_orders WHERE id=?").bind(orderId).first();
+          const order = await env.DB.prepare("SELECT c.*,o.payment_status,o.balance_applied_stars FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
           if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
           const meta = await getAdminOrderMeta(env, orderType, order);
           return json({ ok: true, order_type: orderType, order, items: [], payment: null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
@@ -1147,7 +1208,7 @@ export default {
           const productOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=o.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=o.id AND json_extract(a.details,'$.order_type')='product' ORDER BY a.id DESC LIMIT 1)" : "NULL";
           const customOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=c.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=c.id AND json_extract(a.details,'$.order_type')='custom' ORDER BY a.id DESC LIMIT 1)" : "NULL";
           const productStatus = "COALESCE(" + productOverride + ",CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END)";
-          const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
+          const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
               "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
@@ -1614,6 +1675,22 @@ export default {
         if (salesPause?.value === "1") return json({ error: "Оформление новых покупок временно приостановлено владельцем. Уже оплаченные заказы продолжают обрабатываться." }, 503, origin);
       }
 
+      if (method === "POST" && !path.startsWith("/api/admin/") && path !== "/api/telegram/webhook") {
+        let incoming={};try{incoming=await request.clone().json();}catch{}
+        const texts=await extractTextValues(incoming);
+        if(texts.some(containsProhibitedLanguage)){
+          const reason="Автоматическая модерация: обнаружена нецензурная или оскорбительная лексика.";
+          const active=await env.DB.prepare("SELECT id FROM user_blocks WHERE telegram_id=? AND status='active' LIMIT 1").bind(telegramId).first();
+          if(!active){
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO user_blocks (telegram_id,block_type,reason,blocked_by) VALUES (?,'full',?,'automatic_moderation')").bind(telegramId,reason),
+              env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES ('automatic_moderation',?,'user_block',?)").bind(telegramId,JSON.stringify({block_type:"full",reason}))
+            ]);
+            await notifyOwner(env,"🚫 Автоматическая полная блокировка\nTelegram ID: "+telegramId+"\nПричина: нецензурная или оскорбительная лексика. Проверьте блокировку в карточке пользователя.");
+          }
+          return json({error:"Доступ ограничен автоматической модерацией из-за нецензурной или оскорбительной лексики. Если это ошибка, обратитесь к владельцу Агентства."},403,origin);
+        }
+      }
       // Enforce user restrictions server-side after owner routes, so the owner can always administer accounts.
       let activeBlock = null;
       try {
@@ -1665,10 +1742,11 @@ export default {
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
         const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
         if(!cancelled)return json({error:"Заказ уже оплачен, отменён или не найден."},409,origin);
+        await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
         return json({ok:true,refunded:true},200,origin);
       }
       if (path === "/api/orders" && method === "GET") {
-        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || subject AS title,total_stars AS amount,status,NULL AS fulfillment_status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50")
+        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE c.status END AS status,o.fulfillment_status,o.balance_applied_stars,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
           .bind(telegramId, telegramId).all();
         return json({ orders: result.results || [] }, 200, origin);
       }
