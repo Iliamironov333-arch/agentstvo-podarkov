@@ -543,7 +543,7 @@ export default {
           }
         }
         if (path === "/api/admin/backup/export" && method === "GET") {
-          const listed = await env.DB.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+          const listed = await env.DB.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all();
           const tables = listed.results || [];
           const backupTables = [];
           let totalRows = 0;
