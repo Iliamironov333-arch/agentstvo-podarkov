@@ -386,6 +386,37 @@ async function createSupportAnswer(env, history, isVip) {
   return answer.trim().slice(0, 4000);
 }
 
+async function estimateCustomOrderPrice(env, answers, fallbackStars) {
+  if (!env.OPENAI_API_KEY) return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
+  const prompt = [
+    "Оцени предварительную стоимость готовой авторской художественной работы для заказа в Агентстве подарков.",
+    "Верни только JSON без Markdown: {\"price_stars\": число, \"note\": \"короткое объяснение\"}.",
+    "Цена только в целых Telegram Stars, диапазон 250..100000. Оцени сложность, размер, материалы, детализацию и срочность. Не используй курс рубля и не придумывай конвертацию бюджета.",
+    "Это ориентир, не окончательная цена: владелец подтвердит или изменит её вручную.",
+    "Данные заказа: " + JSON.stringify(answers).slice(0,3500)
+  ].join("\n");
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", input: prompt, max_output_tokens: 220 })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error("OpenAI estimate HTTP " + response.status);
+    let output = typeof data.output_text === "string" ? data.output_text : "";
+    if (!output && Array.isArray(data.output)) output = data.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n");
+    const match = output.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("AI estimate JSON missing");
+    const parsed = JSON.parse(match[0]);
+    const price = Number(parsed.price_stars);
+    if (!Number.isSafeInteger(price) || price < 250 || price > 100000) throw new Error("AI estimate outside allowed range");
+    return { price_stars: price, source: "ai", note: String(parsed.note || "Предварительная оценка ИИ").slice(0,300) };
+  } catch (error) {
+    console.error("Custom order AI estimate failed:", String(error).slice(0,300));
+    return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
+  }
+}
+
 async function createCraftAnswer(env,messages){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
@@ -1764,12 +1795,14 @@ export default {
         const wishes = typeof a.wishes === "string" ? a.wishes.trim().slice(0,700) : "";
         for (const key of ["style","format","palette","complexity","deadline"]) if (!Object.prototype.hasOwnProperty.call(CUSTOM_PRICE_OPTIONS[key],a[key])) return json({error:"Проверь ответы опроса: выбран неизвестный вариант."},400,origin);
         if(subject.length<3)return json({error:"Опиши, что нужно изобразить (минимум 3 символа)."},400,origin);
-        const p=CUSTOM_PRICE_OPTIONS,total=Math.min(700,250+p.style[a.style]+p.format[a.format]+p.palette[a.palette]+p.complexity[a.complexity]+p.deadline[a.deadline]),id=makeId();
-        const materials=Array.isArray(a.materials)?[...new Set(a.materials.filter(x=>["watercolor","gouache","pastel","pencils","markers","liners"].includes(x)))]:[];if(!materials.length)return json({error:"Выберите хотя бы один художественный материал."},400,origin);const saved=JSON.stringify({style:a.style,subject,format:a.format,palette:a.palette,materials,complexity:a.complexity,deadline:a.deadline,wishes});
+        const p=CUSTOM_PRICE_OPTIONS,fallbackStars=Math.min(700,250+p.style[a.style]+p.format[a.format]+p.palette[a.palette]+p.complexity[a.complexity]+p.deadline[a.deadline]),id=makeId();
+        const materials=Array.isArray(a.materials)?[...new Set(a.materials.filter(x=>["watercolor","gouache","pastel","pencils","markers","liners"].includes(x)))]:[];if(!materials.length)return json({error:"Выберите хотя бы один художественный материал."},400,origin);
+        const estimate=await estimateCustomOrderPrice(env,{style:a.style,subject,format:a.format,palette:a.palette,materials,complexity:a.complexity,deadline:a.deadline,wishes,budget_rub:Number.isFinite(Number(a.budget_rub))&&Number(a.budget_rub)>0?Math.min(1000000,Number(a.budget_rub)):null},fallbackStars);
+        const total=estimate.price_stars,saved=JSON.stringify({style:a.style,subject,format:a.format,palette:a.palette,materials,complexity:a.complexity,deadline:a.deadline,wishes,ai_estimate_stars:total,ai_estimate_source:estimate.source,ai_estimate_note:estimate.note});
         await env.DB.prepare("INSERT INTO custom_orders (id,telegram_id,username,first_name,subject,answers_json,total_stars,status) VALUES (?,?,?,?,?,?,?,'new')").bind(id,telegramId,user.username||null,user.first_name||null,subject,saved,total).run();
         const L={style:{classic:"Классический",watercolor:"Акварельный",perspective:"С перспективой",autumn:"Осенний",realistic:"Реалистичный",artist_choice:"На усмотрение художника"},format:{postcard:"Открытка",a5:"А5",a4:"А4",large:"Большой формат"},palette:{natural:"Естественная",bright:"Яркая",pastel:"Пастельная",custom:"На усмотрение художника"},materials:{watercolor:"Акварель",gouache:"Гуашь",pastel:"Пастель",pencils:"Цветные карандаши",markers:"Фломастеры",liners:"Линеры"},complexity:{simple:"Простая",medium:"Средняя",detailed:"Высокая"},deadline:{standard:"Обычный срок",priority:"Приоритетный заказ"}};
-        await notifyOwner(env,"🎨 НОВЫЙ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+id+"\nПокупатель: "+(user.first_name||"Без имени")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\nЧто изобразить: "+subject+"\nСтиль: "+L.style[a.style]+"\nФормат: "+L.format[a.format]+"\nЦвета: "+L.palette[a.palette]+"\nМатериалы: "+materials.map(x=>L.materials[x]).join(", ")+"\nСложность: "+L.complexity[a.complexity]+"\nСрок: "+L.deadline[a.deadline]+"\nПожелания: "+(wishes||"Не указаны")+"\n\nЦена: "+total+" ⭐ (ожидает подтверждения владельцем)");
-        return json({ok:true,order_id:id,total_stars:total,status:"new"},200,origin);
+        await notifyOwner(env,"🎨 НОВЫЙ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+id+"\nПокупатель: "+(user.first_name||"Без имени")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\nЧто изобразить: "+subject+"\nСтиль: "+L.style[a.style]+"\nФормат: "+L.format[a.format]+"\nЦвета: "+L.palette[a.palette]+"\nМатериалы: "+materials.map(x=>L.materials[x]).join(", ")+"\nСложность: "+L.complexity[a.complexity]+"\nСрок: "+L.deadline[a.deadline]+"\nПожелания: "+(wishes||"Не указаны")+"\n\nПредварительная оценка ИИ: "+total+" ⭐. "+estimate.note+"\nОкончательную цену подтверждает владелец.");
+        return json({ok:true,order_id:id,total_stars:total,estimate_source:estimate.source,estimate_note:estimate.note,status:"new"},200,origin);
       }
 
         if (path === "/api/promo/validate" && method === "POST") {
