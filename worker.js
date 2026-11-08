@@ -692,7 +692,7 @@ export default {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
-    ctx.waitUntil(processPendingOrderPostcards(env, 10).catch(error => console.error("Pending postcard processor failed:", String(error).slice(0,500))));
+    // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1757,7 +1757,11 @@ export default {
           .bind(telegramId).all();
         const vip = await env.DB.prepare("SELECT plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1")
           .bind(telegramId).first();
+        // Reputation equals lifetime Telegram Stars actually paid. Top-ups count; internal-balance spending does not count again.
+        const reputation = await env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payment_intents WHERE telegram_id=? AND status='paid'")
+          .bind(telegramId).first();
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
+          reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
           orders: orders.results || [], vip: vip || null }, 200, origin);
       }
