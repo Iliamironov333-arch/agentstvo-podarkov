@@ -48,7 +48,7 @@ main{padding:12px 15px}
 .primary{width:100%;padding:13px;border:0;border-radius:12px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#25180b;font-weight:800;font-size:14px;margin-top:10px}
 .secondary{padding:10px 12px;background:#34271a;color:var(--gold2);border:1px solid #6b4a25;border-radius:10px}
 .bottom{position:fixed;bottom:0;left:0;right:0;background:#17130ff5;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:9px 5px calc(9px + env(safe-area-inset-bottom));z-index:5;backdrop-filter:blur(12px)}
-.bottom button{border:0;background:none;color:var(--muted);font-size:11px;padding:5px 0}
+.bottom button{position:relative;z-index:1;pointer-events:auto;touch-action:manipulation;border:0;background:none;color:var(--muted);font-size:11px;padding:5px 0}
 .bottom button strong{display:block;font-size:20px;margin-bottom:3px}
 .bottom button.active{color:var(--gold2)}
 button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.55)}
@@ -58,7 +58,7 @@ button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.55)}
 .menu-card:last-child{grid-column:1/-1}
 .menu-card strong{display:block;font-size:14px;margin-bottom:5px}
 .menu-card span{font-size:12px;color:var(--muted);line-height:1.4}
-.leaf-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:8;opacity:.5}
+.leaf-layer{position:fixed;inset:0;pointer-events:none!important;overflow:hidden;z-index:0;opacity:.5}
 .leaf{position:absolute;top:-40px;font-size:20px;animation:leafFall linear infinite;filter:drop-shadow(0 2px 3px #0004)}
 .leaf:nth-child(1){left:8%;animation-duration:17s}
 .leaf:nth-child(2){left:27%;animation-duration:22s;animation-delay:-8s;font-size:15px}
@@ -579,13 +579,22 @@ async function loadProducts() {
   toast('Каталог: ' + (error.message || 'не удалось загрузить цены'));
  }
 }
-let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
+let cart = {};
+try { const savedCart = localStorage.getItem('gift-cart'); const parsedCart = savedCart ? JSON.parse(savedCart) : {}; cart = parsedCart && typeof parsedCart === 'object' && !Array.isArray(parsedCart) ? parsedCart : {}; } catch (storageError) { console.warn('Корзина восстановлена без повреждённых локальных данных:', storageError); cart = {}; }
 let activePromo = null;
 let vipActive = false;
 let activeFilter = 'all';
 let quickBuyMode=false;
 
 const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
+
+// Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
+document.addEventListener('click', event => {
+ const button = event.target && event.target.closest ? event.target.closest('.bottom button[data-view]') : null;
+ if (!button || button.disabled) return;
+ event.preventDefault();
+ showView(button.dataset.view);
+}, true);
 
 function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
@@ -669,7 +678,8 @@ function toggleTheme() {
 }
 
 (function initTheme() {
- const dark = localStorage.getItem('gift-theme') === 'dark';
+ let dark = false;
+ try { dark = localStorage.getItem('gift-theme') === 'dark'; } catch (storageError) { console.warn('Настройки темы недоступны:', storageError); }
  document.body.classList.toggle('dark-theme',dark);
  document.body.classList.toggle('light-theme',!dark);
  const b = document.getElementById('themeToggle');
@@ -1995,12 +2005,9 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 document.addEventListener('click',event=>{
- const navButton=event.target.closest('.bottom button[data-view]');
- if(navButton){showView(navButton.dataset.view);return;}
  const orderButton=event.target.closest('button[data-order-action][data-order-id]');
  if(orderButton){const id=orderButton.dataset.orderId;if(orderButton.dataset.orderAction==='pay')payExistingOrder(id);else if(orderButton.dataset.orderAction==='cancel')cancelExistingOrder(id);}
 });
-document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
 drawProducts();
 drawCart();
