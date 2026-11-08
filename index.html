@@ -55,7 +55,7 @@ button:disabled{opacity:.48;cursor:not-allowed;filter:saturate(.55)}
 .menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
 .menu-card{background:linear-gradient(145deg,#30251b,#211a14);border:1px solid var(--line);border-radius:15px;padding:14px;text-align:left;color:var(--text);min-height:88px}
 .menu-card:first-child{grid-column:1/-1;background:linear-gradient(120deg,#493019,#2b2117);min-height:72px}
-.menu-card:last-child,.menu-card[onclick="showView('dealsView')"]{grid-column:1/-1}
+.menu-card:last-child,.menu-card[onclick="showView('dealsView')"],#dealsCard,#ownerAdminCard{grid-column:1/-1}
 .menu-card strong{display:block;font-size:14px;margin-bottom:5px}
 .menu-card span{font-size:12px;color:var(--muted);line-height:1.4}
 .leaf-layer{position:fixed;inset:0;pointer-events:none!important;overflow:hidden;z-index:0;opacity:.5}
@@ -245,7 +245,7 @@ body.light-theme input:not([type="checkbox"]):not([type="radio"]):not([type="fil
   <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Подбор авторской работы, вариантов и бюджета</span></button>
-  <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
   <button class="menu-card hidden" id="ownerAdminCard" onclick="showView('adminPanelView')"><strong>🔐 Панель владельца <span class="pill">ADMIN</span></strong><span>Управление Агентством подарков</span></button>
  </div>
 </section>
@@ -2001,27 +2001,37 @@ async function checkout() {
 async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
 async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 async function loadMe() {
- try {
-  const me=await apiFetch('/api/me'),points=Number(me.points??me.balance_stars??0);
-  document.getElementById('points').textContent=points.toLocaleString('ru-RU');
-  const bp=document.getElementById('balancePoints');if(bp)bp.textContent=points.toLocaleString('ru-RU')+' ⭐';
-  setVipUi(!!me.vip);
- const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
-  const pp=document.getElementById('profilePoints');if(pp)pp.textContent=points.toLocaleString('ru-RU')+' баллов';
+ if(!initData)return;
+ try{
+  const me=await apiFetch('/api/me');
+  const points=Number(me.points??me.balance_stars??0);
+  const formatted=points.toLocaleString('ru-RU');
+  const headerPoints=document.getElementById('points');if(headerPoints)headerPoints.textContent=formatted;
+  const bp=document.getElementById('balancePoints');if(bp)bp.textContent=formatted+' ⭐';
+  const pp=document.getElementById('profilePoints');if(pp)pp.textContent=formatted+' баллов';
+  const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
+  setVipUi(!!me.vip);
+ }catch(e){console.warn('Не удалось загрузить профиль и баланс:',e);}
+ try{
   const od=await apiFetch('/api/orders');
-  const orders=Array.isArray(od.orders)?od.orders:[],pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
-  const root=document.getElementById('ordersList');if(root)root.innerHTML=orders.length?orders.map(o=>{
-  const status=String(o.status||'').toLowerCase();
-  const terminal=['paid','cancelled','canceled','completed','fulfilled','delivered'].includes(status);
-  const waitingPrice=o.order_type==='custom'&&status==='awaiting_price';
-  const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
-  const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
-  const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
+  const orders=Array.isArray(od.orders)?od.orders:[];
+  const pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
+  const root=document.getElementById('ordersList');
+  if(root)root.innerHTML=orders.length?orders.map(o=>{
+   const status=String(o.status||'').toLowerCase();
+   const terminal=['paid','cancelled','canceled','completed','fulfilled','delivered'].includes(status);
+   const waitingPrice=o.order_type==='custom'&&status==='awaiting_price';
+   const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
+   const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
+   const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
    const actions=payable?'<div class="order-actions"><button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':waitingPrice?'<div class="order-actions"><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':'';
-  return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
-}).join(''):'<p class="muted">Пока заказов нет.</p>';
- }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
+   return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
+  }).join(''):'<p class="muted">Пока заказов нет.</p>';
+ }catch(e){
+  console.warn('Не удалось загрузить список заказов:',e);
+  const root=document.getElementById('ordersList');if(root)root.innerHTML='<p class="muted">Не удалось загрузить заказы. Попробуйте обновить раздел.</p>';
+ }
 }
 async function openCase() {
  const result = document.getElementById('caseResult');
