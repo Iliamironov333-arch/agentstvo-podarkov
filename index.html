@@ -717,11 +717,11 @@ async function openAdminUser(telegramId) {
   box.append(blockControls);
   const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
   const audit=document.createElement('div');audit.className='admin-block-controls';
-  const auditTitle=document.createElement('h4');auditTitle.textContent='История действий владельца';audit.append(auditTitle);
+  const auditTitle=document.createElement('h4');auditTitle.textContent='История административных действий';audit.append(auditTitle);
   if(!adminHistory.length){
    const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
   }else{
-   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки'};
+   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки',staff_role_changed:'Изменение должности',staff_permissions_changed:'Изменение прав доступа'};
    adminHistory.forEach(item=>{
     const line=document.createElement('p');line.className='notice';
     line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
@@ -1506,6 +1506,10 @@ async function checkOwnerAccess() {
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
+   const heroTitle=document.querySelector('#adminPanelView .hero h2');
+   if(heroTitle) heroTitle.textContent=result.role==='owner'?'Добро пожаловать, владелец':'Добро пожаловать, модератор';
+   const cardTitle=card.querySelector('strong');
+   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=result.role==='owner'?'🔐 Панель владельца ':'🛡️ Панель модератора ';
    applyAdminPermissionVisibility();
    if(result.root_owner) loadAdminStaff();
   }
