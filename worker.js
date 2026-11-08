@@ -816,15 +816,18 @@ export default {
           }, 200, origin);
         }
         if (path === "/api/admin/analytics" && method === "GET") {
-          const [dailyRevenue, dailyOrders, newUsers, totals] = await Promise.all([
+          const [dailyRevenue, dailyOrders, newUsers, totals, promoStats] = await Promise.all([
             env.DB.prepare("SELECT date(confirmed_at) AS day,COALESCE(SUM(amount_stars),0) AS stars,COUNT(*) AS payments FROM payments WHERE status='paid' AND currency='XTR' AND confirmed_at>=datetime('now','-30 days') GROUP BY date(confirmed_at) ORDER BY day").all(),
             env.DB.prepare("SELECT date(created_at) AS day,COUNT(*) AS orders FROM orders WHERE created_at>=datetime('now','-30 days') GROUP BY date(created_at) ORDER BY day").all(),
             env.DB.prepare("SELECT date(created_at) AS day,COUNT(*) AS users FROM users WHERE created_at>=datetime('now','-30 days') GROUP BY date(created_at) ORDER BY day").all(),
-            env.DB.prepare("SELECT (SELECT COUNT(*) FROM orders WHERE payment_status='paid') AS paid_orders,(SELECT COUNT(*) FROM custom_orders) AS custom_orders,(SELECT COUNT(*) FROM users) AS users,(SELECT COALESCE(SUM(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS revenue_stars,(SELECT COALESCE(AVG(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS average_check").first()
+            env.DB.prepare("SELECT (SELECT COUNT(*) FROM orders WHERE payment_status='paid') AS paid_orders,(SELECT COUNT(*) FROM custom_orders) AS custom_orders,(SELECT COUNT(*) FROM users) AS users,(SELECT COALESCE(SUM(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS revenue_stars,(SELECT COALESCE(AVG(amount_stars),0) FROM payments WHERE status='paid' AND currency='XTR') AS average_check").first(),
+            optionalTableRows(env.DB.prepare("SELECT p.code,p.discount_percent,p.max_uses,p.reserved_count,p.redeemed_count,COALESCE(SUM(CASE WHEN r.status='paid' THEN r.discount_stars ELSE 0 END),0) AS discount_stars,COUNT(CASE WHEN r.status='paid' THEN 1 END) AS paid_uses,COUNT(CASE WHEN r.status='reserved' THEN 1 END) AS pending_uses FROM promo_codes p LEFT JOIN promo_redemptions r ON r.code=p.code GROUP BY p.code ORDER BY paid_uses DESC,p.created_at DESC LIMIT 20"),"promo_codes")
           ]);
-          return json({ok:true,period_days:30,daily_revenue:dailyRevenue.results||[],daily_orders:dailyOrders.results||[],new_users:newUsers.results||[],totals:{
+          return json({ok:true,period_days:30,daily_revenue:dailyRevenue.results||[],daily_orders:dailyOrders.results||[],new_users:newUsers.results||[],promo_stats:promoStats.results||[],promo_migration_pending:!!promoStats.migration_pending,totals:{
             paid_orders:Number(totals?.paid_orders||0),custom_orders:Number(totals?.custom_orders||0),users:Number(totals?.users||0),
-            revenue_stars:Number(totals?.revenue_stars||0),average_check_stars:Math.round(Number(totals?.average_check||0))
+            revenue_stars:Number(totals?.revenue_stars||0),average_check_stars:Math.round(Number(totals?.average_check||0)),
+            promo_discount_stars:(promoStats.results||[]).reduce((sum,row)=>sum+Number(row.discount_stars||0),0),
+            promo_paid_uses:(promoStats.results||[]).reduce((sum,row)=>sum+Number(row.paid_uses||0),0)
           },updated_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/support/conversations" && method === "GET") {
