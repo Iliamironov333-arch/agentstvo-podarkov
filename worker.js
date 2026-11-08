@@ -442,8 +442,10 @@ async function handleWebhook(request, env) {
       statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
       if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
+      const deliveryInfo=await env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(order.id).first();
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
-        "\nСумма: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title);
+        "\nИтого заказа: " + order.total_stars + " ⭐\nСписано с баланса: " + Number(order.balance_applied_stars||0) + " ⭐\nОплата Telegram: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title +
+        (deliveryInfo ? "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритет: +100 ⭐" : "") : ""));
     } else if (intent.status !== "paid" || String(intent.charge_id || "") !== chargeId || order.payment_status !== "paid") {
       return json({ ok: true });
     }
@@ -611,8 +613,8 @@ function defaultAdminPermissions() {
 export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
-    ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(releaseExpiredOrderReservations(env));
+    ctx.waitUntil(releaseExpiredPromoReservations(env));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1613,6 +1615,13 @@ export default {
           orders: orders.results || [], vip: vip || null }, 200, origin);
       }
 
+      if (path === "/api/orders/cancel" && method === "POST") {
+        const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
+        if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+        const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
+        if(!cancelled)return json({error:"Заказ уже оплачен, отменён или не найден."},409,origin);
+        return json({ok:true,refunded:true},200,origin);
+      }
       if (path === "/api/orders" && method === "GET") {
         const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || subject AS title,total_stars AS amount,status,NULL AS fulfillment_status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50")
           .bind(telegramId, telegramId).all();
