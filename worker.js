@@ -598,10 +598,14 @@ export default {
           for (const key of Object.keys(permissions)) permissions[key] = permissions[key] === true;
         }
         if (path === "/api/admin/session" && method === "GET") {
+          const hasAdminAccess = rootOwner || staff?.role === "owner" || ADMIN_PERMISSION_KEYS.some(key => permissions[key] === true);
           return json({ ok: true, owner: rootOwner || staff?.role === "owner", root_owner: rootOwner,
-            role: rootOwner ? "owner" : staff.role, permissions }, 200, origin);
+            admin_access: hasAdminAccess, role: rootOwner ? "owner" : staff.role, permissions }, 200, origin);
         }
         const requiredPermission = adminPermissionForPath(path, method);
+        if (!rootOwner && path !== "/api/admin/session" && staff?.role === "moderator" && !ADMIN_PERMISSION_KEYS.some(key => permissions[key] === true)) {
+          return json({ error: "Все административные права отозваны владельцем." }, 403, origin);
+        }
         if (!rootOwner && requiredPermission === "owner_only") return json({ error: "Это действие доступно только владельцу." }, 403, origin);
         if (!rootOwner && requiredPermission && requiredPermission !== "staff_manage" && permissions[requiredPermission] !== true) {
           return json({ error: "У этой должности нет разрешения на данное действие: " + requiredPermission }, 403, origin);
@@ -1406,7 +1410,8 @@ export default {
             user_blocks:await tableExists(env,"user_blocks"),support_conversation_controls:await tableExists(env,"support_conversation_controls"),
             support_internal_notes:await tableExists(env,"support_internal_notes"),announcements:await tableExists(env,"announcements"),
             campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients"),
-            promo_codes:await tableExists(env,"promo_codes"),promo_redemptions:await tableExists(env,"promo_redemptions")
+            promo_codes:await tableExists(env,"promo_codes"),promo_redemptions:await tableExists(env,"promo_redemptions"),
+            admin_staff:await tableExists(env,"admin_staff")
           };
           const migrations={
             "0004_order_item_images":tableChecks.order_items&&await columnExists(env,"order_items","image_url"),
