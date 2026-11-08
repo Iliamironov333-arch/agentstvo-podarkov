@@ -1821,7 +1821,8 @@ export default {
           .bind(telegramId).all();
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
-        return json({ messages: (rows.results || []).reverse(), vip: !!vip }, 200, origin);
+        const aiConfig = await readAiConfig(env);
+        return json({ messages: (rows.results || []).reverse(), vip: !!vip, greeting: aiConfig.greeting || "Здравствуйте! Я помощник Агентства подарков. Чем могу помочь?" }, 200, origin);
       }
 
       if (path === "/api/support/chat" && method === "POST") {
