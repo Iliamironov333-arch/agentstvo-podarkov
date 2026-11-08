@@ -61,6 +61,13 @@ async function tableExists(env, tableName) {
   try { await env.DB.prepare("SELECT 1 FROM " + tableName + " LIMIT 1").first(); return true; }
   catch (error) { if (isMissingTableError(error, tableName)) return false; throw error; }
 }
+async function columnExists(env, tableName, columnName) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(String(tableName)) || !/^[a-z_][a-z0-9_]*$/i.test(String(columnName))) return false;
+  try {
+    const result = await env.DB.prepare("PRAGMA table_info(" + tableName + ")").all();
+    return (result.results || []).some(column => column.name === columnName);
+  } catch { return false; }
+}
 async function getAdminOrderMeta(env, orderType, order) {
   const result = await optionalTableRows(
     env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND action_type IN ('order_status_changed','order_comment') ORDER BY id DESC LIMIT 100")
@@ -938,10 +945,20 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
+          const [controlsReady, senderTypeReady] = await Promise.all([
+            tableExists(env, "support_conversation_controls"),
+            columnExists(env, "support_chat_messages", "sender_type")
+          ]);
+          const messageQuery = senderTypeReady
+            ? env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId)
+            : env.DB.prepare("SELECT role,content,'ai' AS sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId);
+          const controlQuery = controlsReady
+            ? env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first()
+            : Promise.resolve(null);
           const [profile, messages, control, productOrders, customOrders, tickets, notes, balanceHistory] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,first_name,username,created_at,balance_stars,updated_at FROM users WHERE telegram_id=?").bind(targetId).first(),
-            env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId).all(),
-            env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first(),
+            messageQuery,
+            controlQuery,
             env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status AS payment_status,fulfillment_status AS status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             optionalTableRows(env.DB.prepare("SELECT id,'Индивидуальный заказ: ' || subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId), "custom_orders"),
             env.DB.prepare("SELECT id,message,status,created_at FROM support_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
@@ -955,6 +972,7 @@ export default {
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
+            conversation_migration_pending: !controlsReady || !senderTypeReady,
             messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
@@ -1232,8 +1250,27 @@ export default {
             (async()=>{try{return await env.DB.prepare("SELECT COUNT(*) AS total FROM system_error_log WHERE status='new'").first()}catch(e){if(isMissingTableError(e,"system_error_log"))return {total:null};throw e;}})(),
             env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key LIKE 'feature_%' OR key='sales_paused'").all()
           ]);
-          const tableChecks={users:true,products:true,orders:true,app_settings:true,system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),announcements:await tableExists(env,"announcements"),campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients")};
-          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+          const tableChecks={
+            users:true,products:true,orders:true,app_settings:true,order_items:await tableExists(env,"order_items"),
+            system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),
+            user_blocks:await tableExists(env,"user_blocks"),support_conversation_controls:await tableExists(env,"support_conversation_controls"),
+            support_internal_notes:await tableExists(env,"support_internal_notes"),announcements:await tableExists(env,"announcements"),
+            campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients"),
+            promo_codes:await tableExists(env,"promo_codes"),promo_redemptions:await tableExists(env,"promo_redemptions")
+          };
+          const migrations={
+            "0004_order_item_images":tableChecks.order_items&&await columnExists(env,"order_items","image_url"),
+            "0005_delivery_retry_lease":await columnExists(env,"order_items","delivery_started_at"),
+            "0006_admin_action_log":tableChecks.admin_action_log,
+            "0007_user_blocks":tableChecks.user_blocks,
+            "0008_support_human_takeover":tableChecks.support_conversation_controls&&await columnExists(env,"support_chat_messages","sender_type"),
+            "0009_support_internal_notes":tableChecks.support_internal_notes,
+            "0010_announcements":tableChecks.announcements,
+            "0011_mass_mailing":tableChecks.campaigns&&tableChecks.campaign_recipients,
+            "0012_system_monitoring":tableChecks.system_error_log,
+            "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars")
+          };
+          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "GET") {
           const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
