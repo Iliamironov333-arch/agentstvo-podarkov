@@ -314,6 +314,12 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div class="sectionhead"><h3>🖥️ Технический центр</h3><button class="secondary" type="button" onclick="loadAdminTechnicalCenter()">↻ Проверить систему</button></div>
    <p class="muted">Состояние базы и основных компонентов. Проверки выполняются безопасными запросами чтения; данные покупателей и заказы не изменяются.</p>
    <p id="adminTechnicalStatus" class="notice" aria-live="polite">Проверяем подключение…</p>
+   <div class="admin-user-detail">
+    <h4>🗄️ Резервная копия базы</h4>
+    <p class="muted">Создаёт файл JSON со структурой и данными таблиц D1. Файл может содержать личные данные покупателей и приватные заметки — храните его в безопасном месте.</p>
+    <button class="secondary" id="adminBackupDownloadButton" type="button" onclick="downloadAdminBackup()">Скачать резервную копию D1</button>
+    <p id="adminBackupStatus" class="notice" aria-live="polite">Ручной экспорт доступен владельцу. Автоматическое хранение и восстановление подключаются отдельно.</p>
+   </div>
    <div class="admin-metrics" id="adminTechnicalMetrics"></div>
    <h4>Компоненты базы данных</h4><div id="adminTechnicalTables"></div>
    <div class="divider"></div>
@@ -752,6 +758,27 @@ const adminFeatureDefinitions=[
  {key:'feature_support',title:'Поддержка',description:'Отправка сообщений ИИ-помощнику и владельцу'},
  {key:'feature_vip',title:'VIP-подписка',description:'Создание новых VIP-счетов'}
 ];
+
+async function downloadAdminBackup(){
+ const status=document.getElementById('adminBackupStatus'),button=document.getElementById('adminBackupDownloadButton');
+ if(!status||!button)return;
+ if(!API_BASE||!initData){status.textContent='Открой панель владельца через Telegram.';return;}
+ button.disabled=true;status.textContent='Формируем резервную копию D1…';
+ try{
+  const response=await fetch(API_BASE+'/api/admin/backup/export',{headers:{'X-Telegram-Init-Data':initData}});
+  if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||'Не удалось создать резервную копию (HTTP '+response.status+').');}
+  const blob=await response.blob();
+  if(!blob.size)throw new Error('Сервер вернул пустой файл.');
+  const disposition=response.headers.get('Content-Disposition')||'';
+  const match=disposition.match(/filename="([^"]+)"/i);
+  const filename=match?match[1]:'agentstvo-podarkov-backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+  const url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status.textContent='Резервная копия подготовлена: '+(blob.size/1024).toFixed(1)+' КБ. Сохраните файл в надёжном месте.';
+ }catch(e){status.textContent=e.message||'Ошибка экспорта.';}
+ finally{button.disabled=false;}
+}
 
 async function loadAdminTechnicalCenter(){
  const status=document.getElementById('adminTechnicalStatus');if(!status)return;status.textContent='Проверяем базу и компоненты…';
