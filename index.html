@@ -691,10 +691,14 @@ async function openAdminUser(telegramId) {
    ? (activeBlock.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(activeBlock.reason||'Без причины')+' · '+(activeBlock.blocked_at||'Дата неизвестна')
    : 'Активных ограничений нет.';
   blockControls.append(blockStatus);
+  const canBan=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_ban===true;
+  const canUnban=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_unban===true;
   if(activeBlock){
-   const unblock=document.createElement('button');unblock.type='button';unblock.className='secondary';unblock.textContent='Снять блокировку';unblock.disabled=!!data.migrations_pending;
-   unblock.addEventListener('click',()=>adminUnblockUser(telegramId));blockControls.append(unblock);
-  }else{
+   if(canUnban){
+    const unblock=document.createElement('button');unblock.type='button';unblock.className='secondary';unblock.textContent='Снять блокировку';unblock.disabled=!!data.migrations_pending;
+    unblock.addEventListener('click',()=>adminUnblockUser(telegramId));blockControls.append(unblock);
+   }
+  }else if(canBan){
    const blockType=document.createElement('select');blockType.id='adminBlockType';blockType.setAttribute('aria-label','Тип блокировки');
    [['purchases','Запретить покупки'],['full','Полностью закрыть доступ']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;blockType.append(option);});
    const blockReason=document.createElement('input');blockReason.id='adminBlockReason';blockReason.type='text';blockReason.maxLength=500;blockReason.placeholder='Обязательная причина блокировки';blockReason.setAttribute('aria-label','Причина блокировки');
@@ -725,14 +729,17 @@ async function openAdminUser(telegramId) {
    });
   }
   box.append(audit);
-  const controls=document.createElement('div');controls.className='admin-balance-controls';
-  const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
-  const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
-  const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
-  const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.disabled=!!data.migrations_pending;action.addEventListener('click',()=>adminAdjustBalance(telegramId));
-  const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
-  controls.append(amount,reason,action,hint);box.append(controls);
-  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+  const canAdjust=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;
+   if(canAdjust){
+    const controls=document.createElement('div');controls.className='admin-balance-controls';
+    const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
+    const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
+    const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
+    const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.disabled=!!data.migrations_pending;action.addEventListener('click',()=>adminAdjustBalance(telegramId));
+    const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
+    controls.append(amount,reason,action,hint);box.append(controls);
+   }
+   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
 }
 
