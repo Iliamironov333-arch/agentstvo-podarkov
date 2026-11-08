@@ -114,8 +114,13 @@ select:focus,input:focus,textarea:focus{outline:2px solid var(--gold);outline-of
 .admin-metric strong{display:block;color:var(--gold2);font-size:25px;margin-top:8px;overflow-wrap:anywhere}
 body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 @media(min-width:600px){.admin-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.admin-search{display:flex;gap:8px;align-items:center}
-.admin-search input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px;color:var(--text);font:inherit}
+.admin-search{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;align-items:stretch;width:100%;min-width:0}
+.admin-search>*{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;flex:none}
+.admin-search input{flex:none;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px;color:var(--text);font:inherit}
+#adminPanelView .admin-search input[type=text],#adminPanelView .admin-search input[type=search]{width:100%;min-width:0}
+#adminPanelView .admin-user-detail input[type=checkbox],#adminPanelView .admin-user-detail input[type=radio]{display:inline-block;width:18px!important;min-width:18px!important;max-width:18px;min-height:18px;justify-self:start}
+#adminPanelView #adminStaffPermissionEditor label{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;gap:10px}
+#adminPanelView #adminStaffPermissionEditor label input{width:18px!important;min-width:18px!important;max-width:18px}
 .admin-user-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .admin-user-row:last-child{border-bottom:0}
 .admin-user-row strong,.admin-user-row small{display:block;overflow-wrap:anywhere}
@@ -884,6 +889,26 @@ async function openAdminUser(telegramId) {
    });
   }
   box.append(blockControls);
+  if(adminSession?.root_owner===true){
+   const staffActions=document.createElement('div');staffActions.className='admin-block-controls';
+   const staffHeading=document.createElement('h4');staffHeading.textContent='Должность в Агентстве';staffActions.append(staffHeading);
+   const staffButton=document.createElement('button');staffButton.type='button';staffButton.className='primary';
+   staffButton.textContent='Назначить модератором';
+   staffButton.addEventListener('click',async()=>{
+    if(!confirm('Назначить пользователя '+telegramId+' модератором? По умолчанию все разрешения будут выключены.'))return;
+    staffButton.disabled=true;
+    try{
+     await apiFetch('/api/admin/staff/role',{method:'POST',body:JSON.stringify({telegram_id:String(telegramId),role:'moderator'})});
+     toast('Модератор назначен. Теперь настройте его разрешения.');
+     await loadAdminStaff();
+     const staffData=await apiFetch('/api/admin/staff');
+     const member=(staffData.staff||[]).find(item=>String(item.telegram_id)===String(telegramId));
+     if(member)openAdminStaffPermissions(member);
+    }catch(e){toast(e.message||'Не удалось назначить модератора.');}
+    finally{staffButton.disabled=false;}
+   });
+   staffActions.append(staffButton);box.append(staffActions);
+  }
   const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
   const audit=document.createElement('div');audit.className='admin-block-controls';
   const auditTitle=document.createElement('h4');auditTitle.textContent='История административных действий';audit.append(auditTitle);
