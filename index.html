@@ -122,6 +122,19 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 .admin-detail-line{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;overflow-wrap:anywhere}
 .admin-detail-line:last-child{border:0}
 .admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
+.admin-product-actions,.admin-product-row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.admin-product-actions>*{flex:1;min-width:120px}
+#adminProductEditor{display:grid;gap:10px;margin-top:12px}
+#adminProductEditor label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+#adminProductEditor input,#adminProductEditor textarea,#adminProductEditor select{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font:inherit}
+#adminProductEditor textarea{resize:vertical;min-height:70px}
+.admin-product-row-actions button{min-width:76px}
+.admin-order-actions{display:grid;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.admin-order-actions h4{margin:0;color:var(--gold2)}
+.admin-order-actions label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.admin-order-actions select,.admin-order-actions textarea{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font:inherit}
+.admin-order-actions textarea{resize:vertical;min-height:70px}
+.admin-order-actions button{width:100%}
 .admin-balance-controls{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
 .admin-balance-controls h4{margin:0 0 10px;color:var(--gold2)}
 .admin-balance-controls input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit}
@@ -155,6 +168,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 <main>
 <section id="menuView">
  <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p></div>
+ <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
  <div class="menu-grid">
   <button class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
@@ -173,12 +187,29 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
+ <div class="panel" id="adminStaffPanel" hidden>
+  <h3>🛡️ Должности и права доступа</h3>
+  <p class="notice">Управление доступно владельцу. Модератору можно выдавать и отзывать каждое разрешение отдельно.</p>
+  <div class="admin-search">
+   <input id="adminStaffTelegramId" type="text" inputmode="numeric" maxlength="64" placeholder="Telegram ID пользователя">
+   <select id="adminStaffRole" aria-label="Должность">
+    <option value="moderator">Модератор</option><option value="owner">Владелец</option><option value="client">Клиент</option>
+   </select>
+   <button class="primary" type="button" onclick="saveAdminStaffRole()">Назначить должность</button>
+  </div>
+  <p id="adminStaffStatus" class="notice" aria-live="polite">Список сотрудников загружается…</p>
+  <div id="adminStaffList"></div>
+  <div id="adminStaffPermissionEditor" class="admin-user-detail hidden"></div>
+ </div>
  <div class="sectionhead"><h3>Обзор Агентства</h3><button class="secondary" type="button" id="adminRefreshBtn" onclick="loadAdminDashboard()">↻ Обновить</button></div>
  <div class="admin-metrics" id="adminMetrics">
   <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
   <div class="admin-metric"><span>Всего заказов</span><strong id="adminOrders">—</strong></div>
+  <div class="admin-metric"><span>Обычные заказы</span><strong id="adminProductOrders">—</strong></div>
+  <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="adminCustomOrders">—</strong></div>
   <div class="admin-metric"><span>Выручка</span><strong id="adminRevenue">— ⭐</strong></div>
   <div class="admin-metric"><span>Ожидают обработки</span><strong id="adminWaiting">—</strong></div>
+  <div class="admin-metric"><span>Ожидают оплаты</span><strong id="adminPendingPayments">—</strong></div>
  </div>
  <p class="notice" id="adminUpdatedAt">Показатели загружаются из D1 через защищённый Worker.</p>
  <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
@@ -200,6 +231,143 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
    <div id="adminOrdersList"></div>
    <div id="adminOrderDetail" class="admin-user-detail hidden"></div>
   </div>
+  <div class="panel" id="adminBackupPanel">
+   <div class="sectionhead"><h3>🛡️ Резервные копии D1</h3><button class="secondary" type="button" onclick="loadAdminBackupStatus()">↻ Проверить</button></div>
+   <p class="muted">Cloudflare D1 Time Travel хранит точки восстановления автоматически в рамках срока хранения вашего тарифа. SQL-экспорт создаёт отдельный файл с временной ссылкой. Во время экспорта база может временно быть недоступна.</p>
+   <p id="adminBackupStatus" class="notice" aria-live="polite">Проверяем доступность резервного копирования…</p>
+   <div class="row-actions"><button class="primary" type="button" id="adminBackupExportButton" onclick="createAdminBackup()">Создать SQL-копию</button><button class="secondary" type="button" id="adminBackupPollButton" onclick="createAdminBackup(true)" disabled>Продолжить экспорт</button></div>
+   <div id="adminBackupDownload"></div>
+   <h4>История резервных операций</h4><div id="adminBackupHistory" class="notice">История загружается…</div>
+   <div class="divider"></div>
+   <h4>Восстановление D1</h4>
+   <p class="notice">Восстановление откатывает рабочую базу и может удалить изменения, сделанные после выбранной точки. Используйте только при необходимости.</p>
+   <label>Bookmark (точка восстановления)<input id="adminBackupRestoreBookmark" maxlength="120" placeholder="Вставьте bookmark Cloudflare"></label>
+   <label>Или дата и время ISO 8601<input id="adminBackupRestoreTimestamp" maxlength="40" placeholder="2026-11-08T10:30:00Z"></label>
+   <label>Подтверждение<input id="adminBackupRestoreConfirm" maxlength="20" placeholder="Введите RESTORE D1"></label>
+   <button class="secondary" type="button" id="adminBackupRestoreButton" onclick="restoreAdminBackup()">Восстановить базу</button>
+  </div>
+  <div class="panel" id="adminPromosPanel">
+   <div class="sectionhead"><h3>🏷️ Промокоды и акции</h3><button class="secondary" type="button" onclick="loadAdminPromos()">↻ Обновить</button></div>
+   <p class="muted">Дополнительная скидка применяется только по введённому коду. Итоговую цену всегда рассчитывает Worker.</p>
+   <div class="admin-user-detail">
+    <label>Код<input id="adminPromoCode" maxlength="32" placeholder="Например, AUTUMN10"></label>
+    <label>Скидка, %<input id="adminPromoPercent" type="number" min="1" max="90" step="1" value="10"></label>
+    <label>Лимит использований (пусто — без лимита)<input id="adminPromoMaxUses" type="number" min="1" step="1" placeholder="Без лимита"></label>
+    <label>Только ID товаров (через запятую; пусто — любые)<input id="adminPromoProductIds" maxlength="2000" placeholder="Например: 0, 12, 25"></label>
+    <label>Только категории (через запятую; пусто — любые)<input id="adminPromoCategories" maxlength="1000" placeholder="Например: animals, art"></label>
+    <p class="muted">Если заполнены оба поля, промокод действует на товар, если совпал его ID или категория. Оба поля пустые — скидка на весь каталог.</p>
+    <label>Начало действия<input id="adminPromoStarts" type="datetime-local"></label>
+    <label>Окончание действия<input id="adminPromoEnds" type="datetime-local"></label>
+    <label>Состояние<select id="adminPromoActive"><option value="1">Активен</option><option value="0">Отключён</option></select></label>
+    <button class="primary" type="button" onclick="saveAdminPromo()">Сохранить промокод</button>
+   </div>
+   <p id="adminPromosStatus" class="notice" aria-live="polite">Список промокодов загружается…</p><div id="adminPromosList"></div>
+  </div>
+  <div class="panel" id="adminCatalogPanel">
+   <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div>
+   <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
+   <p id="adminProductsStatus" class="notice" aria-live="polite">Каталог загружается…</p>
+   <div id="adminProductsList"></div>
+   <div id="adminProductEditor" class="admin-user-detail hidden">
+    <h4 id="adminProductEditorTitle">Новый товар</h4>
+    <input type="hidden" id="adminProductId">
+    <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
+    <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
+    <label>Ссылка на фотографию (HTTPS)<input id="adminProductImage" type="url" maxlength="1000" placeholder="https://…"></label>
+    <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
+    <datalist id="adminProductCategories"></datalist>
+    <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
+    <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
+    <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
+   </div>
+  </div>
+  <div class="panel" id="adminSystemControlsPanel">
+   <h3>🚦 Экстренное управление</h3>
+   <p class="muted">Остановка запрещает новые покупки и оформление заказов. Каталог остаётся доступным, уже оплаченные заказы не затрагиваются.</p>
+   <p id="adminSalesPauseStatus" class="notice" aria-live="polite">Проверяем состояние продаж…</p>
+   <button id="adminSalesPauseButton" type="button" class="secondary" onclick="toggleAdminSalesPause()" disabled>Загрузка…</button>
+  </div>
+  <div class="panel" id="adminAnalyticsPanel">
+   <div class="sectionhead"><h3>📈 Аналитика за 30 дней</h3><button class="secondary" type="button" onclick="loadAdminAnalytics()">↻ Обновить</button></div>
+   <div id="adminAnalyticsSummary" class="notice" aria-live="polite">Загрузка аналитики…</div>
+   <div id="adminAnalyticsDaily" class="admin-detail-line"></div>
+  </div>
+  <div class="panel" id="adminSupportPanel">
+   <div class="sectionhead"><h3>💬 Поддержка и CRM</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
+   <p class="muted">История переписки с ИИ и обращения покупателей. Здесь можно отслеживать диалоги и менять статус заявок.</p>
+   <h4>Диалоги с помощником</h4>
+   <div class="admin-search"><input id="adminSupportSearch" type="search" maxlength="64" placeholder="Имя, username или Telegram ID"><button class="secondary" type="button" onclick="loadAdminSupport()">Найти</button></div>
+   <p id="adminConversationsStatus" class="notice" aria-live="polite">Диалоги загружаются…</p><div id="adminConversationsList"></div>
+   <div id="adminConversationDetail" class="admin-user-detail hidden"></div>
+   <div class="divider"></div>
+   <h4>Обращения владельцу</h4>
+   <div class="admin-search"><select id="adminTicketFilter" onchange="loadAdminSupportTickets()"><option value="all">Все обращения</option><option value="open">Новые</option><option value="in_progress">В работе</option><option value="closed">Закрытые</option></select><input id="adminTicketSearch" type="search" maxlength="64" placeholder="Поиск по тексту, имени, @username или Telegram ID" onkeydown="if(event.key==='Enter')loadAdminSupportTickets()"><button class="secondary" type="button" onclick="loadAdminSupportTickets()">Найти</button></div>
+   <div id="adminTicketSummary" class="notice" aria-live="polite">Сводка активности загружается…</div>
+   <p id="adminTicketsStatus" class="notice" aria-live="polite">Обращения загружаются…</p><div id="adminTicketsList"></div>
+  </div>
+  <div class="panel" id="adminAnnouncementsPanel">
+   <div class="sectionhead"><h3>📢 Объявления</h3><button class="secondary" type="button" onclick="loadAdminAnnouncements()">↻ Обновить</button></div>
+   <p class="muted">Сообщения на главной странице Mini App. Можно выбрать всех покупателей или конкретные Telegram ID, задать период показа и сначала сохранить черновик.</p>
+   <div id="adminAnnouncementsStatus" class="notice" aria-live="polite">Загружаем объявления…</div>
+   <div id="adminAnnouncementsList"></div>
+   <div class="divider"></div>
+   <h4 id="adminAnnouncementEditorTitle">Новое объявление</h4>
+   <input type="hidden" id="adminAnnouncementId">
+   <label>Заголовок<input id="adminAnnouncementTitle" maxlength="100" placeholder="Например: Новая коллекция уже в каталоге"></label>
+   <label>Текст объявления<textarea id="adminAnnouncementBody" rows="4" maxlength="3000" placeholder="Что важно сообщить покупателям?"></textarea></label>
+   <label>Ссылка (необязательно)<input id="adminAnnouncementLink" type="url" maxlength="500" placeholder="https://…"></label>
+   <label>Аудитория<select id="adminAnnouncementAudience" onchange="updateAnnouncementAudienceUi()"><option value="all">Все пользователи Mini App</option><option value="selected">Выбранные Telegram ID</option></select></label>
+   <label id="adminAnnouncementIdsWrap" class="hidden">Telegram ID (через запятую или с новой строки)<textarea id="adminAnnouncementIds" rows="3" placeholder="123456789, 987654321"></textarea></label>
+   <div class="admin-search"><label>Начало показа<input id="adminAnnouncementStart" type="datetime-local"></label><label>Окончание показа<input id="adminAnnouncementEnd" type="datetime-local"></label></div>
+   <label>Статус<select id="adminAnnouncementStatus"><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="archived">В архиве</option></select></label>
+   <div class="admin-product-actions"><button class="secondary" type="button" onclick="previewAnnouncementAudience()">Проверить аудиторию</button><button class="primary" type="button" onclick="saveAdminAnnouncement()">Сохранить объявление</button><button class="secondary" type="button" onclick="resetAdminAnnouncementForm()">Очистить</button></div>
+   <p id="adminAnnouncementPreview" class="notice" aria-live="polite">Перед публикацией проверь аудиторию и предпросмотр.</p>
+   <div id="adminAnnouncementLivePreview" class="notice hidden"></div>
+  </div>
+
+  <div class="panel" id="adminMailingPanel">
+   <div class="sectionhead"><h3>📨 Центр массовых рассылок</h3><button class="secondary" type="button" onclick="loadAdminCampaigns()">↻ Обновить</button></div>
+   <p class="muted">Создавайте рассылки покупателям. Сначала сохраните черновик и проверьте аудиторию. Отправка начинается только после отдельного подтверждения владельца.</p>
+   <p id="adminCampaignsStatus" class="notice" aria-live="polite">Загружаем кампании…</p><div id="adminCampaignsList"></div><div id="adminCampaignReport" class="admin-user-detail hidden"></div>
+   <div class="divider"></div><h4 id="adminCampaignEditorTitle">Новая рассылка</h4>
+   <input type="hidden" id="adminCampaignId">
+   <label>Название кампании<input id="adminCampaignTitle" maxlength="100" placeholder="Например: Новинки недели"></label>
+   <label>Текст сообщения<textarea id="adminCampaignBody" rows="5" maxlength="4000" placeholder="Сообщение, которое получат пользователи"></textarea></label>
+   <label>Аудитория<select id="adminCampaignAudience" onchange="updateCampaignAudienceUi()"><option value="all">Все пользователи</option><option value="buyers">Покупатели с подтверждённой оплатой</option><option value="inactive">Неактивные 30 дней</option><option value="selected">Выбранные Telegram ID</option></select></label>
+   <label id="adminCampaignIdsWrap" class="hidden">Telegram ID (до 500, через запятую или с новой строки)<textarea id="adminCampaignIds" rows="3" placeholder="123456789, 987654321"></textarea></label>
+   <label>Фотография (необязательно, HTTPS URL)<input id="adminCampaignMedia" type="url" maxlength="1000" placeholder="https://…"></label>
+   <div class="admin-search"><label>Текст кнопки (необязательно)<input id="adminCampaignButtonText" maxlength="40" placeholder="Открыть каталог"></label><label>Ссылка кнопки<input id="adminCampaignButtonUrl" type="url" maxlength="500" placeholder="https://…"></label></div>
+   <div class="admin-product-actions"><button class="secondary" type="button" onclick="previewAdminCampaign()">Проверить аудиторию</button><button class="primary" type="button" onclick="saveAdminCampaign()">Сохранить черновик</button><button class="secondary" type="button" onclick="resetAdminCampaignForm()">Очистить</button></div>
+   <p id="adminCampaignPreview" class="notice" aria-live="polite">Перед запуском проверьте количество получателей.</p>
+   <div id="adminCampaignLivePreview" class="notice hidden"></div>
+  </div>
+
+  <div class="panel" id="adminTechnicalCenterPanel">
+   <div class="sectionhead"><h3>🖥️ Технический центр</h3><button class="secondary" type="button" onclick="loadAdminTechnicalCenter()">↻ Проверить систему</button></div>
+   <p class="muted">Состояние базы и основных компонентов. Проверки выполняются безопасными запросами чтения; данные покупателей и заказы не изменяются.</p>
+   <p id="adminTechnicalStatus" class="notice" aria-live="polite">Проверяем подключение…</p>
+   <div class="admin-user-detail">
+    <h4>🗄️ Резервные копии и восстановление D1</h4>
+    <p class="muted">Cloudflare D1 Time Travel автоматически сохраняет точки восстановления базы. Доступный период зависит от тарифа Cloudflare. Это восстановление состояния базы за прошлое время, а не отдельный файл для скачивания.</p>
+    <p id="adminBackupTimeTravelStatus" class="notice" aria-live="polite">Проверяем доступность точки восстановления…</p>
+    <button class="secondary" id="adminBackupRefreshButton" type="button" onclick="loadAdminBackupStatus()">↻ Проверить точку восстановления</button>
+    <p class="muted">Восстановление перезаписывает данные базы. Здесь доступна проверка и копирование bookmark; запуск отката намеренно оставлен отдельной защищённой операцией.</p>
+    <p class="muted">Дополнительно можно скачать независимый JSON-экспорт со структурой и данными таблиц. Он может содержать личные данные покупателей и приватные заметки — храните файл в безопасном месте.</p>
+    <button class="secondary" id="adminBackupDownloadButton" type="button" onclick="downloadAdminBackup()">Скачать резервную копию D1 (JSON)</button>
+    <p id="adminBackupStatus" class="notice" aria-live="polite">Ручной экспорт доступен владельцу.</p>
+   </div>
+   <div class="admin-metrics" id="adminTechnicalMetrics"></div>
+   <h4>Компоненты базы данных</h4><div id="adminTechnicalTables"></div>
+   <div class="divider"></div>
+   <h4>Переключатели функций</h4>
+   <p class="muted">Отключение блокирует новые запросы соответствующей функции на сервере. Уже созданные заказы и подтверждённые платежи не затрагиваются.</p>
+   <div id="adminFeatureFlags"><p class="muted">Загрузка переключателей…</p></div>
+   <div class="divider"></div>
+   <div class="sectionhead"><h4>Журнал ошибок</h4><button class="secondary" type="button" onclick="loadAdminErrorLog()">↻ Обновить</button></div>
+   <p id="adminErrorLogStatus" class="notice" aria-live="polite">Загружаем журнал…</p><div id="adminErrorLogList"></div>
+
+
+  </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
@@ -212,8 +380,11 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
-  <div class="lineitem"><span>Сумма до скидки</span><b id="subtotal">0 ⭐</b></div>
-  <div class="lineitem"><span>Скидка 10%</span><b id="discount">—</b></div>
+  <label>Промокод<input id="promoCodeInput" maxlength="32" autocomplete="off" placeholder="Введите код" oninput="activePromo=null;document.getElementById('promoStatus').textContent='Код изменён. Нажмите «Применить промокод» снова.';drawCart()"></label>
+  <button class="secondary" id="applyPromoButton" type="button" onclick="applyPromoCode()">Применить промокод</button>
+  <p class="notice" id="promoStatus" aria-live="polite">Скидка по каталогу уже учтена. Промокод — дополнительная акция.</p>
+  <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
+  <div class="lineitem"><span>Скидка</span><b id="discount">Уже учтена в каталоге</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оплатить через Telegram 🎁</button>
   <p class="notice" id="deliveryNotice">После подтверждения оплаты бот отправит открытку. Саму работу ты доставишь покупателю отдельно.</p>
@@ -341,6 +512,7 @@ async function loadProducts() {
  }
 }
 let cart = JSON.parse(localStorage.getItem('gift-cart') || '{}');
+let activePromo = null;
 let vipActive = false;
 let activeFilter = 'all';
 
@@ -355,7 +527,8 @@ function showView(id) {
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); }
+ if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminAnnouncements(); loadAdminCampaigns(); }
+ if (id === 'menuView') loadAnnouncements();
 }
 
 function openBot(action) {
@@ -437,11 +610,11 @@ function drawCart() {
  }
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
- const discountAmount = Math.floor(subtotal * 0.10);
- const total = Math.max(0,subtotal - discountAmount);
+ const discountAmount = activePromo ? Number(activePromo.discount_stars||0) : 0;
+ const total = Math.max(0,subtotal-discountAmount);
 
  document.getElementById('subtotal').textContent = money(subtotal);
- document.getElementById('discount').textContent = '−' + money(discountAmount);
+ document.getElementById('discount').textContent = discountAmount ? '-'+money(discountAmount)+' ('+activePromo.code+')' : 'Уже учтена в каталоге';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
@@ -456,6 +629,7 @@ function changeQty(id,d) {
  const next = Number(cart[id] || 0) + d;
  if (next > 10) { toast('Максимум 10 штук одного товара.'); return; }
  cart[id] = Math.max(0,next);
+ activePromo = null;
  if (!cart[id]) delete cart[id];
  persistCart();
  drawProducts();
@@ -500,6 +674,8 @@ async function openAdminUser(telegramId) {
   addLine('Имя',u.first_name);addLine('Username',u.username?'@'+u.username:'—');
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
+  if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть единую CRM-карточку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
   const orders=Array.isArray(data.orders)?data.orders:[];
   addLine('Заказов',orders.length);
   orders.forEach(o=>addLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
@@ -515,14 +691,18 @@ async function openAdminUser(telegramId) {
    ? (activeBlock.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(activeBlock.reason||'Без причины')+' · '+(activeBlock.blocked_at||'Дата неизвестна')
    : 'Активных ограничений нет.';
   blockControls.append(blockStatus);
+  const canBan=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_ban===true;
+  const canUnban=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_unban===true;
   if(activeBlock){
-   const unblock=document.createElement('button');unblock.type='button';unblock.className='secondary';unblock.textContent='Снять блокировку';
-   unblock.addEventListener('click',()=>adminUnblockUser(telegramId));blockControls.append(unblock);
-  }else{
+   if(canUnban){
+    const unblock=document.createElement('button');unblock.type='button';unblock.className='secondary';unblock.textContent='Снять блокировку';unblock.disabled=!!data.migrations_pending;
+    unblock.addEventListener('click',()=>adminUnblockUser(telegramId));blockControls.append(unblock);
+   }
+  }else if(canBan){
    const blockType=document.createElement('select');blockType.id='adminBlockType';blockType.setAttribute('aria-label','Тип блокировки');
    [['purchases','Запретить покупки'],['full','Полностью закрыть доступ']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;blockType.append(option);});
    const blockReason=document.createElement('input');blockReason.id='adminBlockReason';blockReason.type='text';blockReason.maxLength=500;blockReason.placeholder='Обязательная причина блокировки';blockReason.setAttribute('aria-label','Причина блокировки');
-   const blockButton=document.createElement('button');blockButton.type='button';blockButton.className='primary';blockButton.textContent='Применить блокировку';
+   const blockButton=document.createElement('button');blockButton.type='button';blockButton.className='primary';blockButton.textContent='Применить блокировку';blockButton.disabled=!!data.migrations_pending;
    blockButton.addEventListener('click',()=>adminSetUserBlock(telegramId));
    blockControls.append(blockType,blockReason,blockButton);
   }
@@ -537,11 +717,11 @@ async function openAdminUser(telegramId) {
   box.append(blockControls);
   const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
   const audit=document.createElement('div');audit.className='admin-block-controls';
-  const auditTitle=document.createElement('h4');auditTitle.textContent='История действий владельца';audit.append(auditTitle);
+  const auditTitle=document.createElement('h4');auditTitle.textContent='История административных действий';audit.append(auditTitle);
   if(!adminHistory.length){
    const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
   }else{
-   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки'};
+   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки',staff_role_changed:'Изменение должности',staff_permissions_changed:'Изменение прав доступа'};
    adminHistory.forEach(item=>{
     const line=document.createElement('p');line.className='notice';
     line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
@@ -549,14 +729,17 @@ async function openAdminUser(telegramId) {
    });
   }
   box.append(audit);
-  const controls=document.createElement('div');controls.className='admin-balance-controls';
-  const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
-  const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
-  const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
-  const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.addEventListener('click',()=>adminAdjustBalance(telegramId));
-  const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
-  controls.append(amount,reason,action,hint);box.append(controls);
-  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+  const canAdjust=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;
+   if(canAdjust){
+    const controls=document.createElement('div');controls.className='admin-balance-controls';
+    const heading=document.createElement('h4');heading.textContent='Управление баллами';controls.append(heading);
+    const amount=document.createElement('input');amount.type='number';amount.step='1';amount.inputMode='numeric';amount.placeholder='Например: 50 или -20';amount.id='adminBalanceAmount';amount.setAttribute('aria-label','Количество баллов');
+    const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Причина операции';reason.id='adminBalanceReason';reason.setAttribute('aria-label','Причина операции');
+    const action=document.createElement('button');action.type='button';action.className='primary';action.textContent='Изменить баланс';action.disabled=!!data.migrations_pending;action.addEventListener('click',()=>adminAdjustBalance(telegramId));
+    const hint=document.createElement('p');hint.className='notice';hint.textContent='Положительное число начисляет баллы, отрицательное списывает. Баланс не может стать отрицательным.';
+    controls.append(amount,reason,action,hint);box.append(controls);
+   }
+   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
 }
 
@@ -611,7 +794,422 @@ async function adminAdjustBalance(telegramId) {
  finally{if(button)button.disabled=false;}
 }
 
+let adminSalesPaused=false;
+
+const adminFeatureDefinitions=[
+ {key:'feature_product_orders',title:'Заказы из каталога',description:'Создание новых заказов на товары'},
+ {key:'feature_custom_orders',title:'Индивидуальные заказы',description:'Отправка заявок на авторские работы'},
+ {key:'feature_points_topup',title:'Пополнение баланса',description:'Создание счёта на пополнение баллов'},
+ {key:'feature_support',title:'Поддержка',description:'Отправка сообщений ИИ-помощнику и владельцу'},
+ {key:'feature_vip',title:'VIP-подписка',description:'Создание новых VIP-счетов'}
+];
+
+async function downloadAdminBackup(){
+ const status=document.getElementById('adminBackupStatus'),button=document.getElementById('adminBackupDownloadButton');
+ if(!status||!button)return;
+ if(!API_BASE||!initData){status.textContent='Открой панель владельца через Telegram.';return;}
+ button.disabled=true;status.textContent='Формируем резервную копию D1…';
+ try{
+  const response=await fetch(API_BASE+'/api/admin/backup/export',{headers:{'X-Telegram-Init-Data':initData}});
+  if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||'Не удалось создать резервную копию (HTTP '+response.status+').');}
+  const blob=await response.blob();
+  if(!blob.size)throw new Error('Сервер вернул пустой файл.');
+  const disposition=response.headers.get('Content-Disposition')||'';
+  const match=disposition.match(/filename="([^"]+)"/i);
+  const filename=match?match[1]:'agentstvo-podarkov-backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+  const url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status.textContent='Резервная копия подготовлена: '+(blob.size/1024).toFixed(1)+' КБ. Сохраните файл в надёжном месте.';
+ }catch(e){status.textContent=e.message||'Ошибка экспорта.';}
+ finally{button.disabled=false;}
+}
+
+async function loadAdminBackupStatus(){
+ const status=document.getElementById('adminBackupTimeTravelStatus'),button=document.getElementById('adminBackupRefreshButton');
+ if(!status)return;
+ if(button)button.disabled=true;
+ status.textContent='Проверяем точку восстановления D1…';
+ try{
+  const data=await apiFetch('/api/admin/backup/status');
+  if(!data.time_travel_available||!data.bookmark){
+   status.textContent='Cloudflare Time Travel сейчас не подтвердил доступность точки восстановления. Используйте ручной JSON-экспорт и проверьте состояние D1 в Cloudflare.';
+   return;
+  }
+  status.replaceChildren();
+  const label=document.createElement('span');
+  label.textContent='Точка восстановления доступна · проверено '+formatDate(data.checked_at);
+  const code=document.createElement('code');
+  code.style.cssText='display:block;overflow-wrap:anywhere;margin-top:8px';
+  code.textContent=data.bookmark;
+  const copy=document.createElement('button');
+  copy.type='button';copy.className='secondary';copy.textContent='Скопировать bookmark';
+  copy.addEventListener('click',async()=>{
+   try{await navigator.clipboard.writeText(data.bookmark);toast('Bookmark скопирован.');}
+   catch(e){toast('Не удалось скопировать автоматически. Выделите bookmark вручную.');}
+  });
+  status.append(label,code,copy);
+ }catch(e){status.textContent=e.message||'Не удалось проверить Time Travel.';}
+ finally{if(button)button.disabled=false;}
+}
+
+async function loadAdminTechnicalCenter(){
+ const status=document.getElementById('adminTechnicalStatus');if(!status)return;status.textContent='Проверяем базу и компоненты…';
+ try{
+  const d=await apiFetch('/api/admin/technical-status');status.textContent='База данных: подключена · Проверено: '+formatDate(d.checked_at);
+  const metrics=document.getElementById('adminTechnicalMetrics');metrics.replaceChildren();
+  [['Пользователи',d.counts.users],['Товары',d.counts.products],['Заказы',d.counts.orders],['Ожидают оплаты',d.counts.pending_payments],['Новые ошибки',d.new_errors==null?'Миграция не применена':d.new_errors]].forEach(([label,value])=>{const card=document.createElement('div');card.className='admin-metric';const span=document.createElement('span');span.textContent=label;const strong=document.createElement('strong');strong.textContent=Number.isFinite(value)?Number(value).toLocaleString('ru-RU'):String(value);card.append(span,strong);metrics.append(card);});
+  const tables=document.getElementById('adminTechnicalTables');tables.replaceChildren();
+  const integrations=document.createElement('div');integrations.className='notice';const integrationLabels={telegram_bot:'Telegram Bot API',telegram_webhook:'Webhook Telegram',openai:'OpenAI API'};Object.entries(d.integrations||{}).forEach(([key,ready])=>{const line=document.createElement('div');line.textContent=integrationLabels[key]+': '+(ready?'настроено':'не настроено');integrations.append(line);});tables.append(integrations);
+  Object.entries(d.tables||{}).forEach(([name,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=name;const right=document.createElement('b');right.textContent=ready?'Подключена':'Нужна миграция';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
+  const migrationTitle=document.createElement('h4');migrationTitle.textContent='Готовность миграций';tables.append(migrationTitle);
+  const migrationLabels={'0004_order_item_images':'0004 · Изображения в заказах','0005_delivery_retry_lease':'0005 · Безопасный повтор доставки','0006_admin_action_log':'0006 · Журнал действий владельца','0007_user_blocks':'0007 · Блокировки покупателей','0008_support_human_takeover':'0008 · Передача ИИ-диалогов владельцу','0009_support_internal_notes':'0009 · Приватные заметки CRM','0010_announcements':'0010 · Объявления','0011_mass_mailing':'0011 · Массовые рассылки','0012_system_monitoring':'0012 · Журнал системных ошибок','0013_promo_codes':'0013 · Промокоды','0014_promo_code_scopes':'0014 · Ограничения промокодов по товарам и категориям'};
+  Object.entries(d.migrations||{}).forEach(([key,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=migrationLabels[key]||key;const right=document.createElement('b');right.textContent=ready?'Готова':'Не применена';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
+  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminBackupStatus()]);
+ }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
+}
+async function loadAdminFeatureFlags(){
+ const root=document.getElementById('adminFeatureFlags');if(!root)return;root.replaceChildren();
+ try{const d=await apiFetch('/api/admin/feature-flags');adminFeatureDefinitions.forEach(item=>{const row=document.createElement('div');row.className='lineitem';const info=document.createElement('span');const title=document.createElement('b');title.textContent=item.title;const desc=document.createElement('small');desc.textContent=item.description;info.append(title,document.createElement('br'),desc);const button=document.createElement('button');button.type='button';const enabled=d.flags[item.key]!==false;button.className=enabled?'primary':'secondary';button.textContent=enabled?'Включено':'Отключено';button.addEventListener('click',async()=>{const next=!enabled;if(!confirm((next?'Включить':'Отключить')+' функцию «'+item.title+'»?'))return;button.disabled=true;try{await apiFetch('/api/admin/feature-flags',{method:'POST',body:JSON.stringify({key:item.key,enabled:next})});toast(next?'Функция включена.':'Функция отключена.');await loadAdminFeatureFlags();}catch(e){toast(e.message||'Не удалось изменить функцию.');button.disabled=false;}});row.append(info,button);root.append(row);});}catch(e){root.textContent=e.message||'Не удалось загрузить переключатели.';}
+}
+async function loadAdminErrorLog(){
+ const root=document.getElementById('adminErrorLogList'),status=document.getElementById('adminErrorLogStatus');if(!root||!status)return;root.replaceChildren();
+ try{const d=await apiFetch('/api/admin/error-log');if(d.migration_pending){status.textContent='Журнал пока недоступен: требуется миграция 0012.';return;}const rows=d.errors||[];status.textContent='Записей: '+rows.length+' · новые: '+rows.filter(x=>x.status==='new').length;if(!rows.length){root.textContent='Ошибок пока нет.';return;}rows.forEach(item=>{const row=document.createElement('div');row.className='admin-detail-line';const head=document.createElement('b');head.textContent='№'+item.id+' · '+item.severity+' · '+(item.status==='new'?'Новая':'Решена');const meta=document.createElement('small');meta.textContent=formatDate(item.created_at)+' · '+item.source;const message=document.createElement('p');message.textContent=item.message;if(item.status==='new'){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Отметить решённой';button.addEventListener('click',async()=>{button.disabled=true;try{await apiFetch('/api/admin/error-resolve',{method:'POST',body:JSON.stringify({id:item.id})});await loadAdminErrorLog();}catch(e){toast(e.message||'Не удалось обновить запись.');button.disabled=false;}});row.append(head,meta,message,button);}else row.append(head,meta,message);root.append(row);});}catch(e){status.textContent=e.message||'Не удалось загрузить журнал.';}
+}
+async function loadAdminSystemControls(){
+ const status=document.getElementById('adminSalesPauseStatus'),button=document.getElementById('adminSalesPauseButton');
+ if(!status||!button)return;
+ try{
+  const data=await apiFetch('/api/admin/system-controls');adminSalesPaused=!!data.sales_paused;
+  status.textContent=adminSalesPaused?'Продажи приостановлены. Каталог доступен, существующие оплаченные заказы продолжают работу.':'Продажи включены. Новые заказы и покупки разрешены.';
+  button.textContent=adminSalesPaused?'▶ Возобновить продажи':'⏸ Приостановить новые продажи';
+  button.className=adminSalesPaused?'primary':'secondary';button.disabled=false;
+ }catch(e){status.textContent=e.message||'Не удалось получить состояние продаж.';button.disabled=true;}
+}
+async function toggleAdminSalesPause(){
+ const next=!adminSalesPaused;
+ const promptText=next?'Приостановить оформление новых покупок? Каталог и оплаченные заказы останутся доступными.':'Возобновить оформление новых покупок?';
+ if(!confirm(promptText))return;
+ const button=document.getElementById('adminSalesPauseButton');if(button)button.disabled=true;
+ try{await apiFetch('/api/admin/system-controls',{method:'POST',body:JSON.stringify({sales_paused:next})});toast(next?'Новые продажи приостановлены.':'Продажи возобновлены.');await loadAdminSystemControls();}
+ catch(e){toast(e.message||'Не удалось изменить режим продаж.');if(button)button.disabled=false;}
+}
+async function loadAdminBackupHistory(){
+ const root=document.getElementById('adminBackupHistory');if(!root)return;root.textContent='Загружаем историю…';
+ try{const data=await apiFetch('/api/admin/backup-history');root.replaceChildren();if(data.migration_pending){root.textContent='Для журнала резервных операций требуется миграция 0006_admin_action_log.sql.';return;}
+ const rows=data.history||[];if(!rows.length){root.textContent='Резервных операций пока нет.';return;}
+ rows.forEach(row=>{const item=document.createElement('div');item.className='admin-detail-line';const title=document.createElement('b');title.textContent=(row.action_type==='d1_sql_export_created'?'SQL-экспорт':'Восстановление Time Travel')+' · '+(row.created_at||'');const details=document.createElement('div');let parsed={};try{parsed=JSON.parse(row.details||'{}');}catch(e){}details.textContent=row.action_type==='d1_sql_export_created'?'Файл: '+(parsed.filename||'SQL')+' · Bookmark: '+(parsed.bookmark||'—'):'Целевая точка: '+(parsed.target_bookmark||parsed.target_timestamp||'—')+' · Предыдущая: '+(parsed.previous_bookmark||'—');item.append(title,details);root.append(item);});
+ }catch(e){root.textContent=e.message||'Не удалось загрузить историю.';}
+}
+let adminBackupBookmark = null;
+async function loadAdminBackupStatus(){
+ const status=document.getElementById('adminBackupStatus');if(!status)return;
+ status.textContent='Проверяем Cloudflare D1 Time Travel…';
+ try{const data=await apiFetch('/api/admin/backup-status');status.textContent='Time Travel доступен. Текущая точка: '+(data.bookmark||'Cloudflare не вернул bookmark')+'. Секрет API подключён.';await loadAdminBackupHistory();}
+ catch(e){status.textContent=e.message||'Для резервного центра требуется секрет CLOUDFLARE_API_TOKEN с правами D1 Read и D1 Write.';}
+}
+async function createAdminBackup(continueExport=false){
+ const status=document.getElementById('adminBackupStatus'),download=document.getElementById('adminBackupDownload'),start=document.getElementById('adminBackupExportButton'),poll=document.getElementById('adminBackupPollButton');
+ if(start)start.disabled=true;if(poll)poll.disabled=true;status.textContent=continueExport?'Проверяем состояние экспорта…':'Запускаем экспорт D1. Во время экспорта база может временно не отвечать.';
+ try{
+  const data=await apiFetch('/api/admin/backup-export',{method:'POST',body:JSON.stringify({current_bookmark:continueExport?adminBackupBookmark:''})});
+  adminBackupBookmark=data.at_bookmark||adminBackupBookmark;
+  if(data.status==='active'){status.textContent='Экспорт выполняется. Нажмите «Продолжить экспорт» через некоторое время.';if(poll)poll.disabled=false;}
+  else if(data.status==='complete'&&data.signed_url){status.textContent='SQL-копия готова: '+(data.filename||'backup.sql')+'. Ссылка Cloudflare действует ограниченное время.';await loadAdminBackupHistory();download.replaceChildren();const link=document.createElement('a');link.href=data.signed_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Скачать резервную копию SQL';download.append(link);adminBackupBookmark=null;}
+  else{status.textContent='Состояние экспорта: '+String(data.status||'неизвестно')+'. '+(data.messages||[]).join(' ');if(data.at_bookmark&&poll)poll.disabled=false;}
+ }catch(e){status.textContent=e.message||'Не удалось создать SQL-копию.';}
+ finally{if(start)start.disabled=false;}
+}
+async function restoreAdminBackup(){
+ const bookmark=document.getElementById('adminBackupRestoreBookmark').value.trim(),timestamp=document.getElementById('adminBackupRestoreTimestamp').value.trim(),confirmation=document.getElementById('adminBackupRestoreConfirm').value.trim();
+ if((!bookmark&&!timestamp)||(bookmark&&timestamp)){toast('Укажите либо bookmark, либо дату и время.');return;}
+ if(confirmation!=='RESTORE D1'){toast('Введите точное подтверждение RESTORE D1.');return;}
+ if(!confirm('ВНИМАНИЕ: восстановление откатит рабочую базу D1. Продолжить?'))return;
+ const button=document.getElementById('adminBackupRestoreButton'),status=document.getElementById('adminBackupStatus');button.disabled=true;status.textContent='Восстанавливаем D1…';
+ try{const data=await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({bookmark,timestamp,confirmation})});status.textContent=(data.message||'База восстановлена.')+' Предыдущая точка: '+(data.previous_bookmark||'—')+'. Новая точка: '+(data.new_bookmark||'—')+'.';await loadAdminBackupHistory();toast('Восстановление D1 завершено.');}
+ catch(e){status.textContent=e.message||'Не удалось восстановить D1.';toast(status.textContent);}
+ finally{button.disabled=false;}
+}
+async function loadAdminPromos(){
+ const status=document.getElementById('adminPromosStatus'),root=document.getElementById('adminPromosList');if(!status||!root)return;
+ status.textContent='Загружаем промокоды…';root.replaceChildren();
+ try{const data=await apiFetch('/api/admin/promos');if(data.migration_pending){status.textContent='Для промокодов требуется миграция 0013_promo_codes.sql.';return;}
+ const rows=data.promos||[];status.textContent='Промокодов: '+rows.length+(data.scope_migration_pending?' · ограничения по товарам и категориям ждут миграцию 0014':'');
+ const parseList=value=>{try{const parsed=JSON.parse(value||'[]');return Array.isArray(parsed)?parsed:[];}catch(e){return[];}};
+ rows.forEach(p=>{const productIds=parseList(p.product_ids),categories=parseList(p.category_ids);const item=document.createElement('div');item.className='admin-user-row';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=p.code+' · '+p.discount_percent+'%';const meta=document.createElement('small');meta.textContent=(p.is_active?'Активен':'Отключён')+' · оплачено '+Number(p.redeemed_count||0)+' · резерв '+Number(p.reserved_count||0)+' · лимит '+(p.max_uses??'без лимита');const dates=document.createElement('small');dates.textContent=(p.starts_at||'Сразу')+' — '+(p.ends_at||'Без окончания');const scope=document.createElement('small');scope.textContent=productIds.length||categories.length?'Товары: '+(productIds.join(', ')||'любые')+' · Категории: '+(categories.join(', ')||'любые'):'Действует на весь каталог';info.append(title,meta,dates,scope);const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>{document.getElementById('adminPromoCode').value=p.code;document.getElementById('adminPromoPercent').value=p.discount_percent;document.getElementById('adminPromoMaxUses').value=p.max_uses??'';document.getElementById('adminPromoStarts').value=p.starts_at?String(p.starts_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoEnds').value=p.ends_at?String(p.ends_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoActive').value=String(p.is_active);document.getElementById('adminPromoProductIds').value=productIds.join(', ');document.getElementById('adminPromoCategories').value=categories.join(', ');});item.append(info,edit);root.append(item);});
+ }catch(e){status.textContent=e.message||'Не удалось загрузить промокоды.';}
+}
+async function saveAdminPromo(){
+ const button=document.querySelector('#adminPromosPanel button.primary');if(button)button.disabled=true;
+ const value=id=>document.getElementById(id)?.value||'';
+ const parseInput=id=>value(id).split(',').map(item=>item.trim()).filter(Boolean);
+ try{await apiFetch('/api/admin/promo-save',{method:'POST',body:JSON.stringify({code:value('adminPromoCode'),discount_percent:Number(value('adminPromoPercent')),max_uses:value('adminPromoMaxUses'),starts_at:value('adminPromoStarts'),ends_at:value('adminPromoEnds'),is_active:value('adminPromoActive')==='1',product_ids:parseInput('adminPromoProductIds'),category_ids:parseInput('adminPromoCategories')})});toast('Промокод сохранён.');await loadAdminPromos();}
+ catch(e){toast(e.message||'Не удалось сохранить промокод.');}finally{if(button)button.disabled=false;}
+}
+async function loadAdminAnalytics(){
+ const summary=document.getElementById('adminAnalyticsSummary'),daily=document.getElementById('adminAnalyticsDaily');if(!summary||!daily)return;
+ summary.textContent='Загружаем аналитику…';daily.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/analytics'),t=data.totals||{};
+  summary.textContent='Выручка: '+Number(t.revenue_stars||0).toLocaleString('ru-RU')+' ⭐ · Средний платёж: '+Number(t.average_check_stars||0).toLocaleString('ru-RU')+' ⭐ · Оплачено заказов: '+Number(t.paid_orders||0)+' · Индивидуальных заявок: '+Number(t.custom_orders||0)+' · Всего покупателей: '+Number(t.users||0)+' · Активных за 30 дней: '+Number(t.active_customers_30d||0)+' · Покупателей с покупками: '+Number(t.paid_customers||0)+' · Повторных покупателей: '+Number(t.repeat_paid_customers||0)+' · Скидки по промокодам: '+Number(t.promo_discount_stars||0).toLocaleString('ru-RU')+' ⭐ · Использований: '+Number(t.promo_paid_uses||0);
+  const title=document.createElement('h4');title.textContent='Выручка по дням';daily.append(title);
+  const rows=data.daily_revenue||[];
+  if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='За последние 30 дней подтверждённых платежей нет.';daily.append(empty);}
+  rows.forEach(row=>{const line=document.createElement('div');line.className='lineitem';const day=document.createElement('span');day.textContent=row.day||'—';const value=document.createElement('b');value.textContent=Number(row.stars||0).toLocaleString('ru-RU')+' ⭐ · '+Number(row.payments||0)+' платежей';line.append(day,value);daily.append(line);});
+  const promoTitle=document.createElement('h4');promoTitle.textContent='🏷️ Эффективность промокодов';daily.append(promoTitle);
+  if(data.promo_migration_pending){const pending=document.createElement('p');pending.className='notice';pending.textContent='Для статистики промокодов требуется миграция 0013_promo_codes.sql.';daily.append(pending);}
+  else if(!(data.promo_stats||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет промокодов или подтверждённых применений.';daily.append(empty);}
+  (data.promo_stats||[]).forEach(p=>{const line=document.createElement('div');line.className='lineitem';const left=document.createElement('span');left.textContent=p.code+' · '+Number(p.discount_percent||0)+'% · оплачено '+Number(p.paid_uses||0)+' · ожидает оплаты '+Number(p.pending_uses||0);const right=document.createElement('b');right.textContent='Скидка '+Number(p.discount_stars||0).toLocaleString('ru-RU')+' ⭐';line.append(left,right);daily.append(line);});
+  const activityTitle=document.createElement('h4');activityTitle.textContent='Активность за 30 дней';daily.append(activityTitle);
+  const orderDays=data.daily_orders||[],customDays=data.daily_custom_orders||[],userDays=data.new_users||[];
+  const activity=document.createElement('p');activity.className='muted';activity.textContent='За 30 дней: заказов каталога — '+orderDays.reduce((sum,row)=>sum+Number(row.orders||0),0)+'; индивидуальных заявок — '+customDays.reduce((sum,row)=>sum+Number(row.requests||0),0)+'; новых покупателей — '+userDays.reduce((sum,row)=>sum+Number(row.users||0),0)+'. Дней с заказами каталога: '+orderDays.length+'; дней с индивидуальными заявками: '+customDays.length+'.';daily.append(activity);
+  const customTitle=document.createElement('h4');customTitle.textContent='🎨 Состояние индивидуальных заявок';daily.append(customTitle);
+  if(!(data.custom_status_stats||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Индивидуальных заявок пока нет.';daily.append(empty);}
+  (data.custom_status_stats||[]).forEach(item=>{const line=document.createElement('div');line.className='lineitem';const left=document.createElement('span');left.textContent=item.status||'Без статуса';const right=document.createElement('b');right.textContent=Number(item.requests||0)+' заявок';line.append(left,right);daily.append(line);});
+ }catch(e){summary.textContent=e.message||'Не удалось загрузить аналитику.';}
+}
+async function loadAdminSupport() {
+ const status=document.getElementById('adminConversationsStatus'),root=document.getElementById('adminConversationsList');
+ if(!status||!root)return;
+ status.textContent='Загружаем переписки…';root.replaceChildren();
+ try{
+  const q=document.getElementById('adminSupportSearch')?.value.trim()||'';
+  const data=await apiFetch('/api/admin/support/conversations?q='+encodeURIComponent(q));
+  const rows=Array.isArray(data.conversations)?data.conversations:[];
+  status.textContent=rows.length?'Диалогов: '+rows.length:'Сохранённых диалогов пока нет.';
+  rows.forEach(item=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=item.first_name||'Покупатель';
+   const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
+   const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
+   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
+   const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
+   info.append(name,username,meta,activity,preview);
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Карточка';button.addEventListener('click',()=>openAdminConversation(item.telegram_id));
+   row.append(info,button);root.append(row);
+  });
+  await loadAdminSupportTickets();
+  await loadAdminAnalytics();
+ }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
+}
+async function openAdminConversation(telegramId) {
+ const box=document.getElementById('adminConversationDetail');if(!box)return;
+ box.classList.remove('hidden');box.textContent='Загружаем историю…';
+ try{
+  const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId));
+  box.replaceChildren();
+  const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
+  const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
+  const activity=document.createElement('div');activity.className='admin-user-detail';
+  const profile=document.createElement('p');profile.className='notice';profile.textContent='Баланс: '+Number(data.user?.balance_stars||0).toLocaleString('ru-RU')+' баллов · Регистрация: '+(data.user?.created_at||'—')+' · Последнее обновление: '+(data.user?.updated_at||'—');activity.append(profile);
+  const ordersTitle=document.createElement('h4');ordersTitle.textContent='📦 История заказов';activity.append(ordersTitle);
+  if(!(data.orders||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Заказов пока нет.';activity.append(empty);}
+  (data.orders||[]).forEach(order=>{const line=document.createElement('div');line.className='admin-detail-line';const head=document.createElement('b');head.textContent=(order.order_type==='custom'?'Индивидуальный':'Каталог')+' · № '+order.id+' · '+Number(order.total_stars||0)+' ⭐';const body=document.createElement('div');body.textContent=(order.title||'Заказ')+' · '+(order.payment_status||order.status||'—')+' · '+(order.created_at||'');line.append(head,body);activity.append(line);});
+  const ticketsTitle=document.createElement('h4');ticketsTitle.textContent='💬 Обращения покупателя';activity.append(ticketsTitle);
+  if(!(data.tickets||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Обращений пока нет.';activity.append(empty);}
+  (data.tickets||[]).forEach(ticket=>{const line=document.createElement('div');line.className='admin-detail-line';const head=document.createElement('b');head.textContent='Обращение № '+ticket.id+' · '+ticket.status+' · '+(ticket.created_at||'');const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=ticket.message||'';line.append(head,body);activity.append(line);});
+  const balanceTitle=document.createElement('h4');balanceTitle.textContent='🪙 Последние операции с баллами';activity.append(balanceTitle);
+  if(!(data.balance_history||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Операций пока нет.';activity.append(empty);}
+  (data.balance_history||[]).forEach(tx=>{const line=document.createElement('div');line.className='admin-detail-line';line.textContent=(Number(tx.amount_stars)>0?'+':'')+tx.amount_stars+' баллов · '+(tx.operation_type||'операция')+' · '+(tx.description||'')+' · '+(tx.created_at||'');activity.append(line);});
+  box.append(activity);
+  const controls=document.createElement('div');controls.className='row-actions';
+  if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
+  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
+  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
+  controls.append(modeButton);box.append(controls);
+  if(data.mode==='human'){
+   const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   box.append(reply,send);
+  }
+  (data.messages||[]).forEach(message=>{
+   const item=document.createElement('div');item.className='admin-detail-line';
+   const head=document.createElement('b');head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':'🤖 ИИ-помощник'):'👤 Покупатель')+' · '+(message.created_at||'');
+   const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
+   item.append(head,body);box.append(item);
+  });
+  const notesTitle=document.createElement('h4');notesTitle.textContent='🔒 Внутренние заметки владельца';box.append(notesTitle);
+  const notesRoot=document.createElement('div');notesRoot.className='admin-notes-list';box.append(notesRoot);
+  if(data.notes_migration_pending){const pending=document.createElement('p');pending.className='notice';pending.textContent='Для заметок требуется миграция 0009_support_internal_notes.sql.';notesRoot.append(pending);}
+  (data.notes||[]).forEach(note=>{const item=document.createElement('div');item.className='admin-detail-line';const head=document.createElement('b');head.textContent='Владелец · '+(note.created_at||'');const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=note.note||'';item.append(head,body);notesRoot.append(item);});
+  const noteInput=document.createElement('textarea');noteInput.rows=2;noteInput.maxLength=2000;noteInput.placeholder='Личная заметка по покупателю — её не увидит покупатель';noteInput.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+  const saveNote=document.createElement('button');saveNote.type='button';saveNote.className='secondary';saveNote.textContent='Сохранить заметку';saveNote.disabled=!!data.notes_migration_pending;
+  saveNote.addEventListener('click',async()=>{const note=noteInput.value.trim();if(note.length<2){toast('Введите заметку хотя бы из двух символов.');return;}saveNote.disabled=true;try{await apiFetch('/api/admin/support/notes',{method:'POST',body:JSON.stringify({telegram_id:telegramId,note})});toast('Внутренняя заметка сохранена.');await openAdminConversation(telegramId);}catch(e){toast(e.message||'Не удалось сохранить заметку.');}finally{saveNote.disabled=false;}});
+  box.append(noteInput,saveNote);
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть переписку';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
+ }catch(e){box.textContent=e.message||'Не удалось загрузить историю.';}
+}
+async function loadAdminSupportTickets() {
+ const status=document.getElementById('adminTicketsStatus'),root=document.getElementById('adminTicketsList'),summary=document.getElementById('adminTicketSummary');
+ if(!status||!root)return;
+ status.textContent='Загружаем обращения…';root.replaceChildren();
+ try{
+  const filter=document.getElementById('adminTicketFilter')?.value||'all';
+  const q=document.getElementById('adminTicketSearch')?.value.trim()||'';
+  const data=await apiFetch('/api/admin/support/tickets?status='+encodeURIComponent(filter)+'&q='+encodeURIComponent(q));
+  const rows=Array.isArray(data.tickets)?data.tickets:[];
+  const s=data.summary||{};
+  if(summary)summary.textContent='Всего: '+Number(s.total||0)+' · Покупателей: '+Number(s.buyers||0)+' · Новые: '+Number(s.open||0)+' · В работе: '+Number(s.in_progress||0)+' · Закрытые: '+Number(s.closed||0)+' · За 7 дней: '+Number(s.last_7_days||0);
+  status.textContent=rows.length?'Показано обращений: '+rows.length+(q?' · Поиск: «'+q+'»':''):'По заданным условиям обращений нет.';
+  const labels={open:'Новое',in_progress:'В работе',closed:'Закрыто'};
+  rows.forEach(ticket=>{
+   const row=document.createElement('div');row.className='admin-order-actions';
+   const heading=document.createElement('h4');heading.textContent=(ticket.first_name||'Покупатель')+(ticket.username?' · @'+ticket.username:'')+' · '+labels[ticket.status];
+   const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at+' · Всего обращений покупателя: '+Number(ticket.customer_ticket_count||0);
+   const message=document.createElement('p');message.textContent=ticket.message||'';
+   const actions=document.createElement('div');actions.className='row-actions';
+   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>openAdminConversation(ticket.telegram_id));
+   const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответить покупателю в Telegram';reply.setAttribute('aria-label','Ответ на обращение №'+ticket.id);
+   reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в Telegram';
+   send.addEventListener('click',async()=>{
+    const text=reply.value.trim();if(!text){toast('Напишите ответ покупателю.');return;}
+    if(!confirm('Отправить этот ответ покупателю в Telegram?'))return;
+    send.disabled=true;send.textContent='Отправляем…';
+    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ отправлен. Обращение переведено в работу.');await loadAdminSupportTickets();}
+    catch(e){toast(e.message||'Не удалось отправить ответ.');}
+    finally{send.disabled=false;send.textContent='Ответить в Telegram';}
+   });
+   const select=document.createElement('select');select.setAttribute('aria-label','Статус обращения');
+   Object.entries(labels).forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);});
+   select.value=ticket.status;
+   const save=document.createElement('button');save.type='button';save.className='secondary';save.textContent='Сохранить статус';
+   save.addEventListener('click',async()=>{save.disabled=true;try{await apiFetch('/api/admin/support/ticket-status',{method:'POST',body:JSON.stringify({id:ticket.id,status:select.value})});toast('Статус обращения обновлён.');await loadAdminSupportTickets();}catch(e){toast(e.message||'Не удалось обновить обращение.');}finally{save.disabled=false;}});
+   actions.append(profile,send,save);row.append(heading,meta,message,reply,actions,select);root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';if(summary)summary.textContent='Не удалось загрузить сводку активности.';}
+}
+async function openAdminCampaignReport(id){
+ const root=document.getElementById('adminCampaignReport');if(!root)return;
+ root.classList.remove('hidden');root.textContent='Загружаем отчёт…';
+ try{
+  const data=await apiFetch('/api/admin/campaign-report?id='+encodeURIComponent(id));
+  root.replaceChildren();
+  const title=document.createElement('h4');title.textContent='Отчёт: '+data.campaign.title+' · №'+data.campaign.id;root.append(title);
+  const counts=Object.fromEntries((data.counts||[]).map(x=>[x.status,Number(x.total||0)]));
+  const summary=document.createElement('p');summary.className='notice';summary.textContent='Доставлено: '+(counts.sent||0)+' · Ошибки: '+(counts.failed||0)+' · Требуют проверки: '+(counts.uncertain||0)+' · В очереди: '+((counts.pending||0)+(counts.sending||0));root.append(summary);
+  const labels={sent:'Доставлено',failed:'Ошибка',uncertain:'Требует проверки',pending:'Ожидает',sending:'Отправляется'};
+  (data.recipients||[]).forEach(item=>{
+   const row=document.createElement('div');row.className='admin-detail-line';
+   const head=document.createElement('b');head.textContent=(item.first_name||item.username||'Пользователь')+' · '+item.telegram_id+' · '+(labels[item.status]||item.status);
+   const meta=document.createElement('small');meta.textContent='Попыток: '+item.attempts+' · '+(item.sent_at||item.updated_at||'');
+   row.append(head,meta);
+   if(item.last_error){const error=document.createElement('p');error.textContent='Причина: '+item.last_error;row.append(error);}
+   root.append(row);
+  });
+  if((data.recipients||[]).length>=data.limit){const note=document.createElement('p');note.className='notice';note.textContent='Показаны первые 200 получателей. Общие итоги указаны выше.';root.append(note);}
+  const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть отчёт';close.addEventListener('click',()=>root.classList.add('hidden'));root.append(close);
+ }catch(e){root.textContent=e.message||'Не удалось загрузить отчёт.';}
+}
+function updateCampaignAudienceUi(){const selected=document.getElementById('adminCampaignAudience')?.value==='selected';document.getElementById('adminCampaignIdsWrap')?.classList.toggle('hidden',!selected);}
+function parseCampaignIds(){return [...new Set((document.getElementById('adminCampaignIds')?.value||'').split(/[\\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);}
+function campaignFormData(){return {id:document.getElementById('adminCampaignId').value,title:document.getElementById('adminCampaignTitle').value.trim(),body:document.getElementById('adminCampaignBody').value.trim(),audience_type:document.getElementById('adminCampaignAudience').value,audience_ids:parseCampaignIds(),media_url:document.getElementById('adminCampaignMedia').value.trim(),button_text:document.getElementById('adminCampaignButtonText').value.trim(),button_url:document.getElementById('adminCampaignButtonUrl').value.trim()};}
+function resetAdminCampaignForm(){['adminCampaignId','adminCampaignTitle','adminCampaignBody','adminCampaignIds','adminCampaignMedia','adminCampaignButtonText','adminCampaignButtonUrl'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('adminCampaignAudience').value='all';document.getElementById('adminCampaignEditorTitle').textContent='Новая рассылка';document.getElementById('adminCampaignPreview').textContent='Перед запуском проверьте количество получателей.';document.getElementById('adminCampaignLivePreview').classList.add('hidden');updateCampaignAudienceUi();}
+async function previewAdminCampaign(){const status=document.getElementById('adminCampaignPreview');try{const data=campaignFormData();if(data.audience_type==='selected'&&!data.audience_ids.length)throw new Error('Добавьте Telegram ID получателей.');const result=await apiFetch('/api/admin/campaign-preview',{method:'POST',body:JSON.stringify({audience_type:data.audience_type,audience_ids:data.audience_ids})});status.textContent='Получателей: '+Number(result.recipient_count).toLocaleString('ru-RU')+(result.unknown_ids?' · неизвестных ID: '+result.unknown_ids:'')+'. Неактивные — пользователи, не открывавшие Mini App 30 дней.';const preview=document.getElementById('adminCampaignLivePreview');preview.replaceChildren();const title=document.createElement('b');title.textContent=data.title||'Название рассылки';const body=document.createElement('p');body.style.whiteSpace='pre-wrap';body.textContent=data.body||'Текст сообщения';preview.append(title,body);if(data.media_url){const media=document.createElement('p');media.textContent='Фото: '+data.media_url;preview.append(media);}if(data.button_text){const link=document.createElement('p');link.textContent='Кнопка: '+data.button_text+' · '+data.button_url;preview.append(link);}preview.classList.remove('hidden');}catch(e){status.textContent=e.message||'Не удалось проверить аудиторию.';}}
+async function saveAdminCampaign(){const data=campaignFormData();if(data.title.length<2||!data.body){toast('Заполните название и текст рассылки.');return;}if(data.audience_type==='selected'&&!data.audience_ids.length){toast('Укажите Telegram ID.');return;}try{const result=await apiFetch('/api/admin/campaign-save',{method:'POST',body:JSON.stringify(data)});toast('Черновик сохранён.');if(result.id)document.getElementById('adminCampaignId').value=result.id;await loadAdminCampaigns();}catch(e){toast(e.message||'Не удалось сохранить черновик.');}}
+async function loadAdminCampaigns(){const root=document.getElementById('adminCampaignsList'),status=document.getElementById('adminCampaignsStatus');if(!root||!status)return;root.replaceChildren();status.textContent='Загружаем кампании…';try{const data=await apiFetch('/api/admin/campaigns');const rows=data.campaigns||[];status.textContent='Кампаний: '+rows.length;const labels={draft:'Черновик',queued:'В очереди',sending:'Отправляется',completed:'Завершена',partial:'Есть ошибки или требуют проверки'};rows.forEach(item=>{const card=document.createElement('div');card.className='admin-detail-line';const title=document.createElement('b');title.textContent=item.title+' · '+(labels[item.status]||item.status);const body=document.createElement('p');body.textContent=item.body;const meta=document.createElement('small');meta.textContent='Получателей: '+item.total+' · доставлено: '+item.sent+' · ошибок: '+item.failed+' · требуют проверки: '+Number(item.uncertain||0)+' · ожидают: '+item.pending;const actions=document.createElement('div');actions.className='row-actions';const report=document.createElement('button');report.type='button';report.className='secondary';report.textContent='Отчёт о доставке';report.addEventListener('click',()=>openAdminCampaignReport(item.id));actions.append(report);if(item.status==='draft'){const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>{document.getElementById('adminCampaignId').value=item.id;document.getElementById('adminCampaignTitle').value=item.title;document.getElementById('adminCampaignBody').value=item.body;document.getElementById('adminCampaignAudience').value=item.audience_type;let ids=[];try{ids=JSON.parse(item.audience_ids||'[]')}catch{}document.getElementById('adminCampaignIds').value=ids.join(', ');document.getElementById('adminCampaignMedia').value=item.media_url||'';document.getElementById('adminCampaignButtonText').value=item.button_text||'';document.getElementById('adminCampaignButtonUrl').value=item.button_url||'';document.getElementById('adminCampaignEditorTitle').textContent='Редактирование черновика №'+item.id;updateCampaignAudienceUi();document.getElementById('adminCampaignEditorTitle').scrollIntoView({behavior:'smooth',block:'center'});});const queue=document.createElement('button');queue.type='button';queue.className='primary';queue.textContent='Запустить рассылку';queue.addEventListener('click',async()=>{queue.disabled=true;try{const preview=await apiFetch('/api/admin/campaign-preview',{method:'POST',body:JSON.stringify({audience_type:item.audience_type,audience_ids:(()=>{try{return JSON.parse(item.audience_ids||'[]')}catch{return []}})()})});if(!confirm('ВНИМАНИЕ: поставить рассылку в очередь для '+preview.recipient_count+' получателей? Сообщение будет отправлено им в Telegram. Продолжить?'))return;const result=await apiFetch('/api/admin/campaign-queue',{method:'POST',body:JSON.stringify({id:item.id,confirm:true})});toast('Рассылка поставлена в очередь: '+result.recipient_count+' получателей.');await loadAdminCampaigns();}catch(e){toast(e.message||'Не удалось запустить рассылку.');}finally{queue.disabled=false;}});actions.append(edit,queue);}if(item.failed>0&&['partial','completed'].includes(item.status)){const retry=document.createElement('button');retry.type='button';retry.className='secondary';retry.textContent='Повторить ошибки ('+item.failed+')';retry.addEventListener('click',async()=>{if(!confirm('Повторить отправку '+item.failed+' неудачных сообщений? Уже доставленные сообщения повторно отправлены не будут.'))return;retry.disabled=true;try{const result=await apiFetch('/api/admin/campaign-retry',{method:'POST',body:JSON.stringify({id:item.id})});toast('Возвращено в очередь: '+result.requeued);await loadAdminCampaigns();}catch(e){toast(e.message||'Не удалось повторить отправку.');}finally{retry.disabled=false;}});actions.append(retry);}card.append(title,body,meta,actions);root.append(card);});}catch(e){status.textContent=e.message||'Не удалось загрузить рассылки.';}}
+
+function announcementLocalInput(value) {
+ if(!value)return '';
+ const date=new Date(value);if(Number.isNaN(date.getTime()))return '';
+ const pad=n=>String(n).padStart(2,'0');
+ return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes());
+}
+function announcementIso(value) {
+ if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();
+}
+function updateAnnouncementAudienceUi() {
+ const selected=document.getElementById('adminAnnouncementAudience')?.value==='selected';
+ document.getElementById('adminAnnouncementIdsWrap')?.classList.toggle('hidden',!selected);
+}
+function parseAnnouncementIds() {
+ return [...new Set((document.getElementById('adminAnnouncementIds')?.value||'').split(/[\\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);
+}
+function announcementFormData() {
+ return {
+  id:document.getElementById('adminAnnouncementId').value,
+  title:document.getElementById('adminAnnouncementTitle').value.trim(),
+  body:document.getElementById('adminAnnouncementBody').value.trim(),
+  link_url:document.getElementById('adminAnnouncementLink').value.trim(),
+  audience_type:document.getElementById('adminAnnouncementAudience').value,
+  audience_ids:parseAnnouncementIds(),
+  starts_at:announcementIso(document.getElementById('adminAnnouncementStart').value),
+  ends_at:announcementIso(document.getElementById('adminAnnouncementEnd').value),
+  status:document.getElementById('adminAnnouncementStatus').value
+ };
+}
+function resetAdminAnnouncementForm() {
+ ['adminAnnouncementId','adminAnnouncementTitle','adminAnnouncementBody','adminAnnouncementLink','adminAnnouncementIds','adminAnnouncementStart','adminAnnouncementEnd'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ document.getElementById('adminAnnouncementAudience').value='all';
+ document.getElementById('adminAnnouncementStatus').value='draft';
+ document.getElementById('adminAnnouncementEditorTitle').textContent='Новое объявление';
+ document.getElementById('adminAnnouncementPreview').textContent='Перед публикацией проверь аудиторию и предпросмотр.';
+ document.getElementById('adminAnnouncementLivePreview').classList.add('hidden');
+ updateAnnouncementAudienceUi();
+}
+async function previewAnnouncementAudience() {
+ const status=document.getElementById('adminAnnouncementPreview');
+ try {
+  const data=announcementFormData();
+  if(data.audience_type==='selected'&&!data.audience_ids.length)throw new Error('Добавьте Telegram ID выбранных получателей.');
+  const result=await apiFetch('/api/admin/announcement-preview',{method:'POST',body:JSON.stringify({audience_type:data.audience_type,audience_ids:data.audience_ids})});
+  status.textContent='Получателей: '+Number(result.recipient_count).toLocaleString('ru-RU')+(result.unknown_ids?' · ID не найдены: '+result.unknown_ids:'')+'.';
+  const preview=document.getElementById('adminAnnouncementLivePreview');
+  preview.replaceChildren();const title=document.createElement('b');title.textContent=data.title||'Заголовок объявления';const body=document.createElement('p');body.textContent=data.body||'Текст объявления';preview.append(title,body);
+  if(data.link_url){const link=document.createElement('p');link.textContent='Ссылка: '+data.link_url;preview.append(link);}
+  preview.classList.remove('hidden');
+ } catch(e){status.textContent=e.message||'Не удалось проверить аудиторию.';}
+}
+async function loadAdminAnnouncements() {
+ const root=document.getElementById('adminAnnouncementsList'),status=document.getElementById('adminAnnouncementsStatus');
+ if(!root||!status)return;root.replaceChildren();status.textContent='Загружаем объявления…';
+ try {
+  const data=await apiFetch('/api/admin/announcements');const rows=data.announcements||[];
+  status.textContent='Объявлений: '+rows.length;
+  const labels={draft:'Черновик',published:'Опубликовано',archived:'Архив'};
+  rows.forEach(item=>{
+   const card=document.createElement('div');card.className='admin-detail-line';
+   const title=document.createElement('b');title.textContent=item.title+' · '+(labels[item.status]||item.status);
+   const body=document.createElement('p');body.textContent=item.body;
+   const meta=document.createElement('small');meta.textContent='Аудитория: '+(item.audience_type==='all'?'все':'выбранные ID')+' · '+(item.starts_at||'сразу')+' — '+(item.ends_at||'без даты окончания');
+   const actions=document.createElement('div');actions.className='row-actions';
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';
+   edit.addEventListener('click',()=>{document.getElementById('adminAnnouncementId').value=item.id;document.getElementById('adminAnnouncementTitle').value=item.title;document.getElementById('adminAnnouncementBody').value=item.body;document.getElementById('adminAnnouncementLink').value=item.link_url||'';document.getElementById('adminAnnouncementAudience').value=item.audience_type;let ids=[];try{ids=JSON.parse(item.audience_ids||'[]')}catch{}document.getElementById('adminAnnouncementIds').value=ids.join(', ');document.getElementById('adminAnnouncementStart').value=announcementLocalInput(item.starts_at);document.getElementById('adminAnnouncementEnd').value=announcementLocalInput(item.ends_at);document.getElementById('adminAnnouncementStatus').value=item.status;document.getElementById('adminAnnouncementEditorTitle').textContent='Редактирование объявления №'+item.id;updateAnnouncementAudienceUi();document.getElementById('adminAnnouncementEditorTitle').scrollIntoView({behavior:'smooth',block:'center'});});
+   const toggle=document.createElement('button');toggle.type='button';toggle.className='secondary';toggle.textContent=item.status==='published'?'Снять с публикации':item.status==='archived'?'Вернуть в черновики':'Опубликовать';
+   toggle.addEventListener('click',async()=>{const next=item.status==='published'?'archived':'published';if(!confirm(next==='published'?'Опубликовать объявление?':'Снять объявление с публикации?'))return;toggle.disabled=true;try{await apiFetch('/api/admin/announcement-status',{method:'POST',body:JSON.stringify({id:item.id,status:next})});toast('Статус объявления изменён.');await loadAdminAnnouncements();}catch(e){toast(e.message||'Не удалось изменить статус.');}finally{toggle.disabled=false;}});
+   actions.append(edit,toggle);card.append(title,body,meta,actions);root.append(card);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить объявления.';}
+}
+async function saveAdminAnnouncement() {
+ const data=announcementFormData();
+ if(data.title.length<2||!data.body){toast('Заполните заголовок и текст.');return;}
+ if(data.audience_type==='selected'&&!data.audience_ids.length){toast('Укажите Telegram ID получателей.');return;}
+ try {await apiFetch('/api/admin/announcement-save',{method:'POST',body:JSON.stringify(data)});toast('Объявление сохранено.');resetAdminAnnouncementForm();await loadAdminAnnouncements();}
+ catch(e){toast(e.message||'Не удалось сохранить объявление.');}
+}
+async function loadAnnouncements() {
+ const root=document.getElementById('customerAnnouncements');if(!root||!initData)return;
+ root.replaceChildren();
+ try {
+  const data=await apiFetch('/api/announcements');
+  (data.announcements||[]).forEach(item=>{
+   const card=document.createElement('article');card.className='panel announcement-card';
+   const title=document.createElement('h3');title.textContent='📢 '+item.title;
+   const body=document.createElement('p');body.style.whiteSpace='pre-wrap';body.textContent=item.body;
+   card.append(title,body);
+   if(item.link_url){const link=document.createElement('a');link.href=item.link_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Подробнее ↗';card.append(link);}
+   root.append(card);
+  });
+ }catch(error){console.warn('Announcements unavailable:',error);}
+}
+
 async function loadAdminDashboard() {
+ loadAdminPromos();
+ loadAdminAnalytics();
+ loadAdminBackupStatus();
  const status = document.getElementById('adminDashboardStatus');
  const button = document.getElementById('adminRefreshBtn');
  if (!status) return;
@@ -623,8 +1221,11 @@ async function loadAdminDashboard() {
   const m = data.metrics || {};
   document.getElementById('adminUsers').textContent = Number(m.users || 0).toLocaleString('ru-RU');
   document.getElementById('adminOrders').textContent = Number(m.orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminProductOrders').textContent = Number(m.product_orders || 0).toLocaleString('ru-RU');
+  document.getElementById('adminCustomOrders').textContent = Number(m.custom_orders || 0).toLocaleString('ru-RU');
   document.getElementById('adminRevenue').textContent = Number(m.revenue_stars || 0).toLocaleString('ru-RU') + ' ⭐';
   document.getElementById('adminWaiting').textContent = Number(m.awaiting_processing || 0).toLocaleString('ru-RU');
+  document.getElementById('adminPendingPayments').textContent = Number(m.pending_payments || 0).toLocaleString('ru-RU');
   const updated = data.updated_at ? new Date(data.updated_at) : null;
   document.getElementById('adminUpdatedAt').textContent = updated && !Number.isNaN(updated.getTime())
    ? 'Обновлено: ' + updated.toLocaleString('ru-RU')
@@ -652,8 +1253,10 @@ async function openAdminOrder(orderId,orderType) {
    const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
    line.append(strong,span);box.append(line);
   };
+  const statusLabels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
   addLine('Покупатель',order.first_name||order.username||order.telegram_id);
   addLine('Telegram ID',order.telegram_id);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id));box.append(crmButton);
   addLine('Дата',order.created_at);
   addLine('Сумма',Number(order.total_stars||0)+' ⭐');
   if(orderType==='product'){
@@ -667,10 +1270,81 @@ async function openAdminOrder(orderId,orderType) {
    items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
   }else{
    addLine('Тема',order.subject);
-   addLine('Статус',order.status);
+   addLine('Статус заявки',order.status);
    let answers=order.answers_json||'';
    try{answers=JSON.stringify(JSON.parse(answers),null,2);}catch(e){}
    addLine('Ответы и пожелания',answers);
+  }
+  const section=document.createElement('div');section.className='admin-order-actions';
+  const heading=document.createElement('h4');heading.textContent='Управление заказом';section.append(heading);
+  const statusLabel=document.createElement('label');statusLabel.textContent='Статус';
+  const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','Новый статус заказа');
+  const currentStatus=data.admin_status||'new';
+  const isUnpaid=orderType==='product'&&order.payment_status==='pending';
+  const isCancelled=orderType==='product'&&order.payment_status==='cancelled';
+  if(isUnpaid){
+   const opt=document.createElement('option');opt.value='unpaid';opt.textContent='Не оплачен — ожидает оплаты';statusSelect.append(opt);
+   statusSelect.value='unpaid';statusSelect.disabled=true;
+  }else{
+   Object.entries(statusLabels).filter(([key])=>key!=='unpaid').forEach(([key,label])=>{
+    const opt=document.createElement('option');opt.value=key;opt.textContent=label;statusSelect.append(opt);
+   });
+   statusSelect.value=statusLabels[currentStatus]?currentStatus:'new';
+   if(isCancelled)statusSelect.disabled=true;
+  }
+  statusLabel.append(statusSelect);section.append(statusLabel);
+  const commentLabel=document.createElement('label');commentLabel.textContent='Комментарий владельца';
+  const commentField=document.createElement('textarea');commentField.rows=3;commentField.maxLength=1000;commentField.placeholder='Напишите заметку по заказу (необязательно)';
+  commentLabel.append(commentField);section.append(commentLabel);
+  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Сохранить изменения';
+  save.disabled=!!data.migrations_pending;
+  save.addEventListener('click',async()=>{
+   const comment=commentField.value.trim();
+   const changed=!statusSelect.disabled&&statusSelect.value!==currentStatus;
+   if(!changed&&!comment){toast('Нет изменений для сохранения');return;}
+   if(changed&&statusSelect.value==='cancelled'&&!confirm('Отменить этот заказ? Это действие будет записано в журнал.'))return;
+   const payload={order_id:String(order.id),order_type:orderType,comment};
+   if(changed)payload.status=statusSelect.value;
+   save.disabled=true;save.textContent='Сохраняем…';
+   try{
+    const result=await apiFetch('/api/admin/order-update',{method:'POST',body:JSON.stringify(payload)});
+    toast(result.notification?.attempted&&!result.notification?.sent
+      ? 'Статус сохранён, но уведомление покупателю не доставлено'
+      : 'Изменения сохранены'+(result.notification?.sent?' · покупатель уведомлён':''));
+    await openAdminOrder(orderId,orderType);
+    await loadAdminOrders();
+   }catch(error){toast(error.message||'Не удалось сохранить изменения');save.disabled=false;save.textContent='Сохранить изменения';}
+  });
+  section.append(save);
+  const notify=document.createElement('button');notify.type='button';notify.className='secondary';notify.textContent='📨 Повторить уведомление покупателю';
+  notify.addEventListener('click',async()=>{
+   if(!confirm('Отправить покупателю сообщение о текущем статусе заказа в Telegram?'))return;
+   notify.disabled=true;notify.textContent='Отправляем…';
+   try{
+    await apiFetch('/api/admin/order-notify',{method:'POST',body:JSON.stringify({order_id:String(order.id),order_type:orderType})});
+    toast('Уведомление отправлено');
+   }catch(error){toast(error.message||'Не удалось отправить уведомление');}
+   finally{notify.disabled=false;notify.textContent='📨 Повторить уведомление покупателю';}
+  });
+  section.append(notify);
+  if(data.migrations_pending){
+   const warning=document.createElement('p');warning.className='notice';warning.textContent='Для изменения статуса и комментариев требуется миграция 0006_admin_action_log.sql.';section.append(warning);
+  }
+  box.append(section);
+  const historyTitle=document.createElement('h4');historyTitle.textContent='История изменений';box.append(historyTitle);
+  const history=Array.isArray(data.history)?data.history:[];
+  if(!history.length){
+   const empty=document.createElement('p');empty.className='muted';empty.textContent='Записей пока нет.';box.append(empty);
+  }else{
+   history.forEach(event=>{
+    const row=document.createElement('div');row.className='admin-detail-line';
+    const detail=event.details||{};
+    const textNode=document.createElement('span');
+    if(event.action_type==='order_comment')textNode.textContent='💬 '+(detail.comment||'Комментарий');
+    else textNode.textContent='Статус: '+(statusLabels[detail.previous_status]||detail.previous_status||'—')+' → '+(statusLabels[detail.status]||detail.status||'—');
+    const date=document.createElement('small');date.textContent=' · '+formatDate(event.created_at);
+    row.append(textNode,date);box.append(row);
+   });
   }
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть подробности';
   close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
@@ -706,16 +1380,199 @@ async function loadAdminOrders() {
  }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
 }
 
+async function loadAdminProducts() {
+ const status=document.getElementById('adminProductsStatus');
+ const root=document.getElementById('adminProductsList');
+ if(!status||!root)return;
+ status.textContent='Загружаем каталог из D1…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/products');
+  const products=Array.isArray(data.products)?data.products:[];
+  const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
+  (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
+  status.textContent='Товаров в каталоге: '+products.length;
+  if(!products.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет товаров.';root.append(empty);return;}
+  products.forEach(product=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');info.className='admin-user-info';
+   const title=document.createElement('strong');title.textContent=product.title||'Без названия';
+   const meta=document.createElement('small');meta.textContent=(product.category||'Без категории')+' · '+Number(product.price_stars||0)+' ⭐ · '+(Number(product.is_active)===1?'Опубликован':'Черновик');
+   info.append(title,meta);
+   const actions=document.createElement('div');actions.className='admin-product-row-actions';
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>editAdminProduct(product));
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.addEventListener('click',()=>deleteAdminProduct(product));
+   actions.append(edit,remove);row.append(info,actions);root.append(row);
+  });
+ }catch(error){status.textContent=error.message||'Не удалось загрузить каталог.';}
+}
+function newAdminProduct(){
+ const editor=document.getElementById('adminProductEditor');if(!editor)return;
+ document.getElementById('adminProductEditorTitle').textContent='Новый товар';
+ document.getElementById('adminProductId').value='';
+ document.getElementById('adminProductTitle').value='';
+ document.getElementById('adminProductDescription').value='';
+ document.getElementById('adminProductImage').value='';
+ document.getElementById('adminProductCategory').value='';
+ document.getElementById('adminProductPrice').value='';
+ document.getElementById('adminProductActive').value='0';
+ editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function editAdminProduct(product){
+ const editor=document.getElementById('adminProductEditor');if(!editor)return;
+ document.getElementById('adminProductEditorTitle').textContent='Редактирование товара';
+ document.getElementById('adminProductId').value=String(product.id);
+ document.getElementById('adminProductTitle').value=product.title||'';
+ document.getElementById('adminProductDescription').value=product.description||'';
+ document.getElementById('adminProductImage').value=product.image_url||'';
+ document.getElementById('adminProductCategory').value=product.category||'';
+ document.getElementById('adminProductPrice').value=String(product.price_stars??0);
+ document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
+ editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeAdminProductEditor(){document.getElementById('adminProductEditor')?.classList.add('hidden');}
+async function saveAdminProduct(){
+ const button=document.getElementById('adminProductSaveBtn');if(button)button.disabled=true;
+ const payload={
+  id:document.getElementById('adminProductId').value.trim(),
+  title:document.getElementById('adminProductTitle').value.trim(),
+  description:document.getElementById('adminProductDescription').value.trim(),
+  image_url:document.getElementById('adminProductImage').value.trim(),
+  category:document.getElementById('adminProductCategory').value.trim(),
+  price_stars:Number(document.getElementById('adminProductPrice').value),
+  is_active:document.getElementById('adminProductActive').value==='1'
+ };
+ try{
+  await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
+  toast(payload.is_active?'Товар опубликован':'Черновик сохранён');
+  closeAdminProductEditor();await loadAdminProducts();
+ }catch(error){toast(error.message||'Не удалось сохранить товар.');}
+ finally{if(button)button.disabled=false;}
+}
+async function deleteAdminProduct(product){
+ if(!confirm('Удалить товар «'+product.title+'»? Если он связан с заказами или избранным, система не позволит удалить его и предложит скрыть.'))return;
+ try{
+  await apiFetch('/api/admin/product-delete',{method:'POST',body:JSON.stringify({id:String(product.id)})});
+  toast('Товар удалён');await loadAdminProducts();
+ }catch(error){toast(error.message||'Не удалось удалить товар.');}
+}
+
+let adminSession = null;
+let adminStaffSelected = null;
+const adminPermissionLabels = {
+ dashboard_view:'Обзор и показатели',users_view:'Просмотр пользователей и профилей',
+ users_balance:'Начисление и списание баллов',users_ban:'Блокировка пользователей',
+ users_unban:'Снятие блокировки пользователей',orders_view:'Просмотр заказов',
+ orders_manage:'Изменение заказов и уведомления',catalog_view:'Просмотр каталога',
+ catalog_manage:'Управление товарами',support_view:'Просмотр переписок и обращений',
+ support_reply:'Ответы и управление поддержкой',campaigns_manage:'Рассылки',
+ announcements_manage:'Объявления',promos_manage:'Промокоды',analytics_view:'Аналитика',
+ backup_manage:'Резервные копии',system_manage:'Технический центр и настройки'
+};
+function adminHasPermission(key){
+ return !!(adminSession?.root_owner || adminSession?.role==='owner' || adminSession?.permissions?.[key]===true);
+}
+function applyAdminPermissionVisibility(){
+ const showPanel=(selector,allowed)=>{
+  const node=document.querySelector(selector);
+  const panel=node?.closest('.panel');
+  if(panel)panel.hidden=!allowed;
+  else if(node)node.hidden=!allowed;
+ };
+ showPanel('#adminUserSearch',['users_view','users_balance','users_ban','users_unban'].some(adminHasPermission));
+ showPanel('#adminOrderSearch',adminHasPermission('orders_view')||adminHasPermission('orders_manage'));
+ showPanel('#adminBackupPanel',adminHasPermission('backup_manage'));
+ showPanel('#adminPromosPanel',adminHasPermission('promos_manage'));
+ showPanel('#adminCatalogPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
+ showPanel('#adminSystemControlsPanel',adminHasPermission('system_manage'));
+ showPanel('#adminAnalyticsPanel',adminHasPermission('analytics_view'));
+ showPanel('#adminSupportPanel',adminHasPermission('support_view')||adminHasPermission('support_reply'));
+ showPanel('#adminAnnouncementsPanel',adminHasPermission('announcements_manage'));
+ showPanel('#adminMailingPanel',adminHasPermission('campaigns_manage'));
+ showPanel('#adminTechnicalCenterPanel',adminHasPermission('system_manage'));
+ const metrics=document.getElementById('adminMetrics');
+ if(metrics)metrics.hidden=!adminHasPermission('dashboard_view');
+ for(const id of ['adminUpdatedAt','adminDashboardStatus']){const node=document.getElementById(id);if(node)node.hidden=!adminHasPermission('dashboard_view');}
+ const staffPanel=document.getElementById('adminStaffPanel');
+ if(staffPanel)staffPanel.hidden=!(adminSession?.root_owner===true);
+}
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card || !initData) return;
  card.classList.add('hidden');
  try {
   const result = await apiFetch('/api/admin/session');
-  if (result && result.owner === true) card.classList.remove('hidden');
+  adminSession = result || null;
+  if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
+   card.classList.remove('hidden');
+   const title=document.querySelector('#adminPanelView .sectionhead h2');
+   if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
+   const heroTitle=document.querySelector('#adminPanelView .hero h2');
+   if(heroTitle) heroTitle.textContent=result.role==='owner'?'Добро пожаловать, владелец':'Добро пожаловать, модератор';
+   const cardTitle=card.querySelector('strong');
+   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=result.role==='owner'?'🔐 Панель владельца ':'🛡️ Панель модератора ';
+   applyAdminPermissionVisibility();
+   if(result.root_owner) loadAdminStaff();
+  }
  } catch(e) {
+  adminSession = null;
   card.classList.add('hidden');
  }
+}
+async function loadAdminStaff(){
+ const status=document.getElementById('adminStaffStatus'),root=document.getElementById('adminStaffList');
+ if(!status||!root)return;
+ status.textContent='Загружаем должности…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/staff');
+  (data.staff||[]).forEach(member=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=(member.first_name||member.username||member.telegram_id)+' · '+member.role;
+   const meta=document.createElement('small');meta.textContent='ID: '+member.telegram_id+' · '+member.status;
+   info.append(name,meta);
+   const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Права';edit.addEventListener('click',()=>openAdminStaffPermissions(member));
+   row.append(info,edit);root.append(row);
+  });
+  status.textContent='Сотрудников: '+(data.staff||[]).length+'. Основной владелец защищён отдельно.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить должности.';}
+}
+async function saveAdminStaffRole(){
+ const id=document.getElementById('adminStaffTelegramId')?.value.trim()||'';
+ const role=document.getElementById('adminStaffRole')?.value||'moderator';
+ if(!/^\d{3,64}$/.test(id)){toast('Введите корректный Telegram ID.');return;}
+ const roleNames={owner:'владельцем',moderator:'модератором',client:'клиентом'};
+ if(!confirm('Назначить пользователя '+id+' должность «'+roleNames[role]+'»?'))return;
+ try{
+  await apiFetch('/api/admin/staff/role',{method:'POST',body:JSON.stringify({telegram_id:id,role})});
+  toast('Должность обновлена.');await loadAdminStaff();
+ }catch(e){toast(e.message||'Не удалось изменить должность.');}
+}
+function openAdminStaffPermissions(member){
+ adminStaffSelected=member;
+ const box=document.getElementById('adminStaffPermissionEditor');if(!box)return;
+ box.replaceChildren();box.classList.remove('hidden');
+ const title=document.createElement('h4');title.textContent='Права модератора · '+member.telegram_id;box.append(title);
+ if(member.role!=='moderator'){
+  const note=document.createElement('p');note.className='notice';note.textContent='Индивидуальные права настраиваются только для должности «Модератор». Для владельца действует полный доступ, клиент не имеет административных прав.';box.append(note);return;
+ }
+ let permissions={};try{permissions=JSON.parse(member.permissions_json||'{}');}catch{}
+ Object.entries(adminPermissionLabels).forEach(([key,label])=>{
+  const line=document.createElement('label');line.className='admin-detail-line';
+  const input=document.createElement('input');input.type='checkbox';input.checked=permissions[key]!==false;input.dataset.permission=key;
+  const text=document.createElement('span');text.textContent=label;line.append(input,text);box.append(line);
+ });
+ const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Сохранить права';
+ save.addEventListener('click',saveAdminStaffPermissions);box.append(save);
+}
+async function saveAdminStaffPermissions(){
+ if(!adminStaffSelected)return;
+ const box=document.getElementById('adminStaffPermissionEditor');
+ const permissions={};
+ box?.querySelectorAll('input[data-permission]').forEach(input=>permissions[input.dataset.permission]=input.checked);
+ try{
+  await apiFetch('/api/admin/staff/permissions',{method:'POST',body:JSON.stringify({telegram_id:adminStaffSelected.telegram_id,permissions})});
+  toast('Права модератора сохранены.');await loadAdminStaff();
+ }catch(e){toast(e.message||'Не удалось сохранить права.');}
 }
 
 async function apiFetch(path,options={}) {
@@ -854,6 +1711,16 @@ function renderCustomStep(){const s=customSteps[customStep],n=customStep+1;docum
 function customPrev(){if(customStep>0){customStep--;renderCustomStep();}}
 async function customNext(){const s=customSteps[customStep],v=customAnswers[s.key];if(s.key==='subject'&&(!v||v.trim().length<3)){toast('Пожалуйста, укажите, что необходимо изобразить.');return;}if(s.options&&(!v||(Array.isArray(v)&&!v.length))){toast('Пожалуйста, выберите вариант, чтобы продолжить.');return;}if(customStep<7){customStep++;renderCustomStep();return;}const b=document.getElementById('customNext');b.disabled=true;b.textContent='Отправляем…';try{const r=await apiFetch('/api/custom-orders',{method:'POST',body:JSON.stringify({answers:customAnswers})});toast('Заказ отправлен! Цена: '+r.total_stars+' ⭐');showView('ordersView');await loadMe();}catch(e){toast(e.message||'Не удалось отправить заказ.');}finally{b.disabled=false;b.textContent='Отправить заказ';}}
 
+async function applyPromoCode(){
+ const input=document.getElementById('promoCodeInput'),status=document.getElementById('promoStatus'),button=document.getElementById('applyPromoButton');
+ const code=(input?.value||'').trim().toUpperCase(),entries=products.filter(p=>Number(cart[p[0]]||0)>0);
+ if(!code){toast('Введите промокод.');return;}if(!entries.length){toast('Сначала добавьте товары в корзину.');return;}
+ button.disabled=true;status.textContent='Проверяем промокод на сервере…';
+ try{const result=await apiFetch('/api/promo/validate',{method:'POST',body:JSON.stringify({code,items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])}))})});
+ activePromo={code:result.code,discount_stars:Number(result.discount_stars||0),total_stars:Number(result.total_stars||0),discount_percent:Number(result.discount_percent||0)};
+ status.textContent='Промокод применён: скидка '+activePromo.discount_percent+'% · экономия '+money(activePromo.discount_stars)+'. Итог повторно проверяется сервером при оформлении.';drawCart();
+ }catch(e){activePromo=null;status.textContent=e.message||'Промокод не применён.';drawCart();}finally{button.disabled=false;}
+}
 async function checkout() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
  if (entries.some(p => Number(cart[p[0]]) > 10)) return toast('Максимум 10 штук одного товара.');
@@ -868,13 +1735,13 @@ async function checkout() {
  try {
   const data = await apiFetch('/api/orders',{
    method:'POST',
-   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])}))})
+   body:JSON.stringify({items:entries.map(p => ({id:p[0],qty:Number(cart[p[0]])})),promo_code:activePromo?.code||''})
   });
 
   if (!data.invoice_url) throw new Error('Сервер не вернул ссылку на счёт.');
 
   openInvoice(data.invoice_url,status => {
-   if (status === 'paid') { cart = {}; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
+   if (status === 'paid') { cart = {}; activePromo=null; persistCart(); drawProducts(); drawCart(); loadMe(); loadBalance(); toast('Оплата подтверждена! Заказ оформлен 🎁'); }
    else if (status === 'pending') { toast('Платёж ещё обрабатывается. Проверь «Мои заказы».'); loadMe(); }
    else if (status === 'failed') toast('Оплата не прошла. Попробуй ещё раз.');
    else toast('Оплата отменена. Корзина сохранена.');
