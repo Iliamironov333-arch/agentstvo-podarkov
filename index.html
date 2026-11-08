@@ -1293,6 +1293,16 @@ async function openAdminOrder(orderId,orderType) {
    addLine('Оплата',order.payment_status);
    addLine('Статус выполнения',order.fulfillment_status);
    addLine('Скидка',Number(order.discount_percent||0)+'%');
+   addLine('Списано с внутреннего баланса',Number(order.balance_applied_stars||0)+' ⭐');
+   const delivery=data.delivery||{};
+   if(delivery.address){
+    addLine('Адрес доставки',delivery.address);
+    addLine('Подъезд / этаж / квартира',delivery.delivery_details||'Не указаны');
+    addLine('Комментарий курьеру',delivery.delivery_note||'Нет');
+    addLine('Автомобильный маршрут',Number(delivery.distance_km||0).toFixed(2)+' км');
+    addLine('Стоимость доставки',Number(delivery.delivery_stars||0)+' ⭐');
+    addLine('Приоритет',delivery.priority_delivery?'Да · +'+Number(delivery.priority_stars||100)+' ⭐':'Нет');
+   }
    const payment=data.payment;
    if(payment)addLine('Платёж',payment.status+' · '+payment.amount_stars+' '+payment.currency+' · '+(payment.confirmed_at||payment.created_at));
    const items=Array.isArray(data.items)?data.items:[];
