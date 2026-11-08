@@ -1845,11 +1845,12 @@ export default {
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
         if (!Array.isArray(body.items) || !body.items.length || body.items.length > 43) return json({ error: "Корзина пуста или некорректна" }, 400, origin);
+        const deliveryMethod = body.delivery_method === "pickup" ? "pickup" : "courier";
         const deliveryAddress = typeof body.delivery_address === "string" ? body.delivery_address.trim().slice(0,350) : "";
         const deliveryDetails = typeof body.delivery_details === "string" ? body.delivery_details.trim().slice(0,180) : "";
         const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
-        const priorityDelivery = body.priority_delivery === true;
-        if (deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
+        const priorityDelivery = deliveryMethod === "courier" && body.priority_delivery === true;
+        if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
         for (const item of body.items) {
@@ -1883,13 +1884,24 @@ export default {
           promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*discountPercent/100));
         }
         let delivery;
-        try {
-          delivery = await calculateDeliveryQuote(deliveryAddress,priorityDelivery);
-        } catch (deliveryError) {
-          const message = String(deliveryError?.message || "Не удалось рассчитать доставку.");
-          const clientInputError = /Адрес не найден|Доставка доступна только|Укажите полный адрес|Уточните адрес|Проверьте номер дома/i.test(message);
-          console.warn("Delivery quote rejected:",message.slice(0,250));
-          return json({error:message},clientInputError?422:503,origin);
+        if (deliveryMethod === "pickup") {
+          delivery = {
+            address: "Самовывоз — пункт выдачи: Новаторов, 8",
+            distance_km: 0,
+            delivery_stars: 0,
+            priority_delivery: false,
+            priority_stars: 0,
+            total_delivery_stars: 0
+          };
+        } else {
+          try {
+            delivery = await calculateDeliveryQuote(deliveryAddress,priorityDelivery);
+          } catch (deliveryError) {
+            const message = String(deliveryError?.message || "Не удалось рассчитать доставку.");
+            const clientInputError = /Адрес не найден|Доставка доступна только|Укажите полный адрес|Уточните адрес|Проверьте номер дома/i.test(message);
+            console.warn("Delivery quote rejected:",message.slice(0,250));
+            return json({error:message},clientInputError?422:503,origin);
+          }
         }
         const goodsTotal = subtotal-discount;
         const total = goodsTotal+delivery.total_delivery_stars;
