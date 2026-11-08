@@ -187,6 +187,19 @@ html,body{width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none
 .admin-category-section .admin-user-row>*,.admin-category-section .admin-order-actions>*{min-width:0;max-width:100%}
 body.light-theme .panel textarea,body.light-theme .panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .panel select,body.light-theme .admin-category-section textarea,body.light-theme .admin-category-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .admin-category-section select{background:#fff;color:#382819;border-color:#dfc8a8}
 .order-card{padding:12px 0;border-bottom:1px solid var(--line);min-width:0}.order-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px}.order-action-btn,.owner-contact-btn{width:100%;min-width:0;min-height:44px;border-radius:14px!important;padding:10px 12px;line-height:1.25;white-space:normal;overflow-wrap:anywhere}.owner-contact-btn{margin-top:10px}#adminPanelView input,#adminPanelView textarea,#adminPanelView select{box-sizing:border-box;width:100%;max-width:100%;min-width:0}#adminPanelView .admin-category-section button{border-radius:13px;min-height:44px;line-height:1.25;white-space:normal;overflow-wrap:anywhere;word-break:normal;padding:10px 12px}#adminPanelView .admin-category-section .row-actions,#adminPanelView .admin-category-section .admin-product-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px}#adminPanelView .admin-category-section .row-actions button,#adminPanelView .admin-category-section .admin-product-actions button{width:100%;min-width:0}#adminPanelView input[type=date]{width:100%;min-width:0}
+/* Единый стиль текстовых полей во всех разделах приложения */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+textarea{
+ display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+ min-height:44px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;
+ background:var(--panel2);color:var(--text);font:inherit;font-size:14px;line-height:1.4;
+ box-shadow:inset 0 1px 0 #ffffff10;
+}
+textarea{min-height:88px;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere}
+input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px #d88a2026}
+input[type="checkbox"],input[type="radio"]{width:auto;min-width:18px;min-height:18px;accent-color:var(--gold)}
+body.light-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme textarea{background:#fff;color:#382819;border-color:#dfc8a8}
+
 /* Исправление мобильной панели владельца */
 #adminPanelView .admin-category-section,#adminPanelView .admin-category-section .panel,#adminPanelView .admin-category-section form,#adminPanelView .admin-category-section .admin-product-actions,#adminPanelView .admin-category-section .row-actions{box-sizing:border-box;min-width:0;max-width:100%}
 #adminPanelView .admin-category-section input:not([type=checkbox]):not([type=radio]):not([type=file]),#adminPanelView .admin-category-section textarea,#adminPanelView .admin-category-section select{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;margin-inline:0;white-space:normal;overflow-wrap:anywhere}
@@ -432,16 +445,24 @@ body.light-theme .panel textarea,body.light-theme .panel input:not([type="checkb
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
  <div class="panel" id="cartItems"></div>
  <div class="panel">
-  <h3>🚚 Данные доставки</h3>
-  <p class="notice">По Екатеринбургу от ул. Новаторов, 8: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.</p>
-  <label for="deliveryAddress">Адрес (улица и номер дома)
-   <input id="deliveryAddress" maxlength="350" autocomplete="street-address" placeholder="Екатеринбург, улица, дом" style="width:100%;box-sizing:border-box">
+  <h3>🚚 Способ получения</h3>
+  <label for="deliveryMethod">Как удобнее получить заказ?
+   <select id="deliveryMethod" onchange="updateDeliveryMethodUI()">
+    <option value="courier">Курьером по Екатеринбургу</option>
+    <option value="pickup">Самовывоз — пункт выдачи: Новаторов, 8 · бесплатно</option>
+   </select>
   </label>
-  <label for="deliveryDetails">Подъезд, этаж и квартира (необязательно)
-   <input id="deliveryDetails" maxlength="180" placeholder="Подъезд, этаж, квартира" style="width:100%;box-sizing:border-box">
-  </label>
-  <label for="deliveryNote">Комментарий курьеру (необязательно)
-   <textarea id="deliveryNote" rows="2" maxlength="500" placeholder="Ориентир или удобное время" style="width:100%;box-sizing:border-box"></textarea>
+  <p class="notice" id="deliveryMethodHint">Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.</p>
+  <div id="deliveryAddressFields">
+   <label for="deliveryAddress">Адрес (улица и номер дома)
+    <input id="deliveryAddress" maxlength="350" autocomplete="street-address" placeholder="Екатеринбург, улица, дом">
+   </label>
+   <label for="deliveryDetails">Подъезд, этаж и квартира (необязательно)
+    <input id="deliveryDetails" maxlength="180" placeholder="Подъезд, этаж, квартира">
+   </label>
+  </div>
+  <label for="deliveryNote"><span id="deliveryNoteLabel">Комментарий курьеру (необязательно)</span>
+   <textarea id="deliveryNote" rows="2" maxlength="500" placeholder="Ориентир или удобное время"></textarea>
   </label>
   <label style="display:flex;align-items:center;gap:9px;margin:12px 0">
    <input id="priorityDelivery" type="checkbox" style="width:auto">
@@ -728,6 +749,23 @@ function drawProducts() {
  });
 }
 
+function updateDeliveryMethodUI(){
+ const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
+ const fields=document.getElementById('deliveryAddressFields');
+ const priority=document.getElementById('priorityDelivery');
+ const hint=document.getElementById('deliveryMethodHint');
+ const noteLabel=document.getElementById('deliveryNoteLabel');
+ if(fields)fields.classList.toggle('hidden',pickup);
+ if(priority){priority.disabled=pickup;if(pickup)priority.checked=false;}
+ if(hint)hint.textContent=pickup?'Самовывоз из пункта выдачи: Новаторов, 8. Оплата доставки не требуется.':'Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.';
+ if(noteLabel)noteLabel.textContent=pickup?'Комментарий к получению (необязательно)':'Комментарий курьеру (необязательно)';
+ const cost=document.getElementById('deliveryCost');
+ if(cost)cost.textContent=pickup?'0 ⭐ · самовывоз':'По адресу';
+ const status=document.getElementById('deliveryCalcStatus');
+ if(status)status.textContent=pickup?'Самовывоз: Новаторов, 8. Доставка бесплатная.':'Точную стоимость рассчитаем по адресу при оформлении.';
+ const total=document.getElementById('total');
+ if(total&&pickup){const sub=document.getElementById('subtotal');total.textContent=sub?.textContent||'0 ⭐';}
+}
 function drawCart() {
  const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
  const root = document.getElementById('cartItems');
@@ -744,7 +782,8 @@ function drawCart() {
 
  document.getElementById('subtotal').textContent = money(subtotal);
  document.getElementById('discount').textContent = discountAmount ? '-'+money(discountAmount)+' ('+activePromo.code+')' : 'Уже учтена в каталоге';
- document.getElementById('deliveryCost').textContent = 'По адресу';
+ const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
+ document.getElementById('deliveryCost').textContent = pickup ? '0 ⭐ · самовывоз' : 'По адресу';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
@@ -1759,6 +1798,7 @@ async function loadBalance() {
  const root = document.getElementById('balanceHistory');
  try { const data = await apiFetch('/api/balance'); const balance = Number(data.balance_stars || 0);
   document.getElementById('balancePoints').textContent = balance.toLocaleString('ru-RU') + ' ⭐';
+  const headerPoints=document.getElementById('points');if(headerPoints)headerPoints.textContent=balance.toLocaleString('ru-RU');
   const profile = document.getElementById('profilePoints'); if (profile) profile.textContent = balance.toLocaleString('ru-RU') + ' баллов';
   const rows = data.transactions || [];
   root.innerHTML = rows.length ? rows.map(t => `<div class="lineitem"><span>${t.description || t.operation_type}<br><small>${formatDate(t.created_at)}</small></span><b>${Number(t.amount_stars)>0?'+':''}${Number(t.amount_stars)} ⭐</b></div>`).join('') : '<p class="muted">Операций пока нет.</p>';
@@ -1912,19 +1952,21 @@ async function checkout() {
  if(!entries.length)return toast('Корзина пуста.');
  if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
  if(entries.some(p=>p[2]==null))return toast('У одной из работ ещё не указана цена.');
+ const deliveryMethod=document.getElementById('deliveryMethod')?.value==='pickup'?'pickup':'courier';
  const address=document.getElementById('deliveryAddress')?.value.trim()||'';
- if(address.length<8)return toast('Укажи полный адрес доставки в Екатеринбурге.');
+ if(deliveryMethod==='courier'&&address.length<8)return toast('Укажи полный адрес доставки в Екатеринбурге.');
  const btn=document.getElementById('checkoutBtn'),statusBox=document.getElementById('deliveryCalcStatus');
- btn.disabled=true;btn.textContent='Рассчитываем доставку…';
- if(statusBox)statusBox.textContent='Проверяем адрес и автомобильный маршрут…';
+ btn.disabled=true;btn.textContent=deliveryMethod==='pickup'?'Оформляем самовывоз…':'Рассчитываем доставку…';
+ if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Подтверждаем бесплатный самовывоз из пункта выдачи…':'Проверяем адрес и автомобильный маршрут…';
  try{
   const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
    items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])})),
    promo_code:activePromo?.code||'',
-   delivery_address:address,
-   delivery_details:document.getElementById('deliveryDetails')?.value.trim()||'',
+   delivery_method:deliveryMethod,
+   delivery_address:deliveryMethod==='pickup'?'':address,
+   delivery_details:deliveryMethod==='pickup'?'':(document.getElementById('deliveryDetails')?.value.trim()||''),
    delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
-   priority_delivery:!!document.getElementById('priorityDelivery')?.checked
+   priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked
   })});
   const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
   if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
@@ -1936,7 +1978,7 @@ async function checkout() {
    return;
   }
   if(!data.invoice_url)throw new Error('Сервер не вернул ссылку на счёт.');
-  if(statusBox)statusBox.textContent='Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
+  if(statusBox)statusBox.textContent=(deliveryMethod==='pickup'?'Самовывоз: Новаторов, 8 · доставка бесплатно. ':'Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. ')+'Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
     quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
@@ -1997,6 +2039,7 @@ async function openCase() {
  }
 }
 
+updateDeliveryMethodUI();
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active',x === b));
  activeFilter = b.dataset.filter;
