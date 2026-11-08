@@ -1109,6 +1109,7 @@ export default {
           if(old?.payment_status==="paid")return json({error:"Заказ уже оплачен. Изменять цену нельзя."},409,origin);
           if(old&&Number(old.balance_applied_stars||0)>0)return json({error:"По заказу уже списана часть баланса. Сначала отмените неоплаченный заказ, чтобы вернуть списанные баллы."},409,origin);
           if(old){
+            await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(id,String(c.telegram_id)).run();
             await env.DB.prepare("UPDATE orders SET price_stars=?,total_stars=?,product_title=? WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(price,price,"Индивидуальная работа: "+c.subject,id,String(c.telegram_id)).run();
             await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status='pending' WHERE id=?").bind(price,id).run();
           }else{
