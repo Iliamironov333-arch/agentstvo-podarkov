@@ -512,6 +512,29 @@ export default {
         if (path === "/api/admin/session" && method === "GET") {
           return json({ ok: true, owner: true }, 200, origin);
         }
+        if (path === "/api/admin/backup/status" && method === "GET") {
+          try {
+            const session = env.DB.withSession("first-primary");
+            await session.prepare("SELECT 1 AS ready").first();
+            const bookmark = session.getBookmark();
+            return json({
+              ok: true,
+              time_travel_available: !!bookmark,
+              bookmark: bookmark || null,
+              checked_at: new Date().toISOString(),
+              recovery_type: "cloudflare_d1_time_travel"
+            }, 200, origin);
+          } catch (error) {
+            console.error("D1 Time Travel status check failed:", String(error).slice(0,300));
+            return json({
+              ok: true,
+              time_travel_available: false,
+              bookmark: null,
+              checked_at: new Date().toISOString(),
+              recovery_type: "manual_export_only"
+            }, 200, origin);
+          }
+        }
         if (path === "/api/admin/backup/export" && method === "GET") {
           const listed = await env.DB.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
           const tables = listed.results || [];
