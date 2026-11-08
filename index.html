@@ -1965,7 +1965,7 @@ async function loadMe() {
   const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
   const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
   const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
-  const actions=payable?'<div class="order-actions"><button class="primary order-action-btn" onclick="payExistingOrder(\''+id+'\')">Оплатить</button><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':waitingPrice?'<div class="order-actions"><button class="secondary order-action-btn" onclick="cancelExistingOrder(\''+id+'\')">Отменить заказ</button></div>':'';
+   const actions=payable?'<div class="order-actions"><button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':waitingPrice?'<div class="order-actions"><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':'';
   return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
 }).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){if(initData)console.warn('Не удалось загрузить профиль:',e);}
@@ -1994,6 +1994,12 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
  drawProducts();
 });
 
+document.addEventListener('click',event=>{
+ const navButton=event.target.closest('.bottom button[data-view]');
+ if(navButton){showView(navButton.dataset.view);return;}
+ const orderButton=event.target.closest('button[data-order-action][data-order-id]');
+ if(orderButton){const id=orderButton.dataset.orderId;if(orderButton.dataset.orderAction==='pay')payExistingOrder(id);else if(orderButton.dataset.orderAction==='cancel')cancelExistingOrder(id);}
+});
 document.querySelectorAll('.bottom button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
 drawProducts();
