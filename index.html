@@ -147,6 +147,24 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 .admin-block-controls input,.admin-block-controls select{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit}
 .admin-block-controls button{width:100%;margin-top:8px}
 
+
+/* Единый аккуратный стиль полей выбора и панели владельца */
+select{width:100%;min-height:44px;padding:11px 42px 11px 13px;border:1px solid var(--line);border-radius:12px;background-color:var(--panel2);color:var(--text);font:inherit;font-size:14px;line-height:1.3;appearance:none;-webkit-appearance:none;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23d9a64d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;box-shadow:inset 0 1px 0 #ffffff08;}
+select:focus{border-color:var(--gold);box-shadow:0 0 0 3px #e6a53d26}
+select option{background:var(--panel);color:var(--text)}
+input,textarea{accent-color:var(--gold)}
+.admin-category-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
+.admin-category-nav button{min-height:58px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);text-align:left;padding:10px 12px;font-weight:700}
+.admin-category-nav button small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:3px}
+.admin-category-nav button.active{border-color:var(--gold);background:linear-gradient(130deg,#6b471e33,var(--panel));box-shadow:0 0 0 1px #dca34233}
+.admin-category-section{min-width:0}
+.admin-category-section>.panel{margin-top:10px}
+.admin-category-section .sectionhead{margin-top:12px}
+@media(min-width:600px){.admin-category-nav{grid-template-columns:repeat(4,minmax(0,1fr))}}
+body.light-theme select{background-color:#fff;color:#382819;border-color:#dfc8a8}
+body.light-theme select option{background:#fff;color:#382819}
+body.light-theme .admin-category-nav button{background:#fff;color:#382819}
+body.light-theme .admin-category-nav button.active{background:linear-gradient(130deg,#fff0d2,#fffaf3);border-color:#d88a20}
 </style>
 </head>
 <body>
@@ -182,7 +200,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
   <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
   <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
-  <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Создание идей поделок и подробных инструкций</span></button>
+  <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Подбор авторской работы, вариантов и бюджета</span></button>
   <button class="menu-card" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
   <button class="menu-card hidden" id="ownerAdminCard" onclick="showView('adminPanelView')"><strong>🔐 Панель владельца <span class="pill">ADMIN</span></strong><span>Управление Агентством подарков</span></button>
  </div>
@@ -435,7 +453,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 </section>
 <section id="aiWorkshopView" class="hidden">
   <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
-  <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник задаёт вопросы по одному и не спешит с готовой инструкцией.</p></div>
+  <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник уточняет пожелания, подбирает готовую работу и рассчитывает предварительную цену.</p></div>
   <div class="panel hidden" id="craftResultPanel"><h3>Предложение мастерской</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
  </section>
 <section id="vipSupportView" class="hidden"><div class="sectionhead"><h2>👑 VIP-помощь Агентства</h2><span id="vipHelpStatus">Проверка подписки…</span></div><div class="panel"><p class="muted">Персональная помощь для владельцев действующей VIP-подписки. Опишите вопрос — помощник учтёт VIP-статус и при необходимости передаст обращение владельцу.</p><textarea id="vipSupportMessage" rows="4" maxlength="2000" placeholder="Опишите, с чем нужна помощь…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="vipSupportSendBtn" onclick="sendVipSupport()">Отправить в VIP-поддержку</button><p class="notice" id="vipSupportResult" aria-live="polite"></p></div></section>
@@ -537,6 +555,44 @@ let activeFilter = 'all';
 
 const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
+function initAdminCategories(){
+ const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
+ const hero=root.querySelector(':scope > .hero');if(!hero)return;
+ const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['system','🛡️ Система','Резервные копии и диагностика']];
+ const sections={};
+ definitions.forEach(([key,title,subtitle])=>{
+  const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
+  const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
+ });
+ hero.after(nav);
+ let anchor=nav;for(const key of ['store','cheats','operations','system']){anchor.after(sections[key]);anchor=sections[key];}
+ const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
+ const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
+ original.forEach(node=>{
+  const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
+  if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
+  else if(id==='adminSystemControlsPanel'||txt.startsWith('🎛️ Чит-панель'))key='cheats';
+  else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||txt.includes('Защищённый доступ'))key='system';
+  sections[key].appendChild(node);
+ });
+ const flags=document.getElementById('adminFeatureFlags'),cheatPanel=document.getElementById('adminSystemControlsPanel'),tech=document.getElementById('adminTechnicalCenterPanel');
+ if(flags&&cheatPanel){
+  const heading=Array.from(tech?.querySelectorAll('h4')||[]).find(x=>x.textContent.includes('Переключатели функций'));
+  if(heading){const next=heading.nextElementSibling;if(next?.classList.contains('muted'))next.remove();heading.remove();}
+  const title=document.createElement('h4');title.textContent='🎚️ Переключатели функций';cheatPanel.append(title);
+  const note=document.createElement('p');note.className='muted';note.textContent='Включайте или отключайте отдельные возможности. Уже созданные заказы и подтверждённые платежи не затрагиваются.';cheatPanel.append(note,flags);
+ }
+ if(returnButton)root.appendChild(returnButton);
+ root.dataset.categoriesReady='1';showAdminCategory('operations');
+}
+function showAdminCategory(key){
+ const root=document.getElementById('adminPanelView');if(!root)return;
+ root.querySelectorAll('.admin-category-section').forEach(section=>section.classList.toggle('hidden',section.dataset.category!==key));
+ root.querySelectorAll('.admin-category-nav button').forEach(button=>button.classList.toggle('active',button.dataset.category===key));
+}
+
+
 function buyProductNow(productId){
  const product=products.find(p=>String(p[0])===String(productId));
  if(!product||product[2]==null)return toast('Цена этой работы пока уточняется.');
@@ -555,7 +611,7 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCra
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminAnnouncements(); loadAdminCampaigns(); }
+ if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminAnnouncements(); loadAdminCampaigns(); }
  if (id === 'menuView') loadAnnouncements();
 }
 
@@ -1756,13 +1812,13 @@ async function sendCraftMessage(){
  if(!message){status.textContent='Напиши ответ, чтобы продолжить.';return;}
  if(!craftMessages.length)resetCraftConversation();
  if(craftConversationReady){status.textContent='Итог уже готов. Начни новый диалог, если хочешь придумать другую работу.';return;}
- if(craftQuestionCount>=16)craftMessages.push({role:'user',content:'Не задавай больше вопросов. Используй собранные ответы, сделай итоговый вариант и явно укажи все допущения.'});
+ if(craftQuestionCount>=16){status.textContent='Лимит вопросов достигнут. Готовим итоговый подбор…';}
  craftMessages.push({role:'user',content:message});input.value='';button.disabled=true;button.textContent='Мастер думает…';status.textContent='Анализируем пожелания и бюджет…';
  try{
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages})});
   craftMessages.push({role:'assistant',content:d.reply||'Помощник не вернул сообщение.'});
-  if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предварительный проект готов. Окончательную стоимость работы подтвердит владелец.';}
-  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем консультацию. Ответь на следующий вопрос.';}
+  if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Подбор готов. Цены предварительные; окончательную стоимость подтвердит владелец Агентства.';}
+  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответь на следующий вопрос.';}
   renderCraftChat();
  }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуй ещё раз.';input.value=message;}
  finally{button.disabled=craftConversationReady;button.textContent=craftConversationReady?'Проект готов':'Отправить ответ';}
