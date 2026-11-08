@@ -912,7 +912,7 @@ async function loadAdminAnalytics(){
  summary.textContent='Загружаем аналитику…';daily.replaceChildren();
  try{
   const data=await apiFetch('/api/admin/analytics'),t=data.totals||{};
-  summary.textContent='Выручка: '+Number(t.revenue_stars||0).toLocaleString('ru-RU')+' ⭐ · Средний чек: '+Number(t.average_check_stars||0).toLocaleString('ru-RU')+' ⭐ · Оплачено заказов: '+Number(t.paid_orders||0)+' · Индивидуальных заявок: '+Number(t.custom_orders||0)+' · Покупателей: '+Number(t.users||0)+' · Скидки по промокодам: '+Number(t.promo_discount_stars||0).toLocaleString('ru-RU')+' ⭐ · Использований: '+Number(t.promo_paid_uses||0);
+  summary.textContent='Выручка: '+Number(t.revenue_stars||0).toLocaleString('ru-RU')+' ⭐ · Средний платёж: '+Number(t.average_check_stars||0).toLocaleString('ru-RU')+' ⭐ · Оплачено заказов: '+Number(t.paid_orders||0)+' · Индивидуальных заявок: '+Number(t.custom_orders||0)+' · Всего покупателей: '+Number(t.users||0)+' · Активных за 30 дней: '+Number(t.active_customers_30d||0)+' · Покупателей с покупками: '+Number(t.paid_customers||0)+' · Повторных покупателей: '+Number(t.repeat_paid_customers||0)+' · Скидки по промокодам: '+Number(t.promo_discount_stars||0).toLocaleString('ru-RU')+' ⭐ · Использований: '+Number(t.promo_paid_uses||0);
   const title=document.createElement('h4');title.textContent='Выручка по дням';daily.append(title);
   const rows=data.daily_revenue||[];
   if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='За последние 30 дней подтверждённых платежей нет.';daily.append(empty);}
@@ -922,8 +922,11 @@ async function loadAdminAnalytics(){
   else if(!(data.promo_stats||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет промокодов или подтверждённых применений.';daily.append(empty);}
   (data.promo_stats||[]).forEach(p=>{const line=document.createElement('div');line.className='lineitem';const left=document.createElement('span');left.textContent=p.code+' · '+Number(p.discount_percent||0)+'% · оплачено '+Number(p.paid_uses||0)+' · ожидает оплаты '+Number(p.pending_uses||0);const right=document.createElement('b');right.textContent='Скидка '+Number(p.discount_stars||0).toLocaleString('ru-RU')+' ⭐';line.append(left,right);daily.append(line);});
   const activityTitle=document.createElement('h4');activityTitle.textContent='Активность за 30 дней';daily.append(activityTitle);
-  const orderDays=data.daily_orders||[],userDays=data.new_users||[];
-  const activity=document.createElement('p');activity.className='muted';activity.textContent='Дней с заказами: '+orderDays.length+' · Заказов за период: '+orderDays.reduce((sum,row)=>sum+Number(row.orders||0),0)+' · Дней с регистрациями: '+userDays.length+' · Новых покупателей: '+userDays.reduce((sum,row)=>sum+Number(row.users||0),0);daily.append(activity);
+  const orderDays=data.daily_orders||[],customDays=data.daily_custom_orders||[],userDays=data.new_users||[];
+  const activity=document.createElement('p');activity.className='muted';activity.textContent='За 30 дней: заказов каталога — '+orderDays.reduce((sum,row)=>sum+Number(row.orders||0),0)+'; индивидуальных заявок — '+customDays.reduce((sum,row)=>sum+Number(row.requests||0),0)+'; новых покупателей — '+userDays.reduce((sum,row)=>sum+Number(row.users||0),0)+'. Дней с заказами каталога: '+orderDays.length+'; дней с индивидуальными заявками: '+customDays.length+'.';daily.append(activity);
+  const customTitle=document.createElement('h4');customTitle.textContent='🎨 Состояние индивидуальных заявок';daily.append(customTitle);
+  if(!(data.custom_status_stats||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Индивидуальных заявок пока нет.';daily.append(empty);}
+  (data.custom_status_stats||[]).forEach(item=>{const line=document.createElement('div');line.className='lineitem';const left=document.createElement('span');left.textContent=item.status||'Без статуса';const right=document.createElement('b');right.textContent=Number(item.requests||0)+' заявок';line.append(left,right);daily.append(line);});
  }catch(e){summary.textContent=e.message||'Не удалось загрузить аналитику.';}
 }
 async function loadAdminSupport() {
@@ -1213,6 +1216,7 @@ async function openAdminOrder(orderId,orderType) {
   const statusLabels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
   addLine('Покупатель',order.first_name||order.username||order.telegram_id);
   addLine('Telegram ID',order.telegram_id);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id));box.append(crmButton);
   addLine('Дата',order.created_at);
   addLine('Сумма',Number(order.total_stars||0)+' ⭐');
   if(orderType==='product'){
