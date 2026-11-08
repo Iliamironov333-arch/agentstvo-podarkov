@@ -564,6 +564,11 @@ export default {
           const filename = "agentstvo-podarkov-backup-" + new Date().toISOString().replace(/[:.]/g,"-") + ".json";
           return new Response(serialized,{status:200,headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":'attachment; filename="'+filename+'"',...corsHeaders(origin)}});
         }
+        if(path==="/api/admin/backup-history"&&method==="GET"){
+          if(!(await tableExists(env,"admin_action_log")))return json({ok:true,history:[],migration_pending:true},200,origin);
+          const rows=await env.DB.prepare("SELECT id,action_type,details,created_at FROM admin_action_log WHERE action_type IN ('d1_sql_export_created','d1_time_travel_restore') ORDER BY id DESC LIMIT 50").all();
+          return json({ok:true,history:rows.results||[]},200,origin);
+        }
         if(path==="/api/admin/backup-status"&&method==="GET"){
           try{
             const result=await cloudflareD1Api(env,"/time_travel/bookmark");
@@ -574,6 +579,7 @@ export default {
           try{
             const body=await readJson(request),currentBookmark=typeof body.current_bookmark==="string"?body.current_bookmark.trim().slice(0,120):"";
             const result=await cloudflareD1Api(env,"/export",{method:"POST",body:{output_format:"polling",dump_options:{compatibility:"d1"},...(currentBookmark?{current_bookmark:currentBookmark}:{})}});
+            if(result.status==="complete"&&await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"d1_sql_export_created",JSON.stringify({filename:result.result?.filename||null,bookmark:result.at_bookmark||null})).run();
             return json({ok:true,status:result.status||"unknown",at_bookmark:result.at_bookmark||null,filename:result.result?.filename||null,signed_url:result.result?.signed_url||null,messages:result.messages||[]},200,origin);
           }catch(error){return json({error:String(error.message||error).slice(0,500)},502,origin);}
         }
