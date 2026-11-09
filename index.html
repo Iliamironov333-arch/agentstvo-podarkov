@@ -323,6 +323,88 @@ body.season-spring,body.season-summer{isolation:isolate}
 body.season-spring:before,body.season-spring:after,body.season-summer:before,body.season-summer:after,body.season-winter:before{z-index:0}
 body.season-spring header,body.season-spring main,body.season-spring nav,body.season-spring .bottom,body.season-summer header,body.season-summer main,body.season-summer nav,body.season-summer .bottom{position:relative;z-index:2}
 body.season-spring .bottom,body.season-summer .bottom{position:fixed}
+
+/* SUMMER REDESIGN v2 — intentionally distinct from autumn */
+body.season-summer:not(.dark-theme){
+  --bg:#eaf8f2!important;--panel:#fbfffd!important;--panel2:#dff3e9!important;
+  --gold:#36a879!important;--gold2:#167653!important;--text:#173f32!important;
+  --muted:#527b6b!important;--line:#b9dfce!important;
+  background:linear-gradient(180deg,#c9eff4 0%,#e6f7ed 34%,#f4fbef 100%)!important;
+  color:#173f32!important
+}
+body.season-summer:not(.dark-theme) header,
+body.season-summer:not(.dark-theme) .bottom{
+  background:linear-gradient(100deg,#e2f8f5f7,#f5fff1f7)!important;
+  border-color:#a9d9c6!important
+}
+body.season-summer:not(.dark-theme) .hero,
+body.season-summer:not(.dark-theme) .menu-card:first-child{
+  background:linear-gradient(120deg,#b9e9e8 0%,#d7f1c4 58%,#f4fbdc 100%)!important;
+  border-color:#91d0b4!important;color:#173f32!important
+}
+body.season-summer:not(.dark-theme) .product,
+body.season-summer:not(.dark-theme) .panel,
+body.season-summer:not(.dark-theme) .menu-card{
+  background:linear-gradient(145deg,#fbfffd,#eaf7ed)!important;
+  border-color:#b9dfce!important;color:#173f32!important
+}
+body.season-summer:not(.dark-theme) .art{
+  background:radial-gradient(circle at 45% 35%,#fff5bd 0 15%,#ccebd2 56%,#b7e4e1 100%)!important
+}
+body.season-summer:not(.dark-theme) .primary,
+body.season-summer:not(.dark-theme) .add,
+body.season-summer:not(.dark-theme) #checkoutBtn{
+  background:linear-gradient(100deg,#38b985,#16865e)!important;
+  border:1px solid #11764f!important;color:#fff!important;
+  box-shadow:0 4px 12px #16865e25!important
+}
+body.season-summer:not(.dark-theme) .secondary{
+  background:#dff3e9!important;color:#176847!important;border-color:#a9d9c1!important
+}
+body.season-summer:not(.dark-theme) nav button{
+  background:#f7fffa!important;color:#477866!important;border-color:#b9dfce!important
+}
+body.season-summer:not(.dark-theme) nav button.active{
+  background:#c6edda!important;color:#145d40!important;border-color:#70c49b!important
+}
+body.season-summer:not(.dark-theme) .bottom button.active{color:#14764f!important}
+body.season-summer:not(.dark-theme) .muted,
+body.season-summer:not(.dark-theme) .notice,
+body.season-summer:not(.dark-theme) .sectionhead span,
+body.season-summer:not(.dark-theme) .menu-card span,
+body.season-summer:not(.dark-theme) .price small,
+body.season-summer:not(.dark-theme) .hero p,
+body.season-summer:not(.dark-theme) .hero small{color:#416b5a!important}
+body.season-summer:not(.dark-theme) input,
+body.season-summer:not(.dark-theme) textarea,
+body.season-summer:not(.dark-theme) select{background:#fbfffd!important;color:#173f32!important;border-color:#a9d9c1!important}
+body.season-summer:not(.dark-theme) .casebox{background:linear-gradient(135deg,#dff4e8,#c8ece7)!important;border-color:#9ed5bd!important}
+body.season-summer .season-theme-card[data-season=summer]{
+  background:linear-gradient(145deg,#bdeee9,#bfe8ad 58%,#f5efad)!important;color:#174d39!important
+}
+/* Summer night: deep forest green + cool turquoise, never autumn brown */
+body.dark-theme.season-summer{
+  --bg:#102b25!important;--panel:#193a30!important;--panel2:#23483a!important;
+  --gold:#75d5a5!important;--gold2:#b8f0d0!important;--text:#effff5!important;
+  --muted:#b9d8c8!important;--line:#376653!important;
+  background:linear-gradient(180deg,#143c3d 0%,#102b25 65%,#142f24 100%)!important;color:#effff5!important
+}
+body.dark-theme.season-summer header,body.dark-theme.season-summer .bottom{background:#15352df5!important;border-color:#376653!important}
+body.dark-theme.season-summer .hero,body.dark-theme.season-summer .menu-card:first-child{background:linear-gradient(120deg,#205a55,#28543a)!important;border-color:#4d9274!important;color:#effff5!important}
+body.dark-theme.season-summer .product,body.dark-theme.season-summer .panel,body.dark-theme.season-summer .menu-card{background:#193a30!important;border-color:#376653!important;color:#effff5!important}
+body.dark-theme.season-summer .primary,body.dark-theme.season-summer .add,body.dark-theme.season-summer #checkoutBtn{background:linear-gradient(100deg,#75d5a5,#27996c)!important;color:#092c20!important;border-color:#75d5a5!important}
+body.dark-theme.season-summer .secondary{background:#285342!important;color:#d4f7e2!important;border-color:#4d9274!important}
+body.dark-theme.season-summer nav button{background:#193a30!important;color:#c4e4d2!important;border-color:#376653!important}
+body.dark-theme.season-summer nav button.active{background:#2d684d!important;color:#f1fff5!important;border-color:#75d5a5!important}
+body.dark-theme.season-summer .bottom button.active{color:#9be8bd!important}
+body.dark-theme.season-summer .muted,body.dark-theme.season-summer .notice,body.dark-theme.season-summer .sectionhead span,body.dark-theme.season-summer .hero p,body.dark-theme.season-summer .hero small{color:#c4e4d2!important}
+body.dark-theme.season-summer .art{background:radial-gradient(circle at 45% 35%,#e5d98b 0 14%,#397653 56%,#205a55 100%)!important}
+body.season-summer:before{
+  content:"🍃       🌿          🍃       🌿       🍃\\A    🌿        🍃       🌿         🍃\\A 🍃        🌿       🍃       🌿        🍃"!important;
+  color:#278b55!important;opacity:.32!important;animation:seasonalDrift 18s linear infinite!important
+}
+body.dark-theme.season-summer:before{color:#8ee0aa!important;opacity:.25!important}
+
 </style>
 </head>
 <body>
