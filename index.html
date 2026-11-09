@@ -649,7 +649,7 @@ function initAdminCategories(){
  original.forEach(node=>{
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
-  else if(id==='adminSystemControlsPanel'||txt.startsWith('🎛️ Чит-панель'))key='cheats';
+  else if(id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||txt.includes('Защищённый доступ'))key='system';
   sections[key].appendChild(node);
  });
