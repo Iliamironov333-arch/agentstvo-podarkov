@@ -405,6 +405,43 @@ body.season-summer:before{
 }
 body.dark-theme.season-summer:before{color:#8ee0aa!important;opacity:.25!important}
 
+
+/* Seasonal falling particles: start above the sticky brand header and fall at a steady pace */
+.season-particles{display:none;position:fixed;inset:0;overflow:hidden;pointer-events:none!important;z-index:6;contain:strict}
+body.season-summer .season-particles,body.season-spring .season-particles,body.season-winter .season-particles{display:block}
+.season-particles span{position:absolute;top:-12vh;left:var(--x);font-size:var(--size);opacity:var(--alpha,.58);animation:seasonParticleFall var(--duration) linear var(--delay) infinite;will-change:transform}
+.season-particles span:nth-child(1){--x:4%;--size:22px;--duration:12s;--delay:-1s}
+.season-particles span:nth-child(2){--x:12%;--size:17px;--duration:14s;--delay:-8s}
+.season-particles span:nth-child(3){--x:20%;--size:25px;--duration:13s;--delay:-4s}
+.season-particles span:nth-child(4){--x:29%;--size:16px;--duration:15s;--delay:-11s}
+.season-particles span:nth-child(5){--x:38%;--size:21px;--duration:12.5s;--delay:-6s}
+.season-particles span:nth-child(6){--x:47%;--size:18px;--duration:14.5s;--delay:-2s}
+.season-particles span:nth-child(7){--x:56%;--size:24px;--duration:13.5s;--delay:-10s}
+.season-particles span:nth-child(8){--x:65%;--size:16px;--duration:15.5s;--delay:-5s}
+.season-particles span:nth-child(9){--x:74%;--size:22px;--duration:12.8s;--delay:-9s}
+.season-particles span:nth-child(10){--x:83%;--size:18px;--duration:14.8s;--delay:-3s}
+.season-particles span:nth-child(11){--x:92%;--size:25px;--duration:13.2s;--delay:-12s}
+.season-particles span:nth-child(12){--x:98%;--size:17px;--duration:15.2s;--delay:-7s}
+@keyframes seasonParticleFall{
+  0%{transform:translate3d(0,-4vh,0) rotate(0deg)}
+  25%{transform:translate3d(18px,25vh,0) rotate(100deg)}
+  50%{transform:translate3d(-12px,52vh,0) rotate(210deg)}
+  75%{transform:translate3d(20px,82vh,0) rotate(300deg)}
+  100%{transform:translate3d(-8px,116vh,0) rotate(390deg)}
+}
+body.season-summer:before,body.season-spring:before,body.season-winter:before{content:none!important;display:none!important}
+body.season-summer:after,body.season-spring:after{pointer-events:none}
+body.season-summer:not(.dark-theme) .menu-grid > button.menu-card[onclick="showView('catalogView')"]{
+  background:linear-gradient(120deg,#b9e9e8 0%,#d7f1c4 58%,#f4fbdc 100%)!important;
+  border:1px solid #91d0b4!important;color:#174b39!important
+}
+body.season-summer:not(.dark-theme) .menu-grid > button.menu-card[onclick="showView('catalogView')"] strong{color:#174b39!important}
+body.dark-theme.season-summer .menu-grid > button.menu-card[onclick="showView('catalogView')"]{
+  background:linear-gradient(120deg,#205a55,#28543a)!important;
+  border:1px solid #4d9274!important;color:#effff5!important
+}
+body.dark-theme.season-summer .menu-grid > button.menu-card[onclick="showView('catalogView')"] strong{color:#effff5!important}
+
 </style>
 </head>
 <body>
@@ -732,7 +769,8 @@ body.dark-theme.season-summer:before{color:#8ee0aa!important;opacity:.25!importa
  <button data-view="ordersView"><strong>📦</strong>Заказы</button>
 </div>
 <div class="toast" id="toast"></div>
-<div class="leaf-layer" aria-hidden="true"><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span></div>
+<div class="season-particles" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+ <div class="leaf-layer" aria-hidden="true"><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span><span class="leaf">🍁</span><span class="leaf">🍂</span></div>
 <script>
 const tg = window.Telegram?.WebApp;
 tg?.ready();
