@@ -218,7 +218,63 @@ body.light-theme input:not([type="checkbox"]):not([type="radio"]):not([type="fil
 body.winter-season{--bg:#edf7ff;--panel:#fff;--panel2:#e3f2ff;--gold:#55a8dc;--gold2:#246c9c;--text:#18354a;--muted:#66849a;--line:#c7dfef;background:radial-gradient(ellipse at top,#d9efff,#f6fbff 62%);color:var(--text)}body.winter-season header,body.winter-season .bottom{background:#f5fbfff2;border-color:#c7dfef}body.winter-season .hero{background:linear-gradient(125deg,#d8efff,#f8fcff);border-color:#b7d9ef}body.winter-season .product,body.winter-season .panel,body.winter-season .menu-card{background:linear-gradient(145deg,#fff,#f0f8ff);border-color:#c7dfef;color:#18354a}body.winter-season .art{background:radial-gradient(circle,#dff2ff,#f8fcff)}body.winter-season .secondary{background:#e5f3ff;color:#286b98;border-color:#bfdeef}body.winter-season nav button{background:#fff;border-color:#c7dfef;color:#66849a}body.winter-season nav button.active{background:#b9e2fa;color:#174d72;border-color:#80c2e9}body.winter-season .casebox{background:linear-gradient(140deg,#e3f3ff,#f8fcff);border-color:#b7d9ef}
 body.spring-season{--bg:#f4f8ee;--panel:#fffefa;--panel2:#edf5e5;--gold:#83a96b;--gold2:#527843;--text:#30452d;--muted:#788b70;--line:#d7e5ce;background:radial-gradient(ellipse at top,#e6f1dc,#fbfcf7 62%);color:var(--text)}body.spring-season header,body.spring-season .bottom{background:#fbfcf7f2;border-color:#d7e5ce}body.spring-season .hero{background:linear-gradient(125deg,#e8f2dd,#fffdf7);border-color:#cbdcbd}body.spring-season .product,body.spring-season .panel,body.spring-season .menu-card{background:linear-gradient(145deg,#fffefa,#f3f7ed);border-color:#d7e5ce;color:#30452d}body.spring-season .art{background:radial-gradient(circle,#e9f3df,#fffdf7)}body.spring-season nav button.active{background:#dcebd1;color:#385b30;border-color:#b9d3aa}
 body.summer-season{--bg:#fff9e9;--panel:#fffefa;--panel2:#fff0cf;--gold:#e4a83e;--gold2:#a86c18;--text:#4b3a20;--muted:#927c58;--line:#f0d9a9;background:radial-gradient(ellipse at top,#ffedbd,#fffdf5 62%);color:var(--text)}body.summer-season header,body.summer-season .bottom{background:#fffdf2f2;border-color:#f0d9a9}body.summer-season .hero{background:linear-gradient(125deg,#ffedbd,#fffdf5);border-color:#f0d18c}body.summer-season .product,body.summer-season .panel,body.summer-season .menu-card{background:linear-gradient(145deg,#fffefa,#fff6e2);border-color:#f0d9a9;color:#4b3a20}body.summer-season .art{background:radial-gradient(circle,#ffedbd,#fffdf5)}body.summer-season nav button.active{background:#ffe4a4;color:#694510;border-color:#e9c16b}
-@keyframes seasonalSnow{0%{transform:translateY(-12vh) translateX(0);opacity:0}12%{opacity:.7}100%{transform:translateY(110vh) translateX(28px);opacity:.15}}body.winter-season:before{content:"❄   ·    ❅      ❄     ·   ❅";position:fixed;z-index:3;pointer-events:none;top:-8vh;left:0;width:100%;height:110vh;color:#78bce8;font-size:22px;letter-spacing:24px;line-height:90px;opacity:.32;animation:seasonalSnow 18s linear infinite}</style>
+@keyframes seasonalSnow{0%{transform:translateY(-12vh) translateX(0);opacity:0}12%{opacity:.7}100%{transform:translateY(110vh) translateX(28px);opacity:.15}}body.winter-season:before{content:"❄   ·    ❅      ❄     ·   ❅";position:fixed;z-index:3;pointer-events:none;top:-8vh;left:0;width:100%;height:110vh;color:#78bce8;font-size:22px;letter-spacing:24px;line-height:90px;opacity:.32;animation:seasonalSnow 18s linear infinite}
+/* Seasonal theme repair: effects are isolated and dark mode is a first-class palette. */
+.leaf-layer{display:none}
+body.season-autumn .leaf-layer{display:block}
+.season-theme-card{color:#263238!important;text-shadow:none}
+.season-theme-card small{color:inherit;opacity:.86}
+.season-theme-card.active{outline:2px solid var(--gold);outline-offset:2px}
+body.winter-season:before,body.spring-season:before,body.summer-season:before{position:fixed;inset:-12vh 0 0;z-index:1;pointer-events:none;display:block;width:100%;height:112vh;white-space:pre-wrap;text-align:justify;line-height:clamp(64px,11vh,104px);letter-spacing:clamp(12px,4vw,34px);font-size:clamp(15px,2.8vw,23px);opacity:.22;animation:seasonalDrift 24s linear infinite;overflow:hidden}
+body.winter-season:before{content:"❄       ❅       ❄       ❅       ❄\A     ❅       ❄       ❅       ❄\A ❄       ❅       ❄       ❅       ❄";color:#4c9ed1}
+body.spring-season:before{content:"✿       ❀       ✿       ❀       ✿\A     ❀       ✿       ❀       ✿\A ✿       ❀       ✿       ❀       ✿";color:#79a95e}
+body.summer-season:before{content:"✦       ☀       ✦       ☀       ✦\A     ✧       ✦       ✧       ✦\A ✦       ☀       ✦       ☀       ✦";color:#d99a25}
+@keyframes seasonalDrift{0%{transform:translateY(-8vh)}100%{transform:translateY(16vh)}}
+body.dark-theme{--bg:#15171c;--panel:#20242b;--panel2:#292f38;--text:#f3f5f8;--muted:#b5becb;--line:#414b58;--gold:#e5b85c;--gold2:#f4d58d;background:radial-gradient(ellipse at top,#292d35 0,#15171c 62%);color:var(--text)}
+body.dark-theme header,body.dark-theme .bottom{background:#171a20f5;border-color:var(--line)}
+body.dark-theme .headchip,body.dark-theme .theme-toggle{background:var(--panel);border-color:var(--line);color:var(--text)}
+body.dark-theme .hero{background:linear-gradient(125deg,#343b47,#222832 72%);border-color:#536174}
+body.dark-theme .hero small,body.dark-theme .hero p{color:#d4dce7}
+body.dark-theme .product,body.dark-theme .panel,body.dark-theme .menu-card{background:#20242b;border-color:var(--line);color:var(--text)}
+body.dark-theme .menu-card:first-child{background:linear-gradient(120deg,#343b47,#222832)}
+body.dark-theme .menu-card span,body.dark-theme .muted,body.dark-theme .sectionhead span{color:#b5becb}
+body.dark-theme .art{background:radial-gradient(circle,#3b4655,#252b34 72%)}
+body.dark-theme nav button{background:#252b34;border-color:var(--line);color:#c0cad7}
+body.dark-theme nav button.active{background:#e5b85c;color:#241b0c;border-color:#e5b85c}
+body.dark-theme .secondary{background:#303946;color:#f4d58d;border-color:#566477}
+body.dark-theme .primary,body.dark-theme .add{background:linear-gradient(100deg,#f0cf83,#bd8734);color:#241b0c}
+body.dark-theme .bottom button{color:#b5becb}
+body.dark-theme .bottom button.active{color:#f4d58d}
+body.dark-theme .casebox{background:linear-gradient(140deg,#343b47,#20242b);border-color:#68778a}
+body.dark-theme .toast{background:#292f38;border-color:#647184;color:#f3f5f8}
+body.dark-theme input:not([type=checkbox]):not([type=radio]):not([type=file]),body.dark-theme textarea,body.dark-theme select{background:#292f38!important;color:#f3f5f8!important;border-color:#4a5665!important;color-scheme:dark}
+body.dark-theme select option{background:#20242b;color:#f3f5f8}
+body.dark-theme .admin-category-nav button{background:#20242b;color:#f3f5f8}
+body.dark-theme .admin-category-nav button.active{background:#343b47;border-color:#e5b85c}
+body.dark-theme .admin-metric{background:linear-gradient(145deg,#252b34,#1c2027)}
+body.dark-theme .admin-metric span{color:#c0cad7}
+body.dark-theme .admin-detail-title,body.dark-theme .admin-order-actions h4,body.dark-theme .admin-balance-controls h4{color:#f4d58d}
+body.dark-theme .admin-user-detail{background:#292f38;border-color:#414b58}
+body.dark-theme .leaf-layer{display:none!important}
+body.dark-theme.season-autumn .leaf-layer{display:block!important;opacity:.22}
+body.dark-theme.winter-season{--bg:#111e29;--panel:#1b2b38;--panel2:#243847;--text:#edf7ff;--muted:#b2c9d9;--line:#3b596c;--gold:#65b8e8;--gold2:#b8e5ff;background:radial-gradient(ellipse at top,#20394b,#111e29 65%)}
+body.dark-theme.spring-season{--bg:#172219;--panel:#202f23;--panel2:#2b3b2d;--text:#f0f7e9;--muted:#c0d0b6;--line:#465d43;--gold:#9bc77e;--gold2:#d1edb9;background:radial-gradient(ellipse at top,#2a3e2a,#172219 65%)}
+body.dark-theme.summer-season{--bg:#292012;--panel:#382b18;--panel2:#47371f;--text:#fff5dc;--muted:#e0c99c;--line:#66502c;--gold:#edbd56;--gold2:#ffe2a0;background:radial-gradient(ellipse at top,#57401d,#292012 65%)}
+body.dark-theme.winter-season header,body.dark-theme.winter-season .bottom{background:#142532f5;border-color:#3b596c}
+body.dark-theme.winter-season .hero,body.dark-theme.winter-season .menu-card:first-child{background:linear-gradient(125deg,#25475d,#192d3b);border-color:#456b83}
+body.dark-theme.winter-season .product,body.dark-theme.winter-season .panel,body.dark-theme.winter-season .menu-card{background:#1b2b38;border-color:#3b596c;color:#edf7ff}
+body.dark-theme.winter-season .secondary{background:#29465a;color:#c7eaff;border-color:#456b83}
+body.dark-theme.spring-season header,body.dark-theme.spring-season .bottom{background:#1b2a1eF5;border-color:#465d43}
+body.dark-theme.spring-season .hero,body.dark-theme.spring-season .menu-card:first-child{background:linear-gradient(125deg,#304b30,#202f23);border-color:#526e4a}
+body.dark-theme.spring-season .product,body.dark-theme.spring-season .panel,body.dark-theme.spring-season .menu-card{background:#202f23;border-color:#465d43;color:#f0f7e9}
+body.dark-theme.spring-season .secondary{background:#304632;color:#d1edb9;border-color:#526e4a}
+body.dark-theme.summer-season header,body.dark-theme.summer-season .bottom{background:#302412f5;border-color:#66502c}
+body.dark-theme.summer-season .hero,body.dark-theme.summer-season .menu-card:first-child{background:linear-gradient(125deg,#5a421d,#382b18);border-color:#806334}
+body.dark-theme.summer-season .product,body.dark-theme.summer-season .panel,body.dark-theme.summer-season .menu-card{background:#382b18;border-color:#66502c;color:#fff5dc}
+body.dark-theme.summer-season .secondary{background:#51401f;color:#ffe2a0;border-color:#806334}
+body.dark-theme .sectionhead h2,body.dark-theme .panel h3,body.dark-theme .product h3,body.dark-theme .menu-card strong{color:var(--text)}
+body.dark-theme .price,body.dark-theme .admin-metric strong{color:var(--gold2)}
+</style>
 </head>
 <body>
 <header>
@@ -710,10 +766,11 @@ function money(n) {
  return n == null ? 'Цена уточняется' : `${Number(n).toLocaleString('ru-RU')} ⭐`;
 }
 
-function applySeasonTheme(season){if(!['autumn','winter','spring','summer'].includes(season))season='autumn';document.body.classList.remove('winter-season','spring-season','summer-season');if(season!=='autumn')document.body.classList.add(season+'-season');try{localStorage.setItem('gift-season-theme',season)}catch(e){}document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};const s=document.getElementById('adminSeasonThemeStatus');if(s)s.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';const m=document.querySelector('meta[name="theme-color"]');if(m)m.content={autumn:'#fff8ed',winter:'#edf7ff',spring:'#f4f8ee',summer:'#fff9e9'}[season]}
+function updateThemeMeta(){const m=document.querySelector('meta[name="theme-color"]');if(!m)return;const dark=document.body.classList.contains('dark-theme');const season=['winter','spring','summer'].find(x=>document.body.classList.contains('season-'+x))||'autumn';const colors={autumn:dark?'#211810':'#fff8ed',winter:dark?'#101f2b':'#edf7ff',spring:dark?'#172319':'#f4f8ee',summer:dark?'#2b2111':'#fff9e9'};m.content=colors[season]}
+function applySeasonTheme(season){if(!['autumn','winter','spring','summer'].includes(season))season='autumn';document.body.classList.remove('winter-season','spring-season','summer-season','season-autumn','season-winter','season-spring','season-summer');document.body.classList.add('season-'+season);if(season!=='autumn')document.body.classList.add(season+'-season');try{localStorage.setItem('gift-season-theme',season)}catch(e){}document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};const status=document.getElementById('adminSeasonThemeStatus');if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';updateThemeMeta()}
 function setSeasonTheme(season){applySeasonTheme(season);toast('Сезонная тема изменена.')}
-function toggleTheme(){const dark=document.body.classList.toggle('dark-theme');document.body.classList.toggle('light-theme',!dark);localStorage.setItem('gift-theme',dark?'dark':'light');document.getElementById('themeToggle').textContent=dark?'☀️':'🌙'}
-(function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const b=document.getElementById('themeToggle');if(b)b.textContent=dark?'☀️':'🌙';applySeasonTheme(season)})();
+function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';updateThemeMeta()}
+(function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonTheme(season)})();
 
 function toast(s) {
  const t = document.getElementById('toast');
