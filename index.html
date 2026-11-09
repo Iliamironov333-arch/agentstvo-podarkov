@@ -453,6 +453,21 @@ body.dark-theme.season-spring .season-particles span:nth-child(odd):before{conte
 body.dark-theme.season-spring .season-particles span:nth-child(even):before{content:"🍃"}
 body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 
+
+/* Explicit seasonal styling for the MAIN MENU shop button */
+body.season-summer #mainShopButton{
+  background:linear-gradient(120deg,#b9e9e8 0%,#d7f1c4 58%,#f4fbdc 100%)!important;
+  background-image:linear-gradient(120deg,#b9e9e8 0%,#d7f1c4 58%,#f4fbdc 100%)!important;
+  border:1px solid #91d0b4!important;color:#174b39!important
+}
+body.season-summer #mainShopButton strong{color:#174b39!important}
+body.dark-theme.season-summer #mainShopButton{
+  background:linear-gradient(120deg,#205a55,#28543a)!important;
+  background-image:linear-gradient(120deg,#205a55,#28543a)!important;
+  border:1px solid #4d9274!important;color:#effff5!important
+}
+body.dark-theme.season-summer #mainShopButton strong{color:#effff5!important}
+
 </style>
 </head>
 <body>
@@ -480,7 +495,7 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
  <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
  <div class="menu-grid">
-  <button class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
+  <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
   <button class="menu-card" onclick="openCustomWizard()"><strong>🎨 Создать своё</strong><span>Индивидуальная работа за 8 шагов</span></button>
   <button class="menu-card" onclick="showView('vipView')"><strong>👑 VIP-подписка</strong><span>VIP-поддержка и ассистент</span></button>
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
