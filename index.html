@@ -442,6 +442,17 @@ body.dark-theme.season-summer .menu-grid > button.menu-card[onclick="showView('c
 }
 body.dark-theme.season-summer .menu-grid > button.menu-card[onclick="showView('catalogView')"] strong{color:#effff5!important}
 
+
+.season-particles span:before{display:block;line-height:1}
+body.season-summer .season-particles span:before{content:"🍃";filter:drop-shadow(0 2px 2px #164c2830)}
+body.season-spring .season-particles span:nth-child(odd):before{content:"💧"}
+body.season-spring .season-particles span:nth-child(even):before{content:"🍃"}
+body.season-winter .season-particles span:before{content:"❄";color:#83c8f0}
+body.dark-theme.season-winter .season-particles span:before{color:#b8e5ff}
+body.dark-theme.season-spring .season-particles span:nth-child(odd):before{content:"💧"}
+body.dark-theme.season-spring .season-particles span:nth-child(even):before{content:"🍃"}
+body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
+
 </style>
 </head>
 <body>
