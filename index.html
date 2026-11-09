@@ -653,6 +653,11 @@ function initAdminCategories(){
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||txt.includes('Защищённый доступ'))key='system';
   sections[key].appendChild(node);
  });
+ // Гарантируем, что сезонное оформление попадёт именно в раздел «Чит-панель».
+ const seasonPanel=root.querySelector('#adminSeasonThemesPanel');
+ const cheatHeading=Array.from(root.querySelectorAll('.sectionhead')).find(el=>(el.textContent||'').includes('🎛️ Чит-панель'));
+ if(cheatHeading)sections.cheats.appendChild(cheatHeading);
+ if(seasonPanel)sections.cheats.appendChild(seasonPanel);
  const flags=document.getElementById('adminFeatureFlags'),cheatPanel=document.getElementById('adminSystemControlsPanel'),tech=document.getElementById('adminTechnicalCenterPanel');
  if(flags&&cheatPanel){
   const heading=Array.from(tech?.querySelectorAll('h4')||[]).find(x=>x.textContent.includes('Переключатели функций'));
