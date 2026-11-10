@@ -1958,7 +1958,7 @@ function applyAdminPermissionVisibility(){
  showPanel('#adminAnnouncementsPanel',adminHasPermission('announcements_manage'));
  showPanel('#adminMailingPanel',adminHasPermission('campaigns_manage'));
  showPanel('#adminTechnicalCenterPanel',adminHasPermission('system_manage'));
- showPanel('#adminAiBotPanel',adminHasPermission('ai_bot_manage')||adminHasPermission('ai_bot_logs'));
+ showPanel('#adminAiBotPanel',adminHasPermission('ai_bot_manage')||adminHasPermission('ai_bot_logs')||adminHasPermission('ai_watch_end'));
  const aiSettingsBlock=document.getElementById('aiBotSettingsBlock');if(aiSettingsBlock)aiSettingsBlock.hidden=!adminHasPermission('ai_bot_manage');
  showPanel('#adminAiOrdersPanel',adminHasPermission('ai_orders_view')||adminHasPermission('ai_orders_manage'));
  showPanel('#adminAiReportsPanel',adminHasPermission('reports_view'));
