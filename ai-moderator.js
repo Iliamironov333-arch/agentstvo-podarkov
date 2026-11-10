@@ -46,9 +46,12 @@ async function aiLog(env, event) {
 }
 async function aiSettings(env) {
   const row = await env.DB.prepare("SELECT enabled,complaints_enabled,settings_json,group_chat_id FROM ai_moderator_settings WHERE id=1").first();
+  const pause=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key='disabled_until'").first();
+  const temporarilyDisabled=!!pause?.value && Date.parse(pause.value.replace(" ","T")+"Z")>Date.now();
   let saved = {};
   try { saved = JSON.parse(row?.settings_json || "{}"); } catch {}
-  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: row ? row.enabled === 1 : true,
+  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: (row ? row.enabled === 1 : true) && !temporarilyDisabled,
+    temporarily_disabled: temporarilyDisabled, disabled_until: pause?.value || null,
     complaints_enabled: row ? row.complaints_enabled === 1 : true, group_chat_id: row?.group_chat_id || null };
 }
 async function aiSaveSettings(env, settings, actor) {
@@ -61,6 +64,11 @@ async function aiSaveSettings(env, settings, actor) {
     else if (key === "night_start" || key === "night_end") current[key] = /^\d{2}:\d{2}$/.test(String(value)) ? String(value) : current[key];
     else if (key === "rules_text") current[key] = String(value || "").slice(0,3000);
   }
+  if(Number(settings?.disable_minutes)>0){
+    const minutes=Math.max(5,Math.min(1440,Number(settings.disable_minutes)));
+    await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES('disabled_until',datetime('now',?),CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind("+"+minutes+" minutes").run();
+  }
+  if(settings?.enabled===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='disabled_until'").run();
   const enabled = current.enabled ? 1 : 0, complaints = current.complaints_enabled ? 1 : 0;
   const stored = Object.fromEntries(allowed.map(key => [key, current[key]]));
   await env.DB.prepare("UPDATE ai_moderator_settings SET enabled=?,complaints_enabled=?,settings_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=1")
@@ -81,7 +89,7 @@ async function aiRememberMember(env, chatId, user) {
     .bind(String(chatId),String(user.id),user.username || null,user.first_name || null,user.last_name || null).run();
 }
 async function aiWatch(env, chatId, targetId, reason, source = "system") {
-  const active = await env.DB.prepare("SELECT id,expires_at FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' ORDER BY id DESC LIMIT 1")
+  const active = await env.DB.prepare("SELECT id,expires_at FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1")
     .bind(String(chatId),String(targetId)).first();
   if (active) {
     await env.DB.prepare("UPDATE ai_watchlist SET expires_at=datetime('now','+24 hours'),extended_count=extended_count+1,reason=?,source=? WHERE id=?")
@@ -167,10 +175,8 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Не отвечайте на вопросы, не относящиеся к Агентству."
   ].join("\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
-    ...context.map(m=>({role:m.role,content:m.content})),{role:"user",content:text}];
+    ...context.map(m=>({role:m.role,content:m.content}))];
   const answer = await aiOpenAi(env,instructions,input,450);
-  await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)")
-    .bind(String(chatId),String(user.id),"user",text.slice(0,3500)).run();
   await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)")
     .bind(String(chatId),String(user.id),"assistant",answer).run();
   await aiTelegram(env,"sendMessage",{chat_id:chatId,text:answer,reply_to_message_id:undefined,allow_sending_without_reply:true});
@@ -180,13 +186,33 @@ async function aiHandleOrderConversation(env, message, text) {
   const chatId=String(message.chat.id),user=message.from;
   let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1")
     .bind(chatId,String(user.id)).first();
+  if(!draft){
+    const approved=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('approved','paid') ORDER BY created_at DESC LIMIT 1").bind(chatId,String(user.id)).first();
+    if(approved && /(изменить|поменять|исправить|добавить к заказу|забыл сказать|ещё пожелани)/i.test(text)){
+      let prior={};try{prior=JSON.parse(approved.details_json||"{}");}catch{}
+      prior.change_requests=Array.isArray(prior.change_requests)?prior.change_requests:[];
+      prior.change_requests.push({text:text.slice(0,1500),created_at:new Date().toISOString()});
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(prior).slice(0,12000),approved.id).run();
+      await aiNotifyOwner(env,"✏️ Клиент просит изменить уже согласованный заказ\nЗаказ: "+approved.id+"\nКлиент: "+user.id+"\nПожелание: "+text.slice(0,900)+"\nПроверьте карточку в Mini App → ИИ-заказы.");
+      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю, я передал Ваши новые пожелания владельцу. Он проверит возможность изменения заказа."});
+      return true;
+    }
+  }
   if (!draft && !aiOrderIntent(text)) return false;
   if (!draft) {
+    const exact=await env.DB.prepare("SELECT title,price_stars FROM products WHERE is_active=1").all();
+    const match=(exact.results||[]).find(p=>text.toLowerCase().includes(String(p.title||"").toLowerCase()));
+    if(match){
+      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"В каталоге есть работа «"+match.title+"» стоимостью "+match.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ."});
+      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_match_for_order",details:{product:match.title,price_stars:match.price_stars}});
+      return true;
+    }
     const id=crypto.randomUUID();
     const subject=text.slice(0,120) || "Индивидуальный заказ";
     await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,status) VALUES(?,?,?,?,?,?,?,'collecting')")
       .bind(id,chatId,String(user.id),user.username||null,aiSafeName(user),subject,JSON.stringify({messages:[text]})).run();
     await aiNotifyOwner(env,"📝 Новый запрос на индивидуальный заказ\nКлиент: "+aiSafeName(user)+" ("+user.id+")\nОписание: "+text.slice(0,800));
+    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"С удовольствием помогу Вам оформить индивидуальный заказ. Расскажите, пожалуйста, какую работу Вы хотите получить и какие особенности для Вас важны?"});
     return true;
   }
   let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
@@ -194,7 +220,7 @@ async function aiHandleOrderConversation(env, message, text) {
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
     .bind(JSON.stringify(details).slice(0,12000),draft.id).run();
   if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
-    let estimate=250, summary=details.messages.join("\n");
+    let estimate=0, summary=details.messages.join("\n");
     try {
       const raw=await aiOpenAi(env,"Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните только JSON: {\"subject\":\"до 120 символов\",\"summary\":\"до 1500 символов\",\"price_stars\":целое число от 250 до 100000}. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.",summary,180);
       const match=raw.match(/\{[\s\S]*\}/);if(match){const obj=JSON.parse(match[0]);if(Number.isSafeInteger(Number(obj.price_stars))&&Number(obj.price_stars)>=250&&Number(obj.price_stars)<=100000)estimate=Number(obj.price_stars);draft.subject=String(obj.subject||draft.subject).slice(0,120);details.summary=String(obj.summary||summary).slice(0,1500);}
