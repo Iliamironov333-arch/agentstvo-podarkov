@@ -90,10 +90,13 @@ async function aiSaveSettings(env, settings, actor) {
   return current;
 }
 function aiIsGroup(chat) { return !!chat && (chat.type === "group" || chat.type === "supergroup"); }
-function aiNightNow() {
+function aiNightNow(settings = {}) {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yekaterinburg", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
   const time = Number((parts.find(p => p.type === "hour")?.value || "0") + (parts.find(p => p.type === "minute")?.value || "0"));
-  return time >= 2300 || time < 700;
+  const start = Number(String(settings.night_start || "23:00").replace(":",""));
+  const end = Number(String(settings.night_end || "07:00").replace(":",""));
+  if(start===end)return false;
+  return start>end ? time>=start || time<end : time>=start && time<end;
 }
 function aiText(message) { return String(message?.text || message?.caption || "").trim(); }
 function aiSafeName(user) { return [user?.first_name,user?.last_name].filter(Boolean).join(" ").slice(0,100) || "Участник"; }
@@ -154,15 +157,15 @@ function aiClassifyLocal(message, settings) {
   const tokens=text.split(/[^а-яa-z]+/).filter(Boolean);
   const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/идиот/,/дурак/,/тупой/,/заткнись/,/^fuck$/i,/^shit$/i];
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
-  if(settings.profanity && settings.night_mode && aiNightNow() && /(идиот|дурак|тупой|заткнись|отвали|пошел ты|пошла ты)/i.test(text))return "Агрессивное обращение в ночное время";
+  if(settings.profanity && settings.night_mode && aiNightNow(settings) && /(идиот|дурак|тупой|заткнись|отвали|пошел ты|пошла ты)/i.test(text))return "Агрессивное обращение в ночное время";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
   if (settings.advertising && (/(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только|покупайте у меня|заказывайте у меня|переходите по ссылке)/i.test(text))) return "Реклама без разрешения";
   return null;
 }
-async function aiIsFlood(env,chatId,userId){
+async function aiIsFlood(env,chatId,userId,settings={}){
   const row=await env.DB.prepare("SELECT COUNT(*) AS total FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND created_at>=datetime('now','-10 seconds')").bind(String(chatId),String(userId)).first();
-  const limit=aiNightNow()?3:5;
+  const limit=aiNightNow(settings)?3:5;
   return Number(row?.total||0)>=limit;
 }
 async function aiIsRepeated(env, chatId, userId, text) {
@@ -559,7 +562,7 @@ async function handleAiTelegramUpdate(update, env) {
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
       await aiWarn(env,chatId,message,violation);return true;
     }
-    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
+    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id,settings)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
     }
@@ -585,7 +588,7 @@ async function handleAiTelegramUpdate(update, env) {
     const relevant=aiAgencyIntent(text) || replied;
     const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
     if(orderHandled) return true;
-    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow() || aiAgencyIntent(text))) {
+    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
       try { await aiReplyToGroup(env,chatId,user,text,settings); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
