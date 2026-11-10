@@ -410,7 +410,7 @@ async function aiInspectImage(env,message){
   const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
   const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
   const sticker=message.sticker&&!message.sticker.is_animated&&!message.sticker.is_video?message.sticker:null;
-  const media=photo||doc||sticker||message.video?.thumbnail||message.video_note?.thumbnail||message.audio?.thumbnail||message.animation?.thumbnail||null;
+  const media=photo||doc||sticker||message.sticker?.thumbnail||message.video?.thumbnail||message.video_note?.thumbnail||message.audio?.thumbnail||message.animation?.thumbnail||null;
   if(!media?.file_id)return null;
   const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
   if(!file?.file_path||Number(file.file_size||0)>5*1024*1024)return {decision:"review",reason:"Файл слишком большой для автоматической проверки",confidence:0};
@@ -494,6 +494,10 @@ async function handleAiTelegramUpdate(update, env) {
       if(hasImage){
         try{
           const scan=await aiInspectImage(env,message);
+          if(!scan){
+            await aiWatch(env,chatId,user.id,"Вложение не удалось полностью проверить автоматически","media_review");
+            await aiNotifyOwner(env,"🔎 Вложение не удалось полностью проверить автоматически. Участник: "+user.id+". Проверьте сообщение вручную; автоматическое наказание не применено.");
+          }
           if(scan?.decision==="violation" && scan.confidence>=0.85){await aiWarn(env,chatId,message,scan.reason||"Обнаружено очевидное нарушение в изображении");return true;}
           if(scan?.decision==="review" || (scan?.decision==="violation"&&scan.confidence<0.85)){
             await aiWatch(env,chatId,user.id,"Вложение требует дополнительной проверки: "+scan.reason,"media_review");
