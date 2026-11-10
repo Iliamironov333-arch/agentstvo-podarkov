@@ -437,6 +437,11 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     const rows=await env.DB.prepare("SELECT * FROM ai_moderation_events ORDER BY id DESC LIMIT 100").all();
     return aiJson({ok:true,events:rows.results||[]});
   }
+  if(path==="/api/admin/ai-warnings" && method==="GET") {
+    if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
+    const rows=await env.DB.prepare("SELECT * FROM ai_warnings WHERE issued_at>=datetime('now','-60 days') ORDER BY id DESC LIMIT 100").all();
+    return aiJson({ok:true,warnings:rows.results||[]});
+  }
   if(path==="/api/admin/ai-watchlist" && method==="GET") {
     if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
     const rows=await env.DB.prepare("SELECT * FROM ai_watchlist WHERE status='active' ORDER BY expires_at").all();
@@ -449,6 +454,12 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       await env.DB.prepare("UPDATE ai_warnings SET cancelled_at=CURRENT_TIMESTAMP,cancelled_by=? WHERE id=? AND cancelled_at IS NULL").bind(String(telegramId),Number(body.id)).run();
     } else if(body.action==="end_watch" && has("ai_watch_end")) {
       await env.DB.prepare("UPDATE ai_watchlist SET status='ended',expires_at=CURRENT_TIMESTAMP WHERE id=? AND status='active'").bind(Number(body.id)).run();
+    } else if(body.action==="warn_reporter" && ownerOnly()) {
+      const complaint=await env.DB.prepare("SELECT * FROM ai_complaints WHERE id=? AND status='review'").bind(Number(body.id)).first();
+      if(!complaint)return aiJson({error:"Жалоба не найдена."},404);
+      const pseudo={from:{id:Number(complaint.reporter_telegram_id),first_name:"Участник"},message_id:complaint.source_message_id};
+      await aiWarn(env,complaint.chat_id,pseudo,"Намеренное злоупотребление системой жалоб");
+      await env.DB.prepare("UPDATE ai_complaints SET status='dismissed',resolved_at=CURRENT_TIMESTAMP,resolved_by=? WHERE id=?").bind(String(telegramId),Number(body.id)).run();
     } else if(body.action==="resolve_complaint" && ownerOnly()) {
       await env.DB.prepare("UPDATE ai_complaints SET status='resolved',resolved_at=CURRENT_TIMESTAMP,resolved_by=? WHERE id=? AND status='review'").bind(String(telegramId),Number(body.id)).run();
     } else if(body.action==="dismiss_complaint" && ownerOnly()) {
