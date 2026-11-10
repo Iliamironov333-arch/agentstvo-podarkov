@@ -6,8 +6,19 @@ const DEFAULT_AI_SETTINGS = {
   night_start: "23:00",
   night_end: "07:00",
   greeting_enabled: true,
+  greeting_text: "🎁 Добро пожаловать в «Агентство подарков», {name}! Рады видеть Вас в нашей группе. Здесь можно обсудить подарки, задать вопросы и оформить индивидуальный заказ.",
   rules_enabled: true,
-  rules_text: "Пожалуйста, общайтесь уважительно. Запрещены оскорбления, спам, реклама, мошеннические и азартные ссылки. По вопросам Агентства подарков обращайтесь к ИИ-помощнику.",
+  rules_text: "📌 Правила группы «Агентство подарков»\\n\\n1. Общайтесь уважительно. Оскорбления, травля и грубость запрещены.\\n2. Не размещайте спам, массовую рассылку и рекламу без разрешения владельца.\\n3. Не публикуйте мошеннические, фишинговые и азартные ссылки.\\n4. Не отправляйте личные данные, пароли и коды.\\n5. Не выдавайте предположения за официальные цены, сроки или решения Агентства.\\n6. По вопросам заказов, оплаты и каталога обращайтесь к ИИ-помощнику или владельцу.\\n7. Жалобы рассматриваются владельцем; жалоба сама по себе не доказывает нарушение.",
+  moderation_instructions: "Вы — ИИ-модератор официальной группы «Агентство подарков». Следуйте этим правилам:\\n1. Наказывайте только за очевидное нарушение, а при сомнении выбирайте ручную проверку.\\n2. Отличайте дружескую шутку, цитату и обычное несогласие от целевого оскорбления или травли.\\n3. Не считайте обычные ссылки, упоминания других проектов или нейтральные слова рекламой без явного рекламного призыва.\\n4. Запрещайте азартные, мошеннические и фишинговые ссылки; не объявляйте безопасную ссылку опасной без оснований.\\n5. Учитывайте контекст переписки и не делайте вывод по одному неоднозначному слову.\\n6. Жалоба — повод проверить ситуацию, а не доказательство вины. Не наказывайте человека только из-за жалобы.\\n7. Не раскрывайте участникам скрытое наблюдение и внутренние оценки.\\n8. При невозможности проверить файл или медиа уведомляйте владельца; не назначайте наказание автоматически.\\n9. Всегда фиксируйте точную понятную причину предупреждения.\\n10. Не вмешивайтесь в обычные доброжелательные разговоры, не относящиеся к Агентству, если не требуется модерация.",
+  ai_instructions: "Вы — официальный ИИ-помощник «Агентства подарков». Всегда обращайтесь к клиентам на «Вы». Отвечайте только по вопросам Агентства, каталога, заказов, оплаты и поддержки. Используйте только реальные данные каталога и переписки; не придумывайте цены, наличие, сроки и статусы. Если ответа нет — честно скажите об этом и передайте вопрос владельцу. Предлагайте только семантически подходящие товары. Не превращайте обычную беседу в рекламу.",
+  profanity_rules: "Проверяйте явную нецензурную лексику и адресные оскорбления. Не наказывайте за нейтральное цитирование или обсуждение правил.",
+  spam_rules: "Считайте спамом массовые повторы, навязчивые сообщения и одинаковые сообщения подряд. Не считайте обычную активную беседу спамом.",
+  advertising_rules: "Удаляйте явную рекламу сторонних услуг, каналов и товаров без разрешения. Не считайте упоминание другого бренда само по себе рекламой.",
+  links_rules: "Блокируйте казино, азартные игры, фишинг, мошенничество и вредоносные ссылки. Обычные безопасные ссылки разрешены.",
+  repeated_rules: "Проверяйте именно повтор одинакового текста и флуд, а не короткие ответы вроде «да» или «спасибо».",
+  media_rules: "Проверяйте только доступные Telegram данные. Если файл нельзя безопасно проверить, отправьте владельцу уведомление и не назначайте автоматическое наказание.",
+  complaints_rules: "Жалоба не доказывает вину. Записывайте автора, адресата и контекст; скрытое наблюдение не раскрывайте.",
+  night_rules: "С 23:00 до 07:00 по Екатеринбургу тщательнее проверяйте агрессивные сообщения, но не запрещайте обычные спокойные разговоры.",
   profanity: true,
   spam: true,
   advertising: true,
@@ -64,7 +75,7 @@ async function aiSaveSettings(env, settings, actor) {
     if (typeof DEFAULT_AI_SETTINGS[key] === "boolean") current[key] = value === true;
     else if (key === "answer_interval_seconds") current[key] = Math.max(5, Math.min(60, Number(value) || 5));
     else if (key === "night_start" || key === "night_end") current[key] = /^\d{2}:\d{2}$/.test(String(value)) ? String(value) : current[key];
-    else if (key === "rules_text") current[key] = String(value || "").slice(0,3000);
+    else if (typeof DEFAULT_AI_SETTINGS[key] === "string") current[key] = String(value ?? "").slice(0, key === "rules_text" ? 3000 : 6000);
   }
   if(Number(settings?.moderation_disabled_minutes)>0){
     const minutes=Math.max(5,Math.min(1440,Number(settings.moderation_disabled_minutes)));
@@ -178,7 +189,17 @@ async function aiInspectText(env,text,settings){
   if(settings.spam)categories.push("спам и массовая рассылка");
   if(settings.suspicious_links)categories.push("мошеннические, фишинговые и азартные ссылки");
   if(settings.profanity)categories.push("оскорбления и агрессивные выпады");
-  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая причина по-русски\",\"confidence\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
+  const customRules = [
+    settings.profanity && settings.profanity_rules ? "Нецензурная лексика: " + settings.profanity_rules : "",
+    settings.spam && settings.spam_rules ? "Спам: " + settings.spam_rules : "",
+    settings.advertising && settings.advertising_rules ? "Реклама: " + settings.advertising_rules : "",
+    settings.suspicious_links && settings.links_rules ? "Ссылки: " + settings.links_rules : "",
+    settings.repeated_messages && settings.repeated_rules ? "Повторы: " + settings.repeated_rules : "",
+    settings.media_checks && settings.media_rules ? "Медиа: " + settings.media_rules : "",
+    settings.complaints_enabled && settings.complaints_rules ? "Жалобы: " + settings.complaints_rules : "",
+    settings.night_mode && settings.night_rules ? "Ночной режим: " + settings.night_rules : ""
+  ].filter(Boolean).join("\\n");
+  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\\nПравила по категориям:\\n"+customRules+"\\nОбщая инструкция владельца:\\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\\nВерните только JSON: {\\"decision\\":\\"ok|review|violation\\",\\"reason\\":\\"краткая причина по-русски\\",\\"confidence\\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9."
   const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
@@ -211,10 +232,12 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Если человек хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
     "Не отвечайте на вопросы, не относящиеся к Агентству. Если сообщение не связано с Агентством, верните ignore=true; бот должен промолчать.",
     "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
-  ].join("\n");
+  ];
+  if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\\n"+String(settings.ai_instructions).slice(0,6000));
+  const instructionText=instructions.join("\\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
-  const raw = await aiOpenAi(env,instructions,input,550);
+  const raw = await aiOpenAi(env,instructionText,input,550);
   let answer=raw,needsOwner=false,ignore=false;
   try{
     const match=raw.match(/\{[\s\S]*\}/);
@@ -465,7 +488,10 @@ async function handleAiTelegramUpdate(update, env) {
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
       await aiRememberMember(env,chatId,member);
-      if(settings.greeting_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Добро пожаловать в «Агентство подарков», "+aiSafeName(member)+"! Рады видеть Вас в нашей группе."});
+      if(settings.greeting_enabled) {
+        const greeting=String(settings.greeting_text||"Добро пожаловать в «Агентство подарков», {name}!").replace(/\\{name\\}/g,aiSafeName(member)).slice(0,3000);
+        await aiTelegram(env,"sendMessage",{chat_id:chatId,text:greeting});
+      }
       if(settings.rules_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"📌 Правила группы\n"+settings.rules_text});
     }
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"members_joined",details:{count:message.new_chat_members.length}});
@@ -642,8 +668,45 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-bot/settings" && method==="POST") {
     if(!has("ai_bot_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);const settings=await aiSaveSettings(env,body.settings||{},telegramId);
+    if(body.settings?.send_rules===true){
+      if(!settings.group_chat_id)return aiJson({error:"Сначала отправьте любое сообщение в группу, чтобы бот определил её."},409);
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:"📌 Правила группы\\n\\n"+settings.rules_text.slice(0,3000)});
+    }
     await aiLog(env,{actor:telegramId,type:"settings_changed",details:{keys:Object.keys(body.settings||{})}});
     return aiJson({ok:true,settings});
+  }
+  if(path==="/api/admin/ai-warning" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Выдавать предупреждения вручную может только владелец."},403);
+    const body=await aiReadJson(request),target=String(body.telegram_id||"").trim(),reason=String(body.reason||"").trim().slice(0,500);
+    if(!/^\\d{5,20}$/.test(target))return aiJson({error:"Введите корректный Telegram ID участника."},400);
+    if(reason.length<3)return aiJson({error:"Укажите понятную причину предупреждения."},400);
+    const settings=await aiSettings(env);
+    if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
+    const member=await env.DB.prepare("SELECT first_name,last_name,username FROM ai_group_members WHERE chat_id=? AND telegram_id=?").bind(String(settings.group_chat_id),target).first();
+    const pseudo={from:{id:Number(target),first_name:member?.first_name||"Участник",last_name:member?.last_name||"",username:member?.username||""}};
+    await aiWarn(env,settings.group_chat_id,pseudo,reason);
+    await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,target,type:"manual_warning",severity:"warning",details:{reason}});
+    return aiJson({ok:true});
+  }
+  if(path==="/api/admin/ai-group-invoice" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Создавать групповые счета может только владелец."},403);
+    const body=await aiReadJson(request),amount=Number(body.amount_stars),title=String(body.title||"Счёт Агентства подарков").trim().slice(0,32),description=String(body.description||"Оплата в Агентстве подарков").trim().slice(0,255);
+    if(!Number.isSafeInteger(amount)||amount<1||amount>100000)return aiJson({error:"Укажите сумму от 1 до 100000 Stars."},400);
+    const settings=await aiSettings(env);
+    if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
+    const payload="group_invoice_"+crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,'0','group_invoice',?,?,0,?,'pending')")
+      .bind(payload,String(settings.group_chat_id),amount,title).run();
+    try {
+      const invoiceUrl=await aiTelegram(env,"createInvoiceLink",{title,description,payload,provider_token:"",currency:"XTR",prices:[{label:title,amount}]});
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:"⭐ Счёт от «Агентства подарков»\\n"+title+"\\n"+description+"\\nСумма: "+amount+" Stars\\n\\nНажмите кнопку ниже, чтобы оплатить.",reply_markup:{inline_keyboard:[[{text:"Оплатить · "+amount+" ⭐",url:invoiceUrl}]]}});
+      await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,type:"group_invoice_created",details:{amount_stars:amount,title,payload}});
+      await aiNotifyOwner(env,"⭐ В группу отправлен счёт: "+title+" · "+amount+" Stars.");
+      return aiJson({ok:true,amount_stars:amount});
+    } catch(error) {
+      await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(payload).run();
+      return aiJson({error:"Не удалось отправить счёт в группу: "+String(error.message||error).slice(0,250)},502);
+    }
   }
   if(path==="/api/admin/ai-questions" && method==="GET") {
     if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
