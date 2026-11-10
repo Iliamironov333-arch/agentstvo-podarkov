@@ -431,7 +431,7 @@ async function aiTranscribeAudio(env,message){
   if(!result.ok)throw new Error("Audio transcription API HTTP "+result.status);
   return String(data.text||"").trim().slice(0,3500);
 }
-async function aiInspectImage(env,message){
+async function aiInspectImage(env,message,settings={}){
   if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
   const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
   const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
@@ -449,7 +449,7 @@ async function aiInspectImage(env,message){
   const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
   const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
   const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая нейтральная причина\",\"confidence\":число от 0 до 1}. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.",
+    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните JSON с ключами decision, reason и confidence. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.\n\nДополнительные инструкции владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000),
     input:[{role:"user",content:[{type:"input_text",text:"Проверьте вложение на очевидное нарушение правил группы. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"low"}]}],max_output_tokens:120})});
   const result=await ai.json().catch(()=>({}));
   if(!ai.ok)throw new Error("Vision API HTTP "+ai.status);
@@ -522,7 +522,7 @@ async function handleAiTelegramUpdate(update, env) {
       const hasImage=!!(message.photo||message.sticker||message.video?.thumbnail||message.animation?.thumbnail||(message.document&&/^image\//i.test(message.document.mime_type||"")));
       if(hasImage){
         try{
-          const scan=await aiInspectImage(env,message);
+          const scan=await aiInspectImage(env,message,settings);
           if(!scan){
             await aiWatch(env,chatId,user.id,"Вложение не удалось полностью проверить автоматически","media_review");
             await aiNotifyOwner(env,"🔎 Вложение не удалось полностью проверить автоматически. Участник: "+user.id+". Проверьте сообщение вручную; автоматическое наказание не применено.");
