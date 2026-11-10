@@ -493,7 +493,7 @@ async function handleAiTelegramUpdate(update, env) {
     for(const member of message.new_chat_members) {
       await aiRememberMember(env,chatId,member);
       if(settings.greeting_enabled) {
-        const greeting=String(settings.greeting_text||"Добро пожаловать в «Агентство подарков», {name}!").replace(/\\{name\\}/g,aiSafeName(member)).slice(0,3000);
+        const greeting=String(settings.greeting_text||"Добро пожаловать в «Агентство подарков», {name}!").replace(/\{name\}/g,aiSafeName(member)).slice(0,3000);
         await aiTelegram(env,"sendMessage",{chat_id:chatId,text:greeting});
       }
       if(settings.rules_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"📌 Правила группы\n"+settings.rules_text});
