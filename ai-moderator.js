@@ -707,8 +707,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     const settings=await aiSettings(env);
     if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
     const payload="group_invoice_"+crypto.randomUUID();
-    await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,'0','group_invoice',?,?,0,?,'pending')")
-      .bind(payload,String(settings.group_chat_id),amount,title).run();
+    await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,?,'topup',?,?,0,?,'pending')")
+      .bind(payload,String(telegramId),String(settings.group_chat_id),amount,"group_invoice:"+title).run();
     try {
       const invoiceUrl=await aiTelegram(env,"createInvoiceLink",{title,description,payload,provider_token:"",currency:"XTR",prices:[{label:title,amount}]});
       await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:"⭐ Счёт от «Агентства подарков»\n"+title+"\n"+description+"\nСумма: "+amount+" Stars\n\nНажмите кнопку ниже, чтобы оплатить.",reply_markup:{inline_keyboard:[[{text:"Оплатить · "+amount+" ⭐",url:invoiceUrl}]]}});
