@@ -374,7 +374,7 @@ async function handleAiTelegramUpdate(update, env) {
   const noticeKey="group_notice:"+chatId;
   const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sent')").bind(noticeKey).run();
   if(notice.meta?.changes===1){
-    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для контекста обращений и журнала безопасности система сохраняет сообщения и события; не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст и изображения могут передаваться в ИИ-сервис OpenAI. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
   }
   await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key])}});
   if(message.left_chat_member){await aiLog(env,{chat_id:chatId,actor:user.id,target:message.left_chat_member.id,type:"member_left"});return true;}
@@ -516,7 +516,7 @@ async function handleAiScheduled(env) {
   const nowParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Yekaterinburg",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
   const weekday=nowParts.find(p=>p.type==="weekday")?.value;
   const hour=Number(nowParts.find(p=>p.type==="hour")?.value||0),minute=Number(nowParts.find(p=>p.type==="minute")?.value||0);
-  if(weekday==="Sat" && hour===8 && minute<5) await aiBuildWeeklyReport(env);
+  if(weekday==="Sat" && hour===8) await aiBuildWeeklyReport(env);
   await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now','-60 days')").run();
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
