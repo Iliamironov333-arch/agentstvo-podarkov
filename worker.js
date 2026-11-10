@@ -794,7 +794,8 @@ export default {
           users_view: ["users_balance", "users_ban", "users_unban"],
           orders_view: ["orders_manage"],
           catalog_view: ["catalog_manage"],
-          support_view: ["support_reply"]
+          support_view: ["support_reply"],
+          ai_orders_view: ["ai_orders_manage"]
         };
         const hasRequiredPermission = requiredPermission === "staff_manage" ||
           permissions[requiredPermission] === true ||
