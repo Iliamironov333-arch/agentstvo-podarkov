@@ -683,8 +683,8 @@ const ADMIN_PERMISSION_KEYS = [
 function adminPermissionForPath(path, method) {
   if (path === "/api/admin/session") return null;
   if (path === "/api/admin/ai-bot/settings") return "ai_bot_manage";
-  if (path === "/api/admin/ai-logs" || path === "/api/admin/ai-watchlist" || path === "/api/admin/ai-complaints") return "ai_bot_logs";
-  if (path === "/api/admin/ai-action") return "ai_bot_logs";
+  if (path === "/api/admin/ai-logs" || path === "/api/admin/ai-warnings" || path === "/api/admin/ai-complaints") return "ai_bot_logs";
+  if (path === "/api/admin/ai-watchlist" || path === "/api/admin/ai-action") return "ai_watch_end";
   if (path === "/api/admin/ai-orders") return method === "GET" ? "ai_orders_view" : "ai_orders_manage";
   if (path === "/api/admin/ai-reports") return "reports_view";
   if (path.startsWith("/api/admin/staff")) return "staff_manage";
