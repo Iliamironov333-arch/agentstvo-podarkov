@@ -321,6 +321,38 @@ async function aiApproveOrder(env, callback) {
   await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
   return true;
 }
+function aiBase64(buffer){
+  const bytes=new Uint8Array(buffer);let binary="";
+  for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+0x8000,bytes.length)));
+  return btoa(binary);
+}
+async function aiInspectImage(env,message){
+  if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
+  const doc=message.document&&/^image\/(jpeg|png|webp|gif)$/i.test(message.document.mime_type||"")?message.document:null;
+  const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
+  const media=photo||doc||message.sticker||message.video?.thumbnail||message.animation?.thumbnail||null;
+  if(!media?.file_id)return null;
+  const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
+  if(!file?.file_path||Number(file.file_size||0)>5*1024*1024)return {decision:"review",reason:"Файл слишком большой для автоматической проверки",confidence:0};
+  const response=await fetch("https://api.telegram.org/file/bot"+env.BOT_TOKEN+"/"+file.file_path);
+  if(!response.ok)return {decision:"review",reason:"Не удалось получить вложение для проверки",confidence:0};
+  const buffer=await response.arrayBuffer();
+  if(buffer.byteLength>5*1024*1024)return {decision:"review",reason:"Файл превышает лимит автоматической проверки",confidence:0};
+  const ext=String(file.file_path).split(".").pop().toLowerCase();
+  const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":ext==="gif"?"image/gif":"image/jpeg";
+  const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
+  const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
+    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая нейтральная причина\",\"confidence\":число от 0 до 1}. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.",
+    input:[{role:"user",content:[{type:"input_text",text:"Проверьте вложение на очевидное нарушение правил группы. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"low"}]}],max_output_tokens:120})});
+  const result=await ai.json().catch(()=>({}));
+  if(!ai.ok)throw new Error("Vision API HTTP "+ai.status);
+  let output=typeof result.output_text==="string"?result.output_text:"";
+  if(!output&&Array.isArray(result.output))output=result.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
+  const match=output.match(/\{[\s\S]*\}/);
+  if(!match)throw new Error("Vision classifier returned no JSON");
+  const parsed=JSON.parse(match[0]);
+  return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное вложение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
+}
 async function handleAiTelegramUpdate(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
     await aiApproveOrder(env,update.callback_query);return true;
@@ -357,6 +389,23 @@ async function handleAiTelegramUpdate(update, env) {
     if(suspicious) {
       await aiWatch(env,chatId,user.id,"Подозрительное вложение: "+String(message.document.file_name||"неизвестный файл"),"suspicious_file");
       await aiNotifyOwner(env,"⚠️ Подозрительный файл в группе\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nФайл: "+String(message.document.file_name||"неизвестный файл")+"\nУстановлен скрытый статус повышенного внимания на 24 часа.");
+    } else {
+      const hasImage=!!(message.photo||message.sticker||message.video?.thumbnail||message.animation?.thumbnail||(message.document&&/^image\//i.test(message.document.mime_type||"")));
+      if(hasImage){
+        try{
+          const scan=await aiInspectImage(env,message);
+          if(scan?.decision==="violation" && scan.confidence>=0.85){await aiWarn(env,chatId,message,scan.reason||"Обнаружено очевидное нарушение в изображении");return true;}
+          if(scan?.decision==="review" || (scan?.decision==="violation"&&scan.confidence<0.85)){
+            await aiWatch(env,chatId,user.id,"Вложение требует дополнительной проверки: "+scan.reason,"media_review");
+            await aiNotifyOwner(env,"🔎 Требуется проверка вложения\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nПричина: "+scan.reason+"\nУверенность ИИ: "+Math.round(scan.confidence*100)+"%. Участнику статус не раскрывается.");
+          }
+        }catch(error){
+          await aiWatch(env,chatId,user.id,"Не удалось автоматически проверить изображение","media_review");
+          await aiNotifyOwner(env,"⚠️ Не удалось проверить изображение в группе. Участник: "+user.id+". Проверьте вручную. Ошибка: "+String(error).slice(0,200));
+        }
+      } else if(message.video||message.audio||message.voice||message.video_note||message.animation){
+        await aiLog(env,{chat_id:chatId,actor:user.id,type:"media_metadata_checked",details:{message_id:message.message_id,media_type:message.video?"video":message.audio?"audio":message.voice?"voice":message.video_note?"video_note":"animation",caption_present:!!text}});
+      }
     }
   }
   if(text) {
