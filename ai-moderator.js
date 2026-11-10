@@ -6,8 +6,20 @@ const DEFAULT_AI_SETTINGS = {
   night_start: "23:00",
   night_end: "07:00",
   greeting_enabled: true,
+  greeting_text: "🎁 Добро пожаловать в «Агентство подарков», {name}! Рады видеть Вас в нашей группе. Здесь можно обсудить подарки, задать вопросы и оформить индивидуальный заказ.",
   rules_enabled: true,
-  rules_text: "Пожалуйста, общайтесь уважительно. Запрещены оскорбления, спам, реклама, мошеннические и азартные ссылки. По вопросам Агентства подарков обращайтесь к ИИ-помощнику.",
+  rules_text: "📌 Правила группы «Агентство подарков»\n\n1. Общайтесь уважительно. Оскорбления, травля и грубость запрещены.\n2. Не размещайте спам, массовую рассылку и рекламу без разрешения владельца.\n3. Не публикуйте мошеннические, фишинговые и азартные ссылки.\n4. Не отправляйте личные данные, пароли и коды.\n5. Не выдавайте предположения за официальные цены, сроки или решения Агентства.\n6. По вопросам заказов, оплаты и каталога обращайтесь к ИИ-помощнику или владельцу.\n7. Жалобы рассматриваются владельцем; жалоба сама по себе не доказывает нарушение.",
+  moderation_instructions: "Вы — ИИ-модератор официальной группы «Агентство подарков». Следуйте этим правилам:\n1. Наказывайте только за очевидное нарушение, а при сомнении выбирайте ручную проверку.\n2. Отличайте дружескую шутку, цитату и обычное несогласие от целевого оскорбления или травли.\n3. Не считайте обычные ссылки, упоминания других проектов или нейтральные слова рекламой без явного рекламного призыва.\n4. Запрещайте азартные, мошеннические и фишинговые ссылки; не объявляйте безопасную ссылку опасной без оснований.\n5. Учитывайте контекст переписки и не делайте вывод по одному неоднозначному слову.\n6. Жалоба — повод проверить ситуацию, а не доказательство вины. Не наказывайте человека только из-за жалобы.\n7. Не раскрывайте участникам скрытое наблюдение и внутренние оценки.\n8. При невозможности проверить файл или медиа уведомляйте владельца; не назначайте наказание автоматически.\n9. Всегда фиксируйте точную понятную причину предупреждения.\n10. Не вмешивайтесь в обычные доброжелательные разговоры, не относящиеся к Агентству, если не требуется модерация.",
+  ai_instructions: "Вы — официальный ИИ-помощник «Агентства подарков». Всегда обращайтесь к клиентам на «Вы». Отвечайте только по вопросам Агентства, каталога, заказов, оплаты и поддержки. Используйте только реальные данные каталога и переписки; не придумывайте цены, наличие, сроки и статусы. Если ответа нет — честно скажите об этом и передайте вопрос владельцу. Предлагайте только семантически подходящие товары. Не превращайте обычную беседу в рекламу.",
+  profanity_rules: "Проверяйте явную нецензурную лексику и адресные оскорбления. Не наказывайте за нейтральное цитирование или обсуждение правил.",
+  spam_rules: "Считайте спамом массовые повторы, навязчивые сообщения и одинаковые сообщения подряд. Не считайте обычную активную беседу спамом.",
+  advertising_rules: "Удаляйте явную рекламу сторонних услуг, каналов и товаров без разрешения. Не считайте упоминание другого бренда само по себе рекламой.",
+  links_rules: "Блокируйте казино, азартные игры, фишинг, мошенничество и вредоносные ссылки. Обычные безопасные ссылки разрешены.",
+  repeated_rules: "Проверяйте именно повтор одинакового текста и флуд, а не короткие ответы вроде «да» или «спасибо».",
+  media_rules: "Проверяйте только доступные Telegram данные. Если файл нельзя безопасно проверить, отправьте владельцу уведомление и не назначайте автоматическое наказание.",
+  complaints_rules: "Жалоба не доказывает вину. Записывайте автора, адресата и контекст; скрытое наблюдение не раскрывайте.",
+  night_rules: "С 23:00 до 07:00 по Екатеринбургу тщательнее проверяйте агрессивные сообщения, но не запрещайте обычные спокойные разговоры.",
+  ai_orders_rules: "Собирайте пожелания по одному вопросу за раз. Не обещайте цену и оформление до согласования владельцем. Если подходящего товара нет, предложите индивидуальный заказ.",
   profanity: true,
   spam: true,
   advertising: true,
@@ -64,7 +76,7 @@ async function aiSaveSettings(env, settings, actor) {
     if (typeof DEFAULT_AI_SETTINGS[key] === "boolean") current[key] = value === true;
     else if (key === "answer_interval_seconds") current[key] = Math.max(5, Math.min(60, Number(value) || 5));
     else if (key === "night_start" || key === "night_end") current[key] = /^\d{2}:\d{2}$/.test(String(value)) ? String(value) : current[key];
-    else if (key === "rules_text") current[key] = String(value || "").slice(0,3000);
+    else if (typeof DEFAULT_AI_SETTINGS[key] === "string") current[key] = String(value ?? "").slice(0, key === "rules_text" ? 3000 : 6000);
   }
   if(Number(settings?.moderation_disabled_minutes)>0){
     const minutes=Math.max(5,Math.min(1440,Number(settings.moderation_disabled_minutes)));
@@ -79,10 +91,13 @@ async function aiSaveSettings(env, settings, actor) {
   return current;
 }
 function aiIsGroup(chat) { return !!chat && (chat.type === "group" || chat.type === "supergroup"); }
-function aiNightNow() {
+function aiNightNow(settings = {}) {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yekaterinburg", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
   const time = Number((parts.find(p => p.type === "hour")?.value || "0") + (parts.find(p => p.type === "minute")?.value || "0"));
-  return time >= 2300 || time < 700;
+  const start = Number(String(settings.night_start || "23:00").replace(":",""));
+  const end = Number(String(settings.night_end || "07:00").replace(":",""));
+  if(start===end)return false;
+  return start>end ? time>=start || time<end : time>=start && time<end;
 }
 function aiText(message) { return String(message?.text || message?.caption || "").trim(); }
 function aiSafeName(user) { return [user?.first_name,user?.last_name].filter(Boolean).join(" ").slice(0,100) || "Участник"; }
@@ -143,15 +158,15 @@ function aiClassifyLocal(message, settings) {
   const tokens=text.split(/[^а-яa-z]+/).filter(Boolean);
   const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/идиот/,/дурак/,/тупой/,/заткнись/,/^fuck$/i,/^shit$/i];
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
-  if(settings.profanity && settings.night_mode && aiNightNow() && /(идиот|дурак|тупой|заткнись|отвали|пошел ты|пошла ты)/i.test(text))return "Агрессивное обращение в ночное время";
+  if(settings.profanity && settings.night_mode && aiNightNow(settings) && /(идиот|дурак|тупой|заткнись|отвали|пошел ты|пошла ты)/i.test(text))return "Агрессивное обращение в ночное время";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
   if (settings.advertising && (/(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только|покупайте у меня|заказывайте у меня|переходите по ссылке)/i.test(text))) return "Реклама без разрешения";
   return null;
 }
-async function aiIsFlood(env,chatId,userId){
+async function aiIsFlood(env,chatId,userId,settings={}){
   const row=await env.DB.prepare("SELECT COUNT(*) AS total FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND created_at>=datetime('now','-10 seconds')").bind(String(chatId),String(userId)).first();
-  const limit=aiNightNow()?3:5;
+  const limit=aiNightNow(settings)?3:5;
   return Number(row?.total||0)>=limit;
 }
 async function aiIsRepeated(env, chatId, userId, text) {
@@ -178,7 +193,17 @@ async function aiInspectText(env,text,settings){
   if(settings.spam)categories.push("спам и массовая рассылка");
   if(settings.suspicious_links)categories.push("мошеннические, фишинговые и азартные ссылки");
   if(settings.profanity)categories.push("оскорбления и агрессивные выпады");
-  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая причина по-русски\",\"confidence\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
+  const customRules = [
+    settings.profanity && settings.profanity_rules ? "Нецензурная лексика: " + settings.profanity_rules : "",
+    settings.spam && settings.spam_rules ? "Спам: " + settings.spam_rules : "",
+    settings.advertising && settings.advertising_rules ? "Реклама: " + settings.advertising_rules : "",
+    settings.suspicious_links && settings.links_rules ? "Ссылки: " + settings.links_rules : "",
+    settings.repeated_messages && settings.repeated_rules ? "Повторы: " + settings.repeated_rules : "",
+    settings.media_checks && settings.media_rules ? "Медиа: " + settings.media_rules : "",
+    settings.complaints_enabled && settings.complaints_rules ? "Жалобы: " + settings.complaints_rules : "",
+    settings.night_mode && settings.night_rules ? "Ночной режим: " + settings.night_rules : ""
+  ].filter(Boolean).join("\n");
+  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\nПравила по категориям:\n"+customRules+"\nОбщая инструкция владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\nВерните JSON с ключами decision, reason и confidence. Значение decision должно быть ok, review или violation. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
   const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
@@ -211,10 +236,12 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Если человек хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
     "Не отвечайте на вопросы, не относящиеся к Агентству. Если сообщение не связано с Агентством, верните ignore=true; бот должен промолчать.",
     "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
-  ].join("\n");
+  ];
+  if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
+  const instructionText=instructions.join("\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
-  const raw = await aiOpenAi(env,instructions,input,550);
+  const raw = await aiOpenAi(env,instructionText,input,550);
   let answer=raw,needsOwner=false,ignore=false;
   try{
     const match=raw.match(/\{[\s\S]*\}/);
@@ -252,7 +279,7 @@ async function aiFindCatalogMatches(env, requestText) {
     return [];
   }
 }
-async function aiHandleOrderConversation(env, message, text) {
+async function aiHandleOrderConversation(env, message, text, settings={}) {
   const chatId=String(message.chat.id),user=message.from;
   let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('collecting','review') ORDER BY created_at DESC LIMIT 1")
     .bind(chatId,String(user.id)).first();
@@ -312,7 +339,7 @@ async function aiHandleOrderConversation(env, message, text) {
   if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
     let estimate=0, summary=details.messages.join("\n");
     try {
-      const raw=await aiOpenAi(env,"Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните только JSON: {\"subject\":\"до 120 символов\",\"summary\":\"до 1500 символов\",\"price_stars\":целое число от 250 до 100000}. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.",summary,180);
+      const orderInstructions="Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните JSON с полями subject, summary и price_stars. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.\nДополнительные правила владельца:\n"+String(settings.ai_orders_rules||"").slice(0,3000);const raw=await aiOpenAi(env,orderInstructions,summary,180)
       const match=raw.match(/\{[\s\S]*\}/);if(match){const obj=JSON.parse(match[0]);if(Number.isSafeInteger(Number(obj.price_stars))&&Number(obj.price_stars)>=250&&Number(obj.price_stars)<=100000)estimate=Number(obj.price_stars);draft.subject=String(obj.subject||draft.subject).slice(0,120);details.summary=String(obj.summary||summary).slice(0,1500);}
     } catch {}
     await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -405,7 +432,7 @@ async function aiTranscribeAudio(env,message){
   if(!result.ok)throw new Error("Audio transcription API HTTP "+result.status);
   return String(data.text||"").trim().slice(0,3500);
 }
-async function aiInspectImage(env,message){
+async function aiInspectImage(env,message,settings={}){
   if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
   const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
   const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
@@ -423,7 +450,7 @@ async function aiInspectImage(env,message){
   const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
   const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
   const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая нейтральная причина\",\"confidence\":число от 0 до 1}. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.",
+    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните JSON с ключами decision, reason и confidence. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.\n\nДополнительные инструкции владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\n\nДополнительные правила медиа:\n"+String(settings.media_rules||"").slice(0,2500),
     input:[{role:"user",content:[{type:"input_text",text:"Проверьте вложение на очевидное нарушение правил группы. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"low"}]}],max_output_tokens:120})});
   const result=await ai.json().catch(()=>({}));
   if(!ai.ok)throw new Error("Vision API HTTP "+ai.status);
@@ -465,7 +492,10 @@ async function handleAiTelegramUpdate(update, env) {
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
       await aiRememberMember(env,chatId,member);
-      if(settings.greeting_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Добро пожаловать в «Агентство подарков», "+aiSafeName(member)+"! Рады видеть Вас в нашей группе."});
+      if(settings.greeting_enabled) {
+        const greeting=String(settings.greeting_text||"Добро пожаловать в «Агентство подарков», {name}!").replace(/\{name\}/g,aiSafeName(member)).slice(0,3000);
+        await aiTelegram(env,"sendMessage",{chat_id:chatId,text:greeting});
+      }
       if(settings.rules_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"📌 Правила группы\n"+settings.rules_text});
     }
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"members_joined",details:{count:message.new_chat_members.length}});
@@ -493,7 +523,7 @@ async function handleAiTelegramUpdate(update, env) {
       const hasImage=!!(message.photo||message.sticker||message.video?.thumbnail||message.animation?.thumbnail||(message.document&&/^image\//i.test(message.document.mime_type||"")));
       if(hasImage){
         try{
-          const scan=await aiInspectImage(env,message);
+          const scan=await aiInspectImage(env,message,settings);
           if(!scan){
             await aiWatch(env,chatId,user.id,"Вложение не удалось полностью проверить автоматически","media_review");
             await aiNotifyOwner(env,"🔎 Вложение не удалось полностью проверить автоматически. Участник: "+user.id+". Проверьте сообщение вручную; автоматическое наказание не применено.");
@@ -533,12 +563,16 @@ async function handleAiTelegramUpdate(update, env) {
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
       await aiWarn(env,chatId,message,violation);return true;
     }
-    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
+    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id,settings)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
     }
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?, 'user', ?)")
       .bind(chatId,String(user.id),text.slice(0,3500)).run();
+    if(settings.owner_suggestions && /(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение)/i.test(text)){
+      await aiNotifyOwner(env,"💡 Предложение участника по улучшению Агентства\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nСообщение: "+text.slice(0,900));
+      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"owner_suggestion",details:{message:text.slice(0,1000)}});
+    }
     if(moderationActive && settings.complaints_enabled && /(хочу пожаловаться|жалуюсь на|жалоба на|пожаловаться на)/i.test(text)) {
       const match=text.match(/(?:пожаловаться на|жалоба на|жалуюсь на)\s+(.{2,100})/i);
       const label=String(message.reply_to_message?.from ? aiSafeName(message.reply_to_message.from) : (match?.[1]||"участника")).replace(/[.!?,]+$/,"").trim();
@@ -557,9 +591,9 @@ async function handleAiTelegramUpdate(update, env) {
     if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
     const relevant=aiAgencyIntent(text) || replied;
-    const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
+    const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text,settings) : false;
     if(orderHandled) return true;
-    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow() || aiAgencyIntent(text))) {
+    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
       try { await aiReplyToGroup(env,chatId,user,text,settings); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
@@ -642,8 +676,50 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-bot/settings" && method==="POST") {
     if(!has("ai_bot_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);const settings=await aiSaveSettings(env,body.settings||{},telegramId);
+    if(body.settings?.send_rules===true){
+      if(!settings.group_chat_id)return aiJson({error:"Сначала отправьте любое сообщение в группу, чтобы бот определил её."},409);
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:"📌 Правила группы\n\n"+settings.rules_text.slice(0,3000)});
+    }
     await aiLog(env,{actor:telegramId,type:"settings_changed",details:{keys:Object.keys(body.settings||{})}});
     return aiJson({ok:true,settings});
+  }
+  if(path==="/api/admin/ai-warning" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Выдавать предупреждения вручную может только владелец."},403);
+    const body=await aiReadJson(request),target=String(body.telegram_id||"").trim(),reason=String(body.reason||"").trim().slice(0,500);
+    if(!/^\\d{5,20}$/.test(target))return aiJson({error:"Введите корректный Telegram ID участника."},400);
+    if(reason.length<3)return aiJson({error:"Укажите понятную причину предупреждения."},400);
+    const settings=await aiSettings(env);
+    if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
+    let memberInfo;
+    try{memberInfo=await aiTelegram(env,"getChatMember",{chat_id:settings.group_chat_id,user_id:Number(target)});}
+    catch{return aiJson({error:"Не удалось найти этого участника в группе. Проверьте Telegram ID и права бота."},404);}
+    if(["left","kicked"].includes(memberInfo?.status))return aiJson({error:"Этот пользователь больше не состоит в группе."},404);
+    if(["creator","administrator"].includes(memberInfo?.status))return aiJson({error:"Нельзя выдать предупреждение администратору группы."},403);
+    const member=await env.DB.prepare("SELECT first_name,last_name,username FROM ai_group_members WHERE chat_id=? AND telegram_id=?").bind(String(settings.group_chat_id),target).first();
+    const pseudo={from:{id:Number(target),first_name:member?.first_name||memberInfo?.user?.first_name||"Участник",last_name:member?.last_name||memberInfo?.user?.last_name||"",username:member?.username||memberInfo?.user?.username||""}};
+    await aiWarn(env,settings.group_chat_id,pseudo,reason);
+    await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,target,type:"manual_warning",severity:"warning",details:{reason}});
+    return aiJson({ok:true});
+  }
+  if(path==="/api/admin/ai-group-invoice" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Создавать групповые счета может только владелец."},403);
+    const body=await aiReadJson(request),amount=Number(body.amount_stars),title=String(body.title||"Счёт Агентства подарков").trim().slice(0,32),description=String(body.description||"Оплата в Агентстве подарков").trim().slice(0,255);
+    if(!Number.isSafeInteger(amount)||amount<1||amount>100000)return aiJson({error:"Укажите сумму от 1 до 100000 Stars."},400);
+    const settings=await aiSettings(env);
+    if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
+    const payload="group_invoice_"+crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,?,'topup',?,?,0,?,'pending')")
+      .bind(payload,String(telegramId),String(settings.group_chat_id),amount,"group_invoice:"+title).run();
+    try {
+      const invoiceUrl=await aiTelegram(env,"createInvoiceLink",{title,description,payload,provider_token:"",currency:"XTR",prices:[{label:title,amount}]});
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:"⭐ Счёт от «Агентства подарков»\n"+title+"\n"+description+"\nСумма: "+amount+" Stars\n\nНажмите кнопку ниже, чтобы оплатить.",reply_markup:{inline_keyboard:[[{text:"Оплатить · "+amount+" ⭐",url:invoiceUrl}]]}});
+      await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,type:"group_invoice_created",details:{amount_stars:amount,title,payload}});
+      await aiNotifyOwner(env,"⭐ В группу отправлен счёт: "+title+" · "+amount+" Stars.");
+      return aiJson({ok:true,amount_stars:amount});
+    } catch(error) {
+      await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(payload).run();
+      return aiJson({error:"Не удалось отправить счёт в группу: "+String(error.message||error).slice(0,250)},502);
+    }
   }
   if(path==="/api/admin/ai-questions" && method==="GET") {
     if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
