@@ -535,12 +535,12 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     return aiJson({ok:true,warnings:rows.results||[]});
   }
   if(path==="/api/admin/ai-watchlist" && method==="GET") {
-    if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
+    if(!has("ai_bot_logs")&&!has("ai_watch_end"))return aiJson({error:"Недостаточно прав."},403);
     const rows=await env.DB.prepare("SELECT * FROM ai_watchlist WHERE status='active' ORDER BY expires_at").all();
     return aiJson({ok:true,watchlist:rows.results||[]});
   }
   if(path==="/api/admin/ai-action" && method==="POST") {
-    if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
+    if(!has("ai_bot_logs")&&!has("ai_watch_end"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
     if(body.action==="cancel_warning" && ownerOnly()) {
       await env.DB.prepare("UPDATE ai_warnings SET cancelled_at=CURRENT_TIMESTAMP,cancelled_by=? WHERE id=? AND cancelled_at IS NULL").bind(String(telegramId),Number(body.id)).run();
