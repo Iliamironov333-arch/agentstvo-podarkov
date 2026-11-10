@@ -1,3 +1,5 @@
+import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute } from "./ai-moderator.js";
+
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 0;
 const VIP_PRICES = { subscription: 500, lifetime: 2000 };
@@ -453,6 +455,15 @@ async function handleWebhook(request, env) {
     return json({ ok: false, error: "Forbidden" }, 403);
   }
   const update = await readJson(request);
+  if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
+    await handleAiTelegramUpdate(update, env);
+    return json({ ok: true });
+  }
+  if (update.message && !update.message.successful_payment &&
+      (update.message.chat?.type === "group" || update.message.chat?.type === "supergroup")) {
+    await handleAiTelegramUpdate(update, env);
+    return json({ ok: true });
+  }
   if (update.pre_checkout_query) {
     const q = update.pre_checkout_query;
     let valid = false;
@@ -516,6 +527,13 @@ async function handleWebhook(request, env) {
       const custom=await env.DB.prepare("SELECT id,subject FROM custom_orders WHERE id=? AND telegram_id=?").bind(order.id,telegramId).first();
       if(custom){
         await env.DB.prepare("UPDATE custom_orders SET status='new' WHERE id=? AND telegram_id=? AND status='pending'").bind(order.id,telegramId).run();
+        try {
+          const aiDraft = await env.DB.prepare("SELECT id,chat_id FROM ai_order_drafts WHERE order_id=? AND status='approved'").bind(order.id).first();
+          if (aiDraft) {
+            await env.DB.prepare("UPDATE ai_order_drafts SET status='paid',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(aiDraft.id).run();
+            await telegram(env,"sendMessage",{chat_id:aiDraft.chat_id,text:"✅ Оплата Вашего индивидуального заказа успешно получена! Заказ передан в работу."});
+          }
+        } catch (error) { console.error("AI custom order confirmation failed:",String(error).slice(0,300)); }
         await notifyOwner(env,"🎨 Оплачен индивидуальный заказ\nID: "+order.id+"\nПокупатель: "+telegramId+"\nРабота: "+custom.subject+"\nИтого: "+order.total_stars+" ⭐\nСписано с баланса: "+Number(order.balance_applied_stars||0)+" ⭐\nОплачено Telegram: "+payment.total_amount+" ⭐");
         return json({ok:true});
       }
@@ -651,14 +669,20 @@ async function writeSystemError(env, error, path) {
 
 
 
+const AI_ADMIN_PERMISSION_KEYS = ["ai_bot_manage","ai_bot_logs","ai_watch_end","ai_orders_view","ai_orders_manage","reports_view"];
 const ADMIN_PERMISSION_KEYS = [
   "dashboard_view","users_view","users_balance","users_ban","users_unban",
   "orders_view","orders_manage","catalog_view","catalog_manage",
   "support_view","support_reply","campaigns_manage","announcements_manage",
-  "promos_manage","analytics_view","backup_manage","system_manage"
+  "promos_manage","analytics_view","backup_manage","system_manage", ...AI_ADMIN_PERMISSION_KEYS
 ];
 function adminPermissionForPath(path, method) {
   if (path === "/api/admin/session") return null;
+  if (path === "/api/admin/ai-bot/settings") return "ai_bot_manage";
+  if (path === "/api/admin/ai-logs" || path === "/api/admin/ai-watchlist" || path === "/api/admin/ai-complaints") return "ai_bot_logs";
+  if (path === "/api/admin/ai-action") return "ai_bot_logs";
+  if (path === "/api/admin/ai-orders") return method === "GET" ? "ai_orders_view" : "ai_orders_manage";
+  if (path === "/api/admin/ai-reports") return "reports_view";
   if (path.startsWith("/api/admin/staff")) return "staff_manage";
   if (path === "/api/admin/users" || path === "/api/admin/user") return "users_view";
   if (path === "/api/admin/balance-adjust") return "users_balance";
@@ -684,7 +708,7 @@ function adminPermissionForPath(path, method) {
   return "owner_only";
 }
 function defaultAdminPermissions() {
-  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, true]));
+  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key)]));
 }
 
 export default {
@@ -692,6 +716,7 @@ export default {
     ctx.waitUntil(processCampaignBatch(env, 15).catch(error => console.error("Campaign queue processor failed:", String(error).slice(0,500))));
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
+    ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
   async fetch(request, env) {
@@ -1682,6 +1707,8 @@ export default {
           const row = await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='sales_paused'").first();
           return json({ ok: true, sales_paused: row?.value === "1", updated_at: row?.updated_at || null }, 200, origin);
         }
+        const aiAdminResponse = await handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,permissions);
+        if (aiAdminResponse) return json(await aiAdminResponse.json(),aiAdminResponse.status,origin);
         if (path === "/api/admin/system-controls" && method === "POST") {
           const body = await readJson(request);
           if (typeof body.sales_paused !== "boolean") return json({ error: "Укажите состояние остановки продаж." }, 400, origin);
