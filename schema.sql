@@ -183,3 +183,5 @@ CREATE INDEX IF NOT EXISTS idx_ai_complaints_status ON ai_complaints(status,crea
 CREATE INDEX IF NOT EXISTS idx_ai_order_drafts_status ON ai_order_drafts(status,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_order_drafts_customer ON ai_order_drafts(telegram_id,last_activity_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_reports_sent ON ai_weekly_reports(sent_at DESC);
+
+INSERT OR IGNORE INTO ai_moderator_settings(id,enabled,complaints_enabled,settings_json) VALUES(1,1,1,'{}');
