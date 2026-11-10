@@ -237,7 +237,7 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
   ];
   if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
-  const instructionText=instructions.join("\\n");
+  const instructionText=instructions.join("\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
   const raw = await aiOpenAi(env,instructionText,input,550);
