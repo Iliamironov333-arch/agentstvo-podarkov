@@ -126,7 +126,7 @@ async function aiWarn(env, chatId, message, reason) {
   try { await aiTelegram(env,"deleteMessage",{chat_id:chatId,message_id:message.message_id}); } catch {}
   const warningCount = before + 1;
   const notice = "⚠️ Предупреждение " + warningCount + ". Причина: " + reason +
-    (restrictionHours ? "\nВам временно ограничена отправка сообщений на " + restrictionHours + " ч." : "");
+    (restrictionHours ? "\nПожалуйста, соблюдайте правила группы." : "");
   try { await aiTelegram(env,"sendMessage",{chat_id:chatId,text:notice,reply_to_message_id:message.message_id,allow_sending_without_reply:true}); } catch {}
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target,type:"warning",severity:"warning",details:{reason,warning_number:warningCount,restriction_hours:restrictionHours}});
   await aiNotifyOwner(env,"⚠️ Нарушение в группе\nУчастник: " + aiSafeName(message.from) + " (" + target + ")\nПредупреждение: " + warningCount + "\nПричина: " + reason + (restrictionHours ? "\nОграничение: " + restrictionHours + " ч." : ""));
@@ -371,7 +371,7 @@ async function aiTranscribeAudio(env,message){
   const form=new FormData();
   form.append("file",new Blob([buffer],{type:mime}),ext==="oga"?"voice.ogg":"voice."+ext);
   form.append("model",env.OPENAI_TRANSCRIPTION_MODEL||"gpt-transcribe");
-  form.append("language","ru");
+  form.append("languages[]","ru");
   form.append("prompt","Русская речь в группе Агентства подарков. Сохраняйте произнесённые слова без добавления новых.");
   const result=await fetch("https://api.openai.com/v1/audio/transcriptions",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY},body:form});
   const data=await result.json().catch(()=>({}));
