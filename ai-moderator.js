@@ -786,7 +786,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   if(path==="/api/admin/ai-warnings" && method==="GET") {
     if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
-    const rows=await env.DB.prepare("SELECT * FROM ai_warnings WHERE issued_at>=datetime('now','-60 days') ORDER BY id DESC LIMIT 100").all();
+    const retention=await aiSettings(env);
+    const rows=await env.DB.prepare("SELECT * FROM ai_warnings WHERE issued_at>=datetime('now',?) ORDER BY id DESC LIMIT 100").bind("-"+Number(retention.warning_history_days||60)+" days").all();
     return aiJson({ok:true,warnings:rows.results||[]});
   }
   if(path==="/api/admin/ai-watchlist" && method==="GET") {
