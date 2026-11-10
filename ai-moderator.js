@@ -530,8 +530,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       if(!draft || !draft.approved_stars)return aiJson({error:"Сначала сохраните заказ и его итоговую цену."},400);
       await env.DB.prepare("UPDATE ai_order_drafts SET status='review' WHERE id=?").bind(draft.id).run();
       const callback={id:"admin_"+crypto.randomUUID(),from:{id:Number(telegramId)},data:"ai_order_approve:"+draft.id};
-      await aiApproveOrder(env,callback);
-      return aiJson({ok:true});
+      const approved=await aiApproveOrder(env,callback);
+      return aiJson({ok:approved===true,error:approved===true?undefined:"Не удалось подтвердить заказ. Проверьте уведомление владельца."},approved===true?200:409);
     }
     if(body.action==="cancel") {
       await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('collecting','review')").bind(String(body.id||"")).run();
