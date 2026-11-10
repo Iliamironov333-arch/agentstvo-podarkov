@@ -1,5 +1,6 @@
 const DEFAULT_AI_SETTINGS = {
   enabled: true,
+  moderation_enabled: true,
   complaints_enabled: true,
   night_mode: true,
   night_start: "23:00",
@@ -46,13 +47,13 @@ async function aiLog(env, event) {
 }
 async function aiSettings(env) {
   const row = await env.DB.prepare("SELECT enabled,complaints_enabled,settings_json,group_chat_id FROM ai_moderator_settings WHERE id=1").first();
-  const pause=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key='disabled_until'").first();
-  const temporarilyDisabled=!!pause?.value && Date.parse(pause.value.replace(" ","T")+"Z")>Date.now();
+  const pause=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key='moderation_disabled_until'").first();
+  const moderationTemporarilyDisabled=!!pause?.value && Date.parse(pause.value.replace(" ","T")+"Z")>Date.now();
   let saved = {};
   try { saved = JSON.parse(row?.settings_json || "{}"); } catch {}
   const configuredEnabled=row ? row.enabled===1 : true;
-  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: configuredEnabled && !temporarilyDisabled, configured_enabled:configuredEnabled,
-    temporarily_disabled: temporarilyDisabled, disabled_until: pause?.value || null,
+  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: configuredEnabled, configured_enabled:configuredEnabled,
+    moderation_temporarily_disabled: moderationTemporarilyDisabled, moderation_disabled_until: pause?.value || null,
     complaints_enabled: row ? row.complaints_enabled === 1 : true, group_chat_id: row?.group_chat_id || null };
 }
 async function aiSaveSettings(env, settings, actor) {
@@ -65,11 +66,11 @@ async function aiSaveSettings(env, settings, actor) {
     else if (key === "night_start" || key === "night_end") current[key] = /^\d{2}:\d{2}$/.test(String(value)) ? String(value) : current[key];
     else if (key === "rules_text") current[key] = String(value || "").slice(0,3000);
   }
-  if(Number(settings?.disable_minutes)>0){
-    const minutes=Math.max(5,Math.min(1440,Number(settings.disable_minutes)));
-    await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES('disabled_until',datetime('now',?),CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind("+"+minutes+" minutes").run();
+  if(Number(settings?.moderation_disabled_minutes)>0){
+    const minutes=Math.max(5,Math.min(1440,Number(settings.moderation_disabled_minutes)));
+    await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES('moderation_disabled_until',datetime('now',?),CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind("+"+minutes+" minutes").run();
   }
-  if(settings?.enabled===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='disabled_until'").run();
+  if(settings?.moderation_enabled===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='moderation_disabled_until'").run();
   const enabled = (Object.prototype.hasOwnProperty.call(settings||{},"enabled") ? settings.enabled===true : current.configured_enabled) ? 1 : 0;
   const complaints = current.complaints_enabled ? 1 : 0;
   const stored = Object.fromEntries(allowed.map(key => [key, current[key]]));
@@ -407,6 +408,7 @@ async function handleAiTelegramUpdate(update, env) {
   await aiRememberMember(env,chatId,user);
   const settings=await aiSettings(env);
   if(!settings.enabled)return true;
+  const moderationActive=settings.moderation_enabled && !settings.moderation_temporarily_disabled;
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
       if(settings.greeting_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Добро пожаловать в «Агентство подарков», "+aiSafeName(member)+"! Рады видеть Вас в нашей группе."});
@@ -426,7 +428,7 @@ async function handleAiTelegramUpdate(update, env) {
     }
   }
   const file=message.document||message.video||message.audio||message.voice||message.animation||message.sticker||message.photo||message.video_note;
-  if(file && settings.media_checks) {
+  if(file && settings.media_checks && moderationActive) {
     const suspicious=message.document && /(apk|exe|scr|bat|cmd|js|vbs|ps1|jar|dmg|pkg)$/i.test(String(message.document.file_name||""));
     if(suspicious) {
       await aiWatch(env,chatId,user.id,"Подозрительное вложение: "+String(message.document.file_name||"неизвестный файл"),"suspicious_file");
@@ -451,8 +453,8 @@ async function handleAiTelegramUpdate(update, env) {
     }
   }
   if(text) {
-    let violation=aiClassifyLocal(message,settings);
-    if(!violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|казино|ставк|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
+    let violation=moderationActive ? aiClassifyLocal(message,settings) : null;
+    if(moderationActive && !violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|казино|ставк|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
       try{
         const aiCheck=await aiInspectText(env,text);
         if(aiCheck.decision==="violation" && aiCheck.confidence>=0.9)violation=aiCheck.reason;
@@ -469,13 +471,13 @@ async function handleAiTelegramUpdate(update, env) {
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
       await aiWarn(env,chatId,message,violation);return true;
     }
-    if(settings.spam && await aiIsFlood(env,chatId,user.id)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
-    if(settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
+    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
+    if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
     }
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?, 'user', ?)")
       .bind(chatId,String(user.id),text.slice(0,3500)).run();
-    if(settings.complaints_enabled && /(хочу пожаловаться|жалуюсь на|жалоба на|пожаловаться на)/i.test(text)) {
+    if(moderationActive && settings.complaints_enabled && /(хочу пожаловаться|жалуюсь на|жалоба на|пожаловаться на)/i.test(text)) {
       const match=text.match(/(?:пожаловаться на|жалоба на|жалуюсь на)\s+(.{2,100})/i);
       const label=String(message.reply_to_message?.from ? aiSafeName(message.reply_to_message.from) : (match?.[1]||"участника")).replace(/[.!?,]+$/,"").trim();
       const members=await env.DB.prepare("SELECT telegram_id,username,first_name,last_name FROM ai_group_members WHERE chat_id=? ORDER BY last_seen_at DESC LIMIT 500").bind(chatId).all();
@@ -489,7 +491,7 @@ async function handleAiTelegramUpdate(update, env) {
       await aiLog(env,{chat_id:chatId,actor:user.id,target:target?.telegram_id||null,type:"complaint_created",severity:"warning",details:{target_label:label}});
       return true;
     }
-    const existingWatch=await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first();
+    const existingWatch=moderationActive ? await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first() : null;
     if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
     const relevant=aiAgencyIntent(text) || replied;
