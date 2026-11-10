@@ -462,7 +462,9 @@ async function handleAiTelegramUpdate(update, env) {
   }
   if(text) {
     let violation=moderationActive ? aiClassifyLocal(message,settings) : null;
-    if(moderationActive && !violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
+    const hasLink=/(https?:\/\/|t\.me\/|www\.)/i.test(text);
+    const hasSpamSignal=/(реклама|продам|куплю|подписывай|промокод|заработок|розыгрыш|фишинг|мошен)/i.test(text);
+    if(moderationActive && !violation && ((settings.suspicious_links&&hasLink)||((settings.spam||settings.advertising)&&hasSpamSignal))){
       try{
         const aiCheck=await aiInspectText(env,text);
         if(aiCheck.decision==="violation" && aiCheck.confidence>=0.9)violation=aiCheck.reason;
