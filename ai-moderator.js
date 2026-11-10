@@ -36,7 +36,7 @@ const DEFAULT_AI_SETTINGS = {
   punishment_suspicious_links: "warning",
   punishment_repeated_messages: "warning",
   punishment_media: "warning",
-  warnings_before_restriction: 3,
+  warnings_before_restriction: 2,
   warning_active_days: 20,
   warning_history_days: 60,
   warning_escalation_action: "restriction",
@@ -171,10 +171,10 @@ async function aiWarn(env, chatId, message, reason, category = "default") {
     await env.DB.prepare("INSERT INTO ai_warnings(chat_id,telegram_id,reason,source_message_id,active_until) VALUES(?,?,?,?,datetime('now',?))")
       .bind(String(chatId),target,String(reason).slice(0,500),message.message_id||null,"+"+Number(settings.warning_active_days||20)+" days").run();
     warningCount=before+1;
-    if(warningCount>=Number(settings.warnings_before_restriction||3))effectiveAction=settings.warning_escalation_action||"restriction";
+    if(warningCount>=Number(settings.warnings_before_restriction||2))effectiveAction=settings.warning_escalation_action||"restriction";
   }
   try {
-    if(effectiveAction==="mute"||effectiveAction==="restriction")restrictionMinutes=await aiApplyRestriction(env,chatId,target,effectiveAction,settings,reason);
+    if(effectiveAction==="mute"||effectiveAction==="restriction"){const escalationSteps=action==="warning"&&effectiveAction==="restriction"?Math.max(1,warningCount-Number(settings.warnings_before_restriction||2)+1):1;const durationSettings={...settings,restriction_duration_hours:Math.min(8760,Number(settings.restriction_duration_hours||24)*escalationSteps)};restrictionMinutes=await aiApplyRestriction(env,chatId,target,effectiveAction,durationSettings,reason);}
   }catch(error){
     await aiNotifyOwner(env,"⚠️ Не удалось применить наказание к участнику "+target+". Проверьте права бота в группе.\nПричина: "+String(error).slice(0,300));
   }
