@@ -121,7 +121,9 @@ async function aiWarn(env, chatId, message, reason) {
 }
 function aiClassifyLocal(message, settings) {
   const text = aiText(message).toLowerCase().replace(/ё/g,"е");
-  if (settings.profanity && (typeof containsProhibitedLanguage === "function") && containsProhibitedLanguage(text)) return "Нецензурная или оскорбительная лексика";
+  const tokens=text.split(/[^а-яa-z]+/).filter(Boolean);
+  const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/^fuck$/i,/^shit$/i];
+  if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   if (settings.suspicious_links && urls.some(url=>/(casino|bet|bets|1xbet|melbet|stake|poker|roulette|казино|ставк|букмек|розыгрыш.*выигрыш|wallet.*connect|verify.*account|login.*secure)/i.test(url+" "+text))) return "Подозрительная азартная, мошенническая или фишинговая ссылка";
   if (settings.advertising && urls.length && /(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только)/i.test(text)) return "Реклама без разрешения";
@@ -210,15 +212,16 @@ async function aiHandleOrderConversation(env, message, text) {
 }
 async function aiApproveOrder(env, callback) {
   const owner=String(env.ADMIN_TELEGRAM_ID||"");
+  const realCallback = !String(callback.id||"").startsWith("admin_");
   if(String(callback.from?.id)!==owner) {
-    await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Подтвердить заказ может только владелец.",show_alert:true});
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Подтвердить заказ может только владелец.",show_alert:true});
     return;
   }
   const id=String(callback.data||"").slice("ai_order_approve:".length);
   const draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE id=? AND status='review'").bind(id).first();
-  if(!draft){await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже обработан или не найден.",show_alert:true});return;}
+  if(!draft){if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже обработан или не найден.",show_alert:true});return;}
   if(!draft.approved_stars || Number(draft.approved_stars)<1) {
-    await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Сначала укажите итоговую цену в Mini App → ИИ-заказы.",show_alert:true});return;
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Сначала укажите итоговую цену в Mini App → ИИ-заказы.",show_alert:true});return;
   }
   const orderId=crypto.randomUUID();
   const title=String(draft.subject||"Индивидуальный заказ").slice(0,120);
@@ -240,11 +243,11 @@ async function aiApproveOrder(env, callback) {
   } catch(error) {
     await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=?").bind(payload).run();
     await aiNotifyOwner(env,"⚠️ Заказ "+orderId+" создан, но счёт не удалось сформировать: "+String(error).slice(0,300));
-    await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ создан, но счёт не сформирован. Проверьте уведомление.",show_alert:true});
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ создан, но счёт не сформирован. Проверьте уведомление.",show_alert:true});
     return;
   }
   await aiTelegram(env,"sendMessage",{chat_id:draft.chat_id,text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nДля оплаты используйте кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+amount+" ⭐",url:invoiceUrl}]]}});
-  await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ подтверждён, счёт отправлен в группу."});
+  if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ подтверждён, счёт отправлен в группу."});
   await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
 }
 async function handleAiTelegramUpdate(update, env) {
@@ -278,7 +281,11 @@ async function handleAiTelegramUpdate(update, env) {
   }
   if(text) {
     const violation=aiClassifyLocal(message,settings);
-    if(violation){await aiWarn(env,chatId,message,violation);return true;}
+    if(violation){
+      const watched=await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(chatId,String(user.id)).first();
+      if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
+      await aiWarn(env,chatId,message,violation);return true;
+    }
     if(settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
     }
@@ -286,10 +293,10 @@ async function handleAiTelegramUpdate(update, env) {
       .bind(chatId,String(user.id),text.slice(0,3500)).run();
     if(settings.complaints_enabled && /(хочу пожаловаться|жалуюсь на|жалоба на|пожаловаться на)/i.test(text)) {
       const match=text.match(/(?:пожаловаться на|жалоба на|жалуюсь на)\s+(.{2,100})/i);
-      const label=String(match?.[1]||"участника").replace(/[.!?,]+$/,"").trim();
+      const label=String(message.reply_to_message?.from ? aiSafeName(message.reply_to_message.from) : (match?.[1]||"участника")).replace(/[.!?,]+$/,"").trim();
       const members=await env.DB.prepare("SELECT telegram_id,username,first_name,last_name FROM ai_group_members WHERE chat_id=? ORDER BY last_seen_at DESC LIMIT 500").bind(chatId).all();
       const normalized=label.replace(/^@/,"").toLowerCase();
-      const target=(members.results||[]).find(m=>String(m.username||"").toLowerCase()===normalized || (String((m.first_name||"")+" "+(m.last_name||"")).toLowerCase()).includes(normalized));
+      const target=message.reply_to_message?.from?.id ? {telegram_id:String(message.reply_to_message.from.id)} : (members.results||[]).find(m=>String(m.username||"").toLowerCase()===normalized || (String((m.first_name||"")+" "+(m.last_name||"")).toLowerCase()).includes(normalized));
       await env.DB.prepare("INSERT INTO ai_complaints(chat_id,reporter_telegram_id,target_telegram_id,target_label,reason,source_message_id) VALUES(?,?,?,?,?,?)")
         .bind(chatId,String(user.id),target?.telegram_id||null,label,text.slice(0,1000),message.message_id||null).run();
       if(target) await aiWatch(env,chatId,target.telegram_id,"На участника поступила жалоба. Требуется проверка контекста.","complaint");
@@ -304,6 +311,8 @@ async function handleAiTelegramUpdate(update, env) {
     const mentioned=(message.entities||[]).some(e=>e.type==="mention" && text.slice(e.offset,e.offset+e.length).toLowerCase()==="@"+botUsername);
     const replied=message.reply_to_message?.from?.is_bot===true;
     const relevant=aiAgencyIntent(text) || mentioned || replied;
+    const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
+    if(orderHandled) return true;
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow() || aiAgencyIntent(text))) {
       const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(chatId).first();
       if(!last || (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000>=Number(settings.answer_interval_seconds||5)) {
@@ -315,7 +324,6 @@ async function handleAiTelegramUpdate(update, env) {
         }
       }
     }
-    if(settings.ai_orders && aiOrderIntent(text)) await aiHandleOrderConversation(env,message,text);
   }
   return true;
 }
@@ -349,7 +357,7 @@ async function handleAiScheduled(env) {
   const weekday=nowParts.find(p=>p.type==="weekday")?.value;
   const hour=Number(nowParts.find(p=>p.type==="hour")?.value||0),minute=Number(nowParts.find(p=>p.type==="minute")?.value||0);
   if(weekday==="Sat" && hour===8 && minute<5) await aiBuildWeeklyReport(env);
-  await env.DB.prepare("UPDATE ai_warnings SET cancelled_at=CURRENT_TIMESTAMP WHERE cancelled_at IS NULL AND issued_at<datetime('now','-60 days')").run();
+  await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now','-60 days')").run();
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
   const reminders=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.subject,o.id AS order_id FROM ai_order_drafts d JOIN orders o ON o.id=d.order_id WHERE d.status='approved' AND o.payment_status='pending' AND d.reminder_sent_at IS NULL AND d.updated_at<=datetime('now','-24 hours') LIMIT 25").all();
@@ -385,7 +393,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     return aiJson({ok:true,watchlist:rows.results||[]});
   }
   if(path==="/api/admin/ai-action" && method==="POST") {
-    if(!has("ai_bot_manage"))return aiJson({error:"Недостаточно прав."},403);
+    if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
     if(body.action==="cancel_warning" && ownerOnly()) {
       await env.DB.prepare("UPDATE ai_warnings SET cancelled_at=CURRENT_TIMESTAMP,cancelled_by=? WHERE id=? AND cancelled_at IS NULL").bind(String(telegramId),Number(body.id)).run();
