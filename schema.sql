@@ -185,3 +185,16 @@ CREATE INDEX IF NOT EXISTS idx_ai_order_drafts_customer ON ai_order_drafts(teleg
 CREATE INDEX IF NOT EXISTS idx_ai_reports_sent ON ai_weekly_reports(sent_at DESC);
 
 INSERT OR IGNORE INTO ai_moderator_settings(id,enabled,complaints_enabled,settings_json) VALUES(1,1,1,'{}');
+
+CREATE TABLE IF NOT EXISTS ai_owner_questions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id TEXT NOT NULL,
+  telegram_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','answered')),
+  answer TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  answered_at TEXT,
+  answered_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_owner_questions_status ON ai_owner_questions(status,created_at DESC);
