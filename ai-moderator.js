@@ -694,6 +694,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     try{memberInfo=await aiTelegram(env,"getChatMember",{chat_id:settings.group_chat_id,user_id:Number(target)});}
     catch{return aiJson({error:"Не удалось найти этого участника в группе. Проверьте Telegram ID и права бота."},404);}
     if(["left","kicked"].includes(memberInfo?.status))return aiJson({error:"Этот пользователь больше не состоит в группе."},404);
+    if(["creator","administrator"].includes(memberInfo?.status))return aiJson({error:"Нельзя выдать предупреждение администратору группы."},403);
     const member=await env.DB.prepare("SELECT first_name,last_name,username FROM ai_group_members WHERE chat_id=? AND telegram_id=?").bind(String(settings.group_chat_id),target).first();
     const pseudo={from:{id:Number(target),first_name:member?.first_name||memberInfo?.user?.first_name||"Участник",last_name:member?.last_name||memberInfo?.user?.last_name||"",username:member?.username||memberInfo?.user?.username||""}};
     await aiWarn(env,settings.group_chat_id,pseudo,reason);
