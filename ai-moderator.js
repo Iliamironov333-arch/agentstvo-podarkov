@@ -209,17 +209,18 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Если точного ответа нет в каталоге или данных недостаточно, не угадывайте: needs_owner=true и сообщите, что уточните информацию у владельца.",
     "Предлагайте только действительно подходящие товары. Не называйте товары похожими, если они отличаются по ключевым пожеланиям клиента.",
     "Если человек хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
-    "Не отвечайте на вопросы, не относящиеся к Агентству.",
-    "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false}."
+    "Не отвечайте на вопросы, не относящиеся к Агентству. Если сообщение не связано с Агентством, верните ignore=true; бот должен промолчать.",
+    "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
   ].join("\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
   const raw = await aiOpenAi(env,instructions,input,550);
-  let answer=raw,needsOwner=false;
+  let answer=raw,needsOwner=false,ignore=false;
   try{
     const match=raw.match(/\{[\s\S]*\}/);
-    if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;}
+    if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}
   }catch{}
+  if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
   if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
   let questionId=null;
   if(needsOwner){
