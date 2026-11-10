@@ -29,6 +29,19 @@ const DEFAULT_AI_SETTINGS = {
   ai_answers: true,
   ai_orders: true,
   owner_suggestions: true,
+  punishment_default: "warning",
+  punishment_profanity: "warning",
+  punishment_spam: "warning",
+  punishment_advertising: "warning",
+  punishment_suspicious_links: "warning",
+  punishment_repeated_messages: "warning",
+  punishment_media: "warning",
+  warnings_before_restriction: 3,
+  warning_active_days: 20,
+  warning_history_days: 60,
+  warning_escalation_action: "restriction",
+  mute_duration_minutes: 60,
+  restriction_duration_hours: 24,
   answer_interval_seconds: 5
 };
 
@@ -75,6 +88,12 @@ async function aiSaveSettings(env, settings, actor) {
     const value = settings[key];
     if (typeof DEFAULT_AI_SETTINGS[key] === "boolean") current[key] = value === true;
     else if (key === "answer_interval_seconds") current[key] = Math.max(5, Math.min(60, Number(value) || 5));
+    else if (["warnings_before_restriction","warning_active_days","warning_history_days","mute_duration_minutes","restriction_duration_hours"].includes(key)) {
+      const limits={warnings_before_restriction:[1,20],warning_active_days:[1,365],warning_history_days:[1,730],mute_duration_minutes:[1,10080],restriction_duration_hours:[1,8760]};
+      const [min,max]=limits[key],number=Number(value);
+      if(Number.isFinite(number))current[key]=Math.max(min,Math.min(max,Math.round(number)));
+    }
+    else if (key.startsWith("punishment_") || key === "warning_escalation_action") current[key] = ["warning","mute","restriction"].includes(String(value)) ? String(value) : current[key];
     else if (key === "night_start" || key === "night_end") current[key] = /^\d{2}:\d{2}$/.test(String(value)) ? String(value) : current[key];
     else if (typeof DEFAULT_AI_SETTINGS[key] === "string") current[key] = String(value ?? "").slice(0, key === "rules_text" ? 3000 : 6000);
   }
@@ -120,31 +139,51 @@ async function aiWatch(env, chatId, targetId, reason, source = "system") {
     await aiLog(env,{chat_id:chatId,target:targetId,type:"watch_started",details:{reason,source}});
   }
 }
-async function aiWarn(env, chatId, message, reason) {
-  const target = String(message.from.id);
-  const active = await env.DB.prepare("SELECT COUNT(*) AS total FROM ai_warnings WHERE telegram_id=? AND chat_id=? AND cancelled_at IS NULL AND active_until>CURRENT_TIMESTAMP")
+function aiCategoryFromReason(reason) {
+  const text=String(reason||"").toLowerCase();
+  if(/оскорб|нецензур|агрессив|бран|мат/.test(text))return "profanity";
+  if(/реклам/.test(text))return "advertising";
+  if(/ссылк|казино|азарт|фишинг|мошенн|вредонос/.test(text))return "suspicious_links";
+  if(/повтор|флуд|спам|частая отправка/.test(text))return /повтор/.test(text)?"repeated_messages":"spam";
+  if(/изображ|вложен|медиа|файл|картин/.test(text))return "media";
+  return "default";
+}
+async function aiApplyRestriction(env,chatId,userId,mode,settings,reason) {
+  const minutes=mode==="mute"?Number(settings.mute_duration_minutes||60):Number(settings.restriction_duration_hours||24)*60;
+  const until=Math.floor(Date.now()/1000)+Math.max(1,minutes)*60;
+  const permissions=mode==="mute"
+    ? {can_send_messages:false,can_send_audios:true,can_send_documents:true,can_send_photos:true,can_send_videos:true,can_send_video_notes:true,can_send_voice_notes:true,can_send_polls:true,can_send_other_messages:true,can_add_web_page_previews:true,can_change_info:false,can_invite_users:false,can_pin_messages:false}
+    : {can_send_messages:false,can_send_audios:false,can_send_documents:false,can_send_photos:false,can_send_videos:false,can_send_video_notes:false,can_send_voice_notes:false,can_send_polls:false,can_send_other_messages:false,can_add_web_page_previews:false,can_change_info:false,can_invite_users:false,can_pin_messages:false};
+  await aiTelegram(env,"restrictChatMember",{chat_id:chatId,user_id:Number(userId),until_date:until,permissions});
+  await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:userId,type:mode==="mute"?"mute":"restriction",severity:"warning",details:{minutes,reason}});
+  return minutes;
+}
+async function aiWarn(env, chatId, message, reason, category = "default") {
+  const target=String(message.from.id),settings=await aiSettings(env);
+  const normalizedCategory=category==="manual"?"default":category;
+  const selected=settings["punishment_"+normalizedCategory]||settings.punishment_default||"warning";
+  const action=category==="manual"?"warning":selected;
+  const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM ai_warnings WHERE telegram_id=? AND chat_id=? AND cancelled_at IS NULL AND active_until>CURRENT_TIMESTAMP")
     .bind(target,String(chatId)).first();
-  const before = Number(active?.total || 0);
-  await env.DB.prepare("INSERT INTO ai_warnings(chat_id,telegram_id,reason,source_message_id,active_until) VALUES(?,?,?,?,datetime('now','+20 days'))")
-    .bind(String(chatId),target,String(reason).slice(0,500),message.message_id || null).run();
-  let restrictionHours = 0;
-  if (before >= 2) restrictionHours = 48;
-  else if (before === 1) restrictionHours = 24;
-  if (restrictionHours) {
-    const until = Math.floor(Date.now()/1000) + restrictionHours*3600;
-    try {
-      await aiTelegram(env,"restrictChatMember",{chat_id:chatId,user_id:message.from.id,until_date:until,
-        permissions:{can_send_messages:false,can_send_audios:false,can_send_documents:false,can_send_photos:false,can_send_videos:false,can_send_video_notes:false,can_send_voice_notes:false,can_send_polls:false,can_send_other_messages:false,can_add_web_page_previews:false,can_change_info:false,can_invite_users:false,can_pin_messages:false}});
-      await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target,type:"restriction",severity:"warning",details:{hours:restrictionHours,reason}});
-    } catch (error) { await aiNotifyOwner(env,"⚠️ Не удалось применить ограничение участника " + target + ". Проверьте права бота в группе.\nПричина: " + String(error).slice(0,300)); }
+  const before=Number(active?.total||0);
+  let warningCount=before,restrictionMinutes=0,effectiveAction=action;
+  if(action==="warning"){
+    await env.DB.prepare("INSERT INTO ai_warnings(chat_id,telegram_id,reason,source_message_id,active_until) VALUES(?,?,?,?,datetime('now',?))")
+      .bind(String(chatId),target,String(reason).slice(0,500),message.message_id||null,"+"+Number(settings.warning_active_days||20)+" days").run();
+    warningCount=before+1;
+    if(warningCount>=Number(settings.warnings_before_restriction||3))effectiveAction=settings.warning_escalation_action||"restriction";
   }
-  try { await aiTelegram(env,"deleteMessage",{chat_id:chatId,message_id:message.message_id}); } catch {}
-  const warningCount = before + 1;
-  const notice = "⚠️ Предупреждение " + warningCount + ". Причина: " + reason +
-    (restrictionHours ? "\nПожалуйста, соблюдайте правила группы." : "");
-  try { await aiTelegram(env,"sendMessage",{chat_id:chatId,text:notice,reply_to_message_id:message.message_id,allow_sending_without_reply:true}); } catch {}
-  await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target,type:"warning",severity:"warning",details:{reason,warning_number:warningCount,restriction_hours:restrictionHours}});
-  await aiNotifyOwner(env,"⚠️ Нарушение в группе\nУчастник: " + aiSafeName(message.from) + " (" + target + ")\nПредупреждение: " + warningCount + "\nПричина: " + reason + (restrictionHours ? "\nОграничение: " + restrictionHours + " ч." : ""));
+  try {
+    if(effectiveAction==="mute"||effectiveAction==="restriction")restrictionMinutes=await aiApplyRestriction(env,chatId,target,effectiveAction,settings,reason);
+  }catch(error){
+    await aiNotifyOwner(env,"⚠️ Не удалось применить наказание к участнику "+target+". Проверьте права бота в группе.\nПричина: "+String(error).slice(0,300));
+  }
+  if(message.message_id)try{await aiTelegram(env,"deleteMessage",{chat_id:chatId,message_id:message.message_id});}catch{}
+  const durationText=effectiveAction==="mute"?"Мут на "+restrictionMinutes+" мин.":effectiveAction==="restriction"?"Ограничение всех сообщений на "+Math.ceil(restrictionMinutes/60)+" ч.":"";
+  const notice=action==="warning"?"⚠️ Предупреждение "+warningCount+". Причина: "+reason+(durationText?"\nДополнительно: "+durationText:""):"⛔ "+durationText+" Причина: "+reason;
+  try{await aiTelegram(env,"sendMessage",{chat_id:chatId,text:notice,...(message.message_id?{reply_to_message_id:message.message_id,allow_sending_without_reply:true}:{})});}catch{}
+  if(action==="warning")await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target,type:"warning",severity:"warning",details:{reason,warning_number:warningCount,effective_action:effectiveAction,restriction_minutes:restrictionMinutes}});
+  await aiNotifyOwner(env,"⚠️ Нарушение в группе\nУчастник: "+aiSafeName(message.from)+" ("+target+")\nКатегория: "+normalizedCategory+"\nДействие: "+effectiveAction+"\n"+(action==="warning"?"Предупреждение: "+warningCount+" из "+settings.warnings_before_restriction+"\n":"")+(durationText?"Срок: "+durationText+"\n":"")+"Причина: "+reason);
   await aiCalmReminder(env,chatId);
 }
 async function aiCalmReminder(env,chatId){
@@ -528,7 +567,7 @@ async function handleAiTelegramUpdate(update, env) {
             await aiWatch(env,chatId,user.id,"Вложение не удалось полностью проверить автоматически","media_review");
             await aiNotifyOwner(env,"🔎 Вложение не удалось полностью проверить автоматически. Участник: "+user.id+". Проверьте сообщение вручную; автоматическое наказание не применено.");
           }
-          if(scan?.decision==="violation" && scan.confidence>=0.85){await aiWarn(env,chatId,message,scan.reason||"Обнаружено очевидное нарушение в изображении");return true;}
+          if(scan?.decision==="violation" && scan.confidence>=0.85){await aiWarn(env,chatId,message,scan.reason||"Обнаружено очевидное нарушение в изображении","media");return true;}
           if(scan?.decision==="review" || (scan?.decision==="violation"&&scan.confidence<0.85)){
             await aiWatch(env,chatId,user.id,"Вложение требует дополнительной проверки: "+scan.reason,"media_review");
             await aiNotifyOwner(env,"🔎 Требуется проверка вложения\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nПричина: "+scan.reason+"\nУверенность ИИ: "+Math.round(scan.confidence*100)+"%. Участнику статус не раскрывается.");
@@ -561,11 +600,11 @@ async function handleAiTelegramUpdate(update, env) {
     if(violation){
       const watched=await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(chatId,String(user.id)).first();
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
-      await aiWarn(env,chatId,message,violation);return true;
+      await aiWarn(env,chatId,message,violation,aiCategoryFromReason(violation));return true;
     }
-    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id,settings)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
+    if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id,settings)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)","spam");return true;}
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
-      await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
+      await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?, 'user', ?)")
       .bind(chatId,String(user.id),text.slice(0,3500)).run();
@@ -697,7 +736,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     if(["creator","administrator"].includes(memberInfo?.status))return aiJson({error:"Нельзя выдать предупреждение администратору группы."},403);
     const member=await env.DB.prepare("SELECT first_name,last_name,username FROM ai_group_members WHERE chat_id=? AND telegram_id=?").bind(String(settings.group_chat_id),target).first();
     const pseudo={from:{id:Number(target),first_name:member?.first_name||memberInfo?.user?.first_name||"Участник",last_name:member?.last_name||memberInfo?.user?.last_name||"",username:member?.username||memberInfo?.user?.username||""}};
-    await aiWarn(env,settings.group_chat_id,pseudo,reason);
+    await aiWarn(env,settings.group_chat_id,pseudo,reason,"manual");
     await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,target,type:"manual_warning",severity:"warning",details:{reason}});
     return aiJson({ok:true});
   }
@@ -765,7 +804,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       const complaint=await env.DB.prepare("SELECT * FROM ai_complaints WHERE id=? AND status='review'").bind(Number(body.id)).first();
       if(!complaint)return aiJson({error:"Жалоба не найдена."},404);
       const pseudo={from:{id:Number(complaint.reporter_telegram_id),first_name:"Участник"},message_id:complaint.source_message_id};
-      await aiWarn(env,complaint.chat_id,pseudo,"Намеренное злоупотребление системой жалоб");
+      await aiWarn(env,complaint.chat_id,pseudo,"Намеренное злоупотребление системой жалоб","manual");
       await env.DB.prepare("UPDATE ai_complaints SET status='dismissed',resolved_at=CURRENT_TIMESTAMP,resolved_by=? WHERE id=?").bind(String(telegramId),Number(body.id)).run();
     } else if(body.action==="resolve_complaint" && ownerOnly()) {
       await env.DB.prepare("UPDATE ai_complaints SET status='resolved',resolved_at=CURRENT_TIMESTAMP,resolved_by=? WHERE id=? AND status='review'").bind(String(telegramId),Number(body.id)).run();
