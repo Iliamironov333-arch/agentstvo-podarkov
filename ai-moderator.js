@@ -140,7 +140,7 @@ async function aiCalmReminder(env,chatId){
 function aiClassifyLocal(message, settings) {
   const text = aiText(message).toLowerCase().replace(/ё/g,"е");
   const tokens=text.split(/[^а-яa-z]+/).filter(Boolean);
-  const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/^fuck$/i,/^shit$/i];
+  const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/идиот/,/дурак/,/тупой/,/заткнись/,/^fuck$/i,/^shit$/i];
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
@@ -170,6 +170,13 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
   if (!output && Array.isArray(data.output)) output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join("\n");
   if (!output.trim()) throw new Error("Empty OpenAI response");
   return output.trim().slice(0,3500);
+}
+async function aiInspectText(env,text){
+  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» на очевидное нарушение правил: реклама сторонних услуг/каналов, спам, массовая рассылка, мошенничество, фишинг, азартные предложения, оскорбления и агрессивные выпады. Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Если не уверены, выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая причина по-русски\",\"confidence\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
+  const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
+  const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
+  const parsed=JSON.parse(match[0]);
+  return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное сообщение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
 }
 function aiAgencyIntent(text) {
   return /(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|сделать для меня)/i.test(text);
@@ -411,7 +418,19 @@ async function handleAiTelegramUpdate(update, env) {
     }
   }
   if(text) {
-    const violation=aiClassifyLocal(message,settings);
+    let violation=aiClassifyLocal(message,settings);
+    if(!violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|казино|ставк|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
+      try{
+        const aiCheck=await aiInspectText(env,text);
+        if(aiCheck.decision==="violation" && aiCheck.confidence>=0.9)violation=aiCheck.reason;
+        else if(aiCheck.decision==="review" || (aiCheck.decision==="violation"&&aiCheck.confidence<0.9)){
+          await aiWatch(env,chatId,user.id,"Сообщение требует проверки: "+aiCheck.reason,"text_review");
+          await aiNotifyOwner(env,"🔎 ИИ-модератор просит проверить сообщение\nУчастник: "+user.id+"\nПричина: "+aiCheck.reason+"\nУверенность: "+Math.round(aiCheck.confidence*100)+"%. Автоматическое наказание не применено.");
+        }
+      }catch(error){
+        await aiNotifyOwner(env,"⚠️ Не удалось выполнить дополнительную проверку сообщения участника "+user.id+". Автоматическое наказание не применено. "+String(error).slice(0,200));
+      }
+    }
     if(violation){
       const watched=await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(chatId,String(user.id)).first();
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
