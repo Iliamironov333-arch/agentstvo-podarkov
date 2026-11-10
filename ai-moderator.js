@@ -373,16 +373,14 @@ async function handleAiTelegramUpdate(update, env) {
       return true;
     }
     const existingWatch=await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first();
-    if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{text:text.slice(0,500)}});
-    const botUsername=String(env.BOT_USERNAME||"Agentstvo_podarkov_bot").replace(/^@/,"").toLowerCase();
-    const mentioned=(message.entities||[]).some(e=>e.type==="mention" && text.slice(e.offset,e.offset+e.length).toLowerCase()==="@"+botUsername);
+    if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
     const relevant=aiAgencyIntent(text) || replied;
     const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
     if(orderHandled) return true;
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow() || aiAgencyIntent(text))) {
-      try { await aiReplyToGroup(env,chatId,user,text,settings);
-        catch(error) {
+      try { await aiReplyToGroup(env,chatId,user,text,settings); }
+      catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
           await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОшибка: "+String(error).slice(0,250));
           await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question:text.slice(0,700)}});
