@@ -396,9 +396,15 @@ async function handleAiTelegramUpdate(update, env) {
   if(!user?.id || user.is_bot) return false;
   await env.DB.prepare("UPDATE ai_moderator_settings SET group_chat_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=1").bind(chatId).run();
   const noticeKey="group_notice:"+chatId;
-  const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sent')").bind(noticeKey).run();
+  const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sending')").bind(noticeKey).run();
   if(notice.meta?.changes===1){
-    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в ИИ-сервис OpenAI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+    try{
+      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в ИИ-сервис OpenAI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+      await env.DB.prepare("UPDATE ai_runtime_state SET value='sent',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(noticeKey).run();
+    }catch(error){
+      await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key=? AND value='sending'").bind(noticeKey).run();
+      await aiNotifyOwner(env,"Не удалось отправить группе уведомление о работе ИИ-модератора: "+String(error).slice(0,250));
+    }
   }
   await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key])}});
   if(message.left_chat_member){await aiLog(env,{chat_id:chatId,actor:user.id,target:message.left_chat_member.id,type:"member_left"});return true;}
@@ -410,6 +416,7 @@ async function handleAiTelegramUpdate(update, env) {
   const moderationActive=settings.moderation_enabled && !settings.moderation_temporarily_disabled;
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
+      await aiRememberMember(env,chatId,member);
       if(settings.greeting_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Добро пожаловать в «Агентство подарков», "+aiSafeName(member)+"! Рады видеть Вас в нашей группе."});
       if(settings.rules_enabled) await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"📌 Правила группы\n"+settings.rules_text});
     }
@@ -422,8 +429,10 @@ async function handleAiTelegramUpdate(update, env) {
       const transcript=await aiTranscribeAudio(env,message);
       if(transcript){text=transcript;await aiLog(env,{chat_id:chatId,actor:user.id,type:"audio_transcribed",details:{message_id:message.message_id,characters:transcript.length}});}
     }catch(error){
-      await aiWatch(env,chatId,user.id,"Не удалось автоматически проверить аудиосообщение","audio_review");
-      await aiNotifyOwner(env,"⚠️ Не удалось проверить аудиосообщение участника "+user.id+". Участник помещён в скрытое наблюдение на 24 часа. Ошибка: "+String(error).slice(0,200));
+      if(moderationActive){
+        await aiWatch(env,chatId,user.id,"Не удалось автоматически проверить аудиосообщение","audio_review");
+        await aiNotifyOwner(env,"⚠️ Не удалось проверить аудиосообщение участника "+user.id+". Участник помещён в скрытое наблюдение на 24 часа. Ошибка: "+String(error).slice(0,200));
+      }else await aiLog(env,{chat_id:chatId,actor:user.id,type:"audio_review_skipped",details:{message_id:message.message_id}});
     }
   }
   const file=message.document||message.video||message.audio||message.voice||message.animation||message.sticker||message.photo||message.video_note;
