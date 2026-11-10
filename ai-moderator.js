@@ -328,9 +328,10 @@ function aiBase64(buffer){
 }
 async function aiInspectImage(env,message){
   if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
-  const doc=message.document&&/^image\/(jpeg|png|webp|gif)$/i.test(message.document.mime_type||"")?message.document:null;
+  const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
   const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
-  const media=photo||doc||message.sticker||message.video?.thumbnail||message.animation?.thumbnail||null;
+  const sticker=message.sticker&&!message.sticker.is_animated&&!message.sticker.is_video?message.sticker:null;
+  const media=photo||doc||sticker||message.video?.thumbnail||message.video_note?.thumbnail||message.audio?.thumbnail||message.animation?.thumbnail||null;
   if(!media?.file_id)return null;
   const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
   if(!file?.file_path||Number(file.file_size||0)>5*1024*1024)return {decision:"review",reason:"Файл слишком большой для автоматической проверки",confidence:0};
@@ -339,7 +340,8 @@ async function aiInspectImage(env,message){
   const buffer=await response.arrayBuffer();
   if(buffer.byteLength>5*1024*1024)return {decision:"review",reason:"Файл превышает лимит автоматической проверки",confidence:0};
   const ext=String(file.file_path).split(".").pop().toLowerCase();
-  const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":ext==="gif"?"image/gif":"image/jpeg";
+  if(!["png","jpg","jpeg","webp"].includes(ext))return {decision:"review",reason:"Формат изображения не поддерживается для автоматической проверки",confidence:0};
+  const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
   const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
   const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
     body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая нейтральная причина\",\"confidence\":число от 0 до 1}. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.",
