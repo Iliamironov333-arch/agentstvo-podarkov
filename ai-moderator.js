@@ -129,6 +129,13 @@ async function aiWarn(env, chatId, message, reason) {
   try { await aiTelegram(env,"sendMessage",{chat_id:chatId,text:notice,reply_to_message_id:message.message_id,allow_sending_without_reply:true}); } catch {}
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target,type:"warning",severity:"warning",details:{reason,warning_number:warningCount,restriction_hours:restrictionHours}});
   await aiNotifyOwner(env,"⚠️ Нарушение в группе\nУчастник: " + aiSafeName(message.from) + " (" + target + ")\nПредупреждение: " + warningCount + "\nПричина: " + reason + (restrictionHours ? "\nОграничение: " + restrictionHours + " ч." : ""));
+  await aiCalmReminder(env,chatId);
+}
+async function aiCalmReminder(env,chatId){
+  const recent=await env.DB.prepare("SELECT id FROM ai_moderation_events WHERE chat_id=? AND event_type='calm_reminder' AND created_at>=datetime('now','-15 minutes') LIMIT 1").bind(String(chatId)).first();
+  if(recent)return;
+  await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Пожалуйста, сохраняйте уважительный тон и спокойное общение. Спасибо за понимание."});
+  await aiLog(env,{chat_id:chatId,actor:"ai_moderator",type:"calm_reminder"});
 }
 function aiClassifyLocal(message, settings) {
   const text = aiText(message).toLowerCase().replace(/ё/g,"е");
