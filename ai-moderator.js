@@ -198,8 +198,8 @@ async function aiInspectText(env,text,settings){
     settings.media_checks && settings.media_rules ? "Медиа: " + settings.media_rules : "",
     settings.complaints_enabled && settings.complaints_rules ? "Жалобы: " + settings.complaints_rules : "",
     settings.night_mode && settings.night_rules ? "Ночной режим: " + settings.night_rules : ""
-  ].filter(Boolean).join("\\n");
-  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\\nПравила по категориям:\\n"+customRules+"\\nОбщая инструкция владельца:\\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\\nВерните только JSON: {\\"decision\\":\\"ok|review|violation\\",\\"reason\\":\\"краткая причина по-русски\\",\\"confidence\\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9."
+  ].filter(Boolean).join("\n");
+  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\nПравила по категориям:\n"+customRules+"\nОбщая инструкция владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\nВерните JSON с ключами decision, reason и confidence. Значение decision должно быть ok, review или violation. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
   const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
