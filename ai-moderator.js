@@ -143,6 +143,7 @@ function aiClassifyLocal(message, settings) {
   const tokens=text.split(/[^а-яa-z]+/).filter(Boolean);
   const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/идиот/,/дурак/,/тупой/,/заткнись/,/^fuck$/i,/^shit$/i];
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
+  if(settings.profanity && settings.night_mode && aiNightNow() && /(идиот|дурак|тупой|заткнись|отвали|пошел ты|пошла ты)/i.test(text))return "Агрессивное обращение в ночное время";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
   if (settings.advertising && (/(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только|покупайте у меня|заказывайте у меня|переходите по ссылке)/i.test(text))) return "Реклама без разрешения";
