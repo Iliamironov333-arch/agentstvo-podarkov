@@ -474,7 +474,7 @@ async function handleWebhook(request, env) {
     try {
       const intent = await env.DB.prepare("SELECT payload,telegram_id,amount_stars,status FROM payment_intents WHERE payload=?")
         .bind(q.invoice_payload).first();
-      valid = !!intent && String(intent.telegram_id) === String(q.from.id) &&
+      valid = !!intent && (intent.kind === "group_invoice" || String(intent.telegram_id) === String(q.from.id)) &&
         Number(intent.amount_stars) === Number(q.total_amount) &&
         q.currency === "XTR" && intent.status === "pending";
     } catch (error) { console.error("Pre-checkout lookup failed:", String(error)); }
@@ -500,6 +500,25 @@ async function handleWebhook(request, env) {
   }
   const chargeId = String(payment.telegram_payment_charge_id || "");
   if (!chargeId) return json({ ok: true });
+
+  if (intent.kind === "group_invoice") {
+    if (intent.status !== "pending") return json({ ok: true });
+    const result = await env.DB.prepare("UPDATE payment_intents SET status='paid',charge_id=?,paid_at=CURRENT_TIMESTAMP,telegram_id=? WHERE payload=? AND status='pending' AND amount_stars=?")
+      .bind(chargeId, telegramId, payload, payment.total_amount).run();
+    if (result.meta && result.meta.changes === 1) {
+      const groupChatId = String(intent.reference_id || "");
+      const invoiceTitle = String(intent.plan_type || "Счёт Агентства подарков");
+      if (groupChatId) {
+        try {
+          await telegram(env, "sendMessage", { chat_id: groupChatId,
+            text: "✅ Счёт «" + invoiceTitle + "» оплачен.\nСумма: " + payment.total_amount + " Stars.\nПлательщик: " + (message.from.first_name || "Участник") + ". Спасибо!" });
+        } catch (error) { console.error("Group invoice payment notice failed:", String(error)); }
+      }
+      await notifyOwner(env, "⭐ Оплачен групповой счёт Агентства подарков\nСчёт: " + invoiceTitle +
+        "\nПлательщик Telegram ID: " + telegramId + "\nСумма: " + payment.total_amount + " Stars");
+    }
+    return json({ ok: true });
+  }
 
   if (intent.kind === "order") {
     const promoSchemaReady = await tableExists(env,"promo_codes");
