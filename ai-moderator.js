@@ -356,7 +356,7 @@ async function aiTranscribeAudio(env,message){
   const form=new FormData();
   form.append("file",new Blob([buffer],{type:mime}),ext==="oga"?"voice.ogg":"voice."+ext);
   form.append("model",env.OPENAI_TRANSCRIPTION_MODEL||"gpt-transcribe");
-  form.append("languages[]","ru");
+  form.append("language","ru");
   form.append("prompt","Русская речь в группе Агентства подарков. Сохраняйте произнесённые слова без добавления новых.");
   const result=await fetch("https://api.openai.com/v1/audio/transcriptions",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY},body:form});
   const data=await result.json().catch(()=>({}));
