@@ -145,7 +145,6 @@ function aiClassifyLocal(message, settings) {
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
-  if (settings.suspicious_links && urls.some(url=>/(casino|bet|bets|1xbet|melbet|stake|poker|roulette|казино|ставк|букмек|розыгрыш.*выигрыш|wallet.*connect|verify.*account|login.*secure)/i.test(url+" "+text))) return "Подозрительная азартная, мошенническая или фишинговая ссылка";
   if (settings.advertising && (/(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только|покупайте у меня|заказывайте у меня|переходите по ссылке)/i.test(text))) return "Реклама без разрешения";
   return null;
 }
@@ -454,7 +453,7 @@ async function handleAiTelegramUpdate(update, env) {
   }
   if(text) {
     let violation=moderationActive ? aiClassifyLocal(message,settings) : null;
-    if(moderationActive && !violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|казино|ставк|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
+    if(moderationActive && !violation && settings.spam && /(https?:\/\/|t\.me\/|www\.|реклама|продам|куплю|подписывай|промокод|заработок|розыгрыш|фишинг|мошен)/i.test(text)){
       try{
         const aiCheck=await aiInspectText(env,text);
         if(aiCheck.decision==="violation" && aiCheck.confidence>=0.9)violation=aiCheck.reason;
