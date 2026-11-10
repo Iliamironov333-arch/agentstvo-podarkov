@@ -220,6 +220,7 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     const match=raw.match(/\{[\s\S]*\}/);
     if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;}
   }catch{}
+  if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
   let questionId=null;
   if(needsOwner){
     answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
