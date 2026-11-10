@@ -198,3 +198,5 @@ CREATE TABLE IF NOT EXISTS ai_owner_questions (
   answered_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ai_owner_questions_status ON ai_owner_questions(status,created_at DESC);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES('0017_ai_moderator');
