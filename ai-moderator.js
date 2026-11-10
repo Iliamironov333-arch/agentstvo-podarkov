@@ -167,6 +167,14 @@ function aiAgencyIntent(text) {
   return /(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|сделать для меня)/i.test(text);
 }
 function aiOrderIntent(text) { return /(хочу|можно|могу|можете|нужно|надо|закаж|куп|оформ).{0,70}(заказ|подар|работ|товар|открытк|рисунок|поделк)|заказать|оформить заказ|хочу приобрести/i.test(text); }
+async function aiGroupReply(env,chatId,userId,text){
+  const settings=await aiSettings(env);
+  const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId)).first();
+  if(last && (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000<Number(settings.answer_interval_seconds||5))return false;
+  await aiTelegram(env,"sendMessage",{chat_id:chatId,text:String(text).slice(0,3500),allow_sending_without_reply:true});
+  await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)").bind(String(chatId),String(userId||""),"assistant",String(text).slice(0,3500)).run();
+  return true;
+}
 async function aiReplyToGroup(env, chatId, user, text, settings) {
   const recent = await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 12")
     .bind(String(chatId),String(user.id)).all();
@@ -185,9 +193,7 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
   const answer = await aiOpenAi(env,instructions,input,450);
-  await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)")
-    .bind(String(chatId),String(user.id),"assistant",answer).run();
-  await aiTelegram(env,"sendMessage",{chat_id:chatId,text:answer,reply_to_message_id:undefined,allow_sending_without_reply:true});
+  await aiGroupReply(env,chatId,user.id,answer);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer",details:{characters:answer.length}});
 }
 async function aiHandleOrderConversation(env, message, text) {
@@ -202,7 +208,7 @@ async function aiHandleOrderConversation(env, message, text) {
       prior.change_requests.push({text:text.slice(0,1500),created_at:new Date().toISOString()});
       await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(prior).slice(0,12000),approved.id).run();
       await aiNotifyOwner(env,"✏️ Клиент просит изменить уже согласованный заказ\nЗаказ: "+approved.id+"\nКлиент: "+user.id+"\nПожелание: "+text.slice(0,900)+"\nПроверьте карточку в Mini App → ИИ-заказы.");
-      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю, я передал Ваши новые пожелания владельцу. Он проверит возможность изменения заказа."});
+      await aiGroupReply(env,chatId,user.id,"Благодарю, я передал Ваши новые пожелания владельцу. Он проверит возможность изменения заказа.");
       return true;
     }
   }
@@ -211,7 +217,7 @@ async function aiHandleOrderConversation(env, message, text) {
     const exact=await env.DB.prepare("SELECT title,price_stars FROM products WHERE is_active=1").all();
     const match=(exact.results||[]).find(p=>text.toLowerCase().includes(String(p.title||"").toLowerCase()));
     if(match){
-      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"В каталоге есть работа «"+match.title+"» стоимостью "+match.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ."});
+      await aiGroupReply(env,chatId,user.id,"В каталоге есть работа «"+match.title+"» стоимостью "+match.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ.");
       await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_match_for_order",details:{product:match.title,price_stars:match.price_stars}});
       return true;
     }
@@ -220,7 +226,7 @@ async function aiHandleOrderConversation(env, message, text) {
     await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,status) VALUES(?,?,?,?,?,?,?,'collecting')")
       .bind(id,chatId,String(user.id),user.username||null,aiSafeName(user),subject,JSON.stringify({messages:[text]})).run();
     await aiNotifyOwner(env,"📝 Новый запрос на индивидуальный заказ\nКлиент: "+aiSafeName(user)+" ("+user.id+")\nОписание: "+text.slice(0,800));
-    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"С удовольствием помогу Вам оформить индивидуальный заказ. Расскажите, пожалуйста, какую работу Вы хотите получить и какие особенности для Вас важны?"});
+    await aiGroupReply(env,chatId,user.id,"С удовольствием помогу Вам оформить индивидуальный заказ. Расскажите, пожалуйста, какую работу Вы хотите получить и какие особенности для Вас важны?");
     return true;
   }
   let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
@@ -230,7 +236,7 @@ async function aiHandleOrderConversation(env, message, text) {
   if(draft.status==="review"){
     await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review'").bind(JSON.stringify(details).slice(0,12000),draft.id).run();
     await aiNotifyOwner(env,"➕ Клиент дополнил запрос на индивидуальный заказ\nЗаказ: "+draft.id+"\nTelegram ID: "+user.id+"\nДополнение: "+text.slice(0,800));
-    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю, я добавил Ваши пожелания к запросу и сообщил владельцу."});
+    await aiGroupReply(env,chatId,user.id,"Благодарю, я добавил Ваши пожелания к запросу и сообщил владельцу.");
     return true;
   }
   if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
@@ -244,10 +250,10 @@ async function aiHandleOrderConversation(env, message, text) {
     const card="🎁 ЗАПРОС НА ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draft.id+"\nКлиент: "+aiSafeName(user)+" (@"+(user.username||"нет username")+")\nTelegram ID: "+user.id+"\nОписание: "+(details.summary||summary).slice(0,1600)+"\nПредварительная оценка ИИ: "+estimate+" ⭐\n\nПроверьте и при необходимости измените заказ в Mini App → ИИ-заказы.";
     const sent=await aiTelegram(env,"sendMessage",{chat_id:env.ADMIN_TELEGRAM_ID,text:card,reply_markup:{inline_keyboard:[[{text:"Подтвердить заказ",callback_data:"ai_order_approve:"+draft.id}]]}});
     await env.DB.prepare("UPDATE ai_order_drafts SET group_message_id=? WHERE id=?").bind(sent.message_id,draft.id).run();
-    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю за подробности! Я подготовил запрос на индивидуальный заказ и передал его владельцу на согласование. Предварительная стоимость — "+estimate+" ⭐. Окончательную цену подтвердит владелец."});
+    await aiGroupReply(env,chatId,user.id,"Благодарю за подробности! Я подготовил запрос на индивидуальный заказ и передал его владельцу на согласование. "+(estimate>0?"Предварительная стоимость — "+estimate+" ⭐. ":"")+"Окончательную цену подтвердит владелец.");
     return true;
   }
-  await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю! Уточните, пожалуйста, ещё одну деталь: какой результат или особенности работы для Вас наиболее важны?"});
+  await aiGroupReply(env,chatId,user.id,"Благодарю! Уточните, пожалуйста, ещё одну деталь: какой результат или особенности работы для Вас наиболее важны?");
   return true;
 }
 async function aiApproveOrder(env, callback) {
@@ -356,7 +362,7 @@ async function handleAiTelegramUpdate(update, env) {
         .bind(chatId,String(user.id),target?.telegram_id||null,label,text.slice(0,1000),message.message_id||null).run();
       if(target) await aiWatch(env,chatId,target.telegram_id,"На участника поступила жалоба. Требуется проверка контекста.","complaint");
       await aiNotifyOwner(env,"📣 Жалоба в группе\nОтправитель: "+aiSafeName(user)+" ("+user.id+")\nНа кого: "+label+(target?" ("+target.telegram_id+")":"\nУчастник пока не идентифицирован")+"\nТекст: "+text.slice(0,700));
-      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:target?"Благодарю за обращение. Жалоба передана владельцу для проверки. Само обращение не означает, что участник признан виновным.":"Благодарю за обращение. Уточните, пожалуйста, username участника или ответьте на его сообщение, чтобы мы могли правильно определить адресата."});
+      await aiGroupReply(env,chatId,user.id,target?"Благодарю за обращение. Жалоба передана владельцу для проверки. Само обращение не означает, что участник признан виновным.":"Благодарю за обращение. Уточните, пожалуйста, username участника или ответьте на его сообщение, чтобы мы могли правильно определить адресата.");
       await aiLog(env,{chat_id:chatId,actor:user.id,target:target?.telegram_id||null,type:"complaint_created",severity:"warning",details:{target_label:label}});
       return true;
     }
@@ -365,15 +371,13 @@ async function handleAiTelegramUpdate(update, env) {
     const botUsername=String(env.BOT_USERNAME||"Agentstvo_podarkov_bot").replace(/^@/,"").toLowerCase();
     const mentioned=(message.entities||[]).some(e=>e.type==="mention" && text.slice(e.offset,e.offset+e.length).toLowerCase()==="@"+botUsername);
     const replied=message.reply_to_message?.from?.is_bot===true;
-    const relevant=aiAgencyIntent(text) || mentioned || replied;
+    const relevant=aiAgencyIntent(text) || replied;
     const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
     if(orderHandled) return true;
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow() || aiAgencyIntent(text))) {
-      const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(chatId).first();
-      if(!last || (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000>=Number(settings.answer_interval_seconds||5)) {
-        try { await aiReplyToGroup(env,chatId,user,text,settings); }
+      try { await aiReplyToGroup(env,chatId,user,text,settings);
         catch(error) {
-          await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения."});
+          await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
           await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОшибка: "+String(error).slice(0,250));
           await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question:text.slice(0,700)}});
         }
