@@ -204,8 +204,7 @@ async function aiInspectText(env,text,settings){
     settings.night_mode && settings.night_rules ? "Ночной режим: " + settings.night_rules : ""
   ].filter(Boolean).join("\n");
   const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\nПравила по категориям:\n"+customRules+"\nОбщая инструкция владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\nВерните JSON с ключами decision, reason и confidence. Значение decision должно быть ok, review или violation. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
-  const promptWithMediaRules=prompt+"\nДополнительные правила проверки медиа:\n"+String(settings.media_rules||"").slice(0,2500);
-  const raw=await aiOpenAi(env,promptWithMediaRules,String(text).slice(0,2500),150);
+  const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
   return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное сообщение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
