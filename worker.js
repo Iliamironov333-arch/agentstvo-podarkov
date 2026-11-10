@@ -493,7 +493,7 @@ async function handleWebhook(request, env) {
   const payload = String(payment.invoice_payload || "");
   const intent = await env.DB.prepare("SELECT * FROM payment_intents WHERE payload=?")
     .bind(payload).first();
-  if (!intent || String(intent.telegram_id) !== telegramId ||
+  if (!intent || (intent.kind !== "group_invoice" && String(intent.telegram_id) !== telegramId) ||
       Number(intent.amount_stars) !== Number(payment.total_amount)) {
     console.error("Payment intent mismatch", payload);
     return json({ ok: true });
