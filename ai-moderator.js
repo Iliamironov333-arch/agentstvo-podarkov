@@ -167,7 +167,7 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
 function aiAgencyIntent(text) {
   return /(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|сделать для меня)/i.test(text);
 }
-function aiOrderIntent(text) { return /(хочу|можно|могу|можете|нужно|надо|закаж|куп|оформ).{0,70}(заказ|подар|работ|товар|открытк|рисунок|поделк)|заказать|оформить заказ|хочу приобрести/i.test(text); }
+function aiOrderIntent(text) { return /(хочу|можно|могу|можете|нужно|надо|закаж|куп|оформ).{0,70}(заказ|подар|работ|товар|открытк|рисунок|поделк)|заказать|оформить заказ|хочу приобрести|хочу купить|купить товар|купить работу/i.test(text); }
 async function aiGroupReply(env,chatId,userId,text){
   const settings=await aiSettings(env);
   const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId)).first();
@@ -203,7 +203,14 @@ async function aiHandleOrderConversation(env, message, text) {
     .bind(chatId,String(user.id)).first();
   if(!draft){
     const approved=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('approved','paid') ORDER BY created_at DESC LIMIT 1").bind(chatId,String(user.id)).first();
-    if(approved && /(изменить|поменять|исправить|добавить к заказу|забыл сказать|ещё пожелани)/i.test(text)){
+    if(approved && /(изменить|поменять|исправить|добавить|забыл сказать|ещё пожелани|другой цвет|другой размер|другой стиль)/i.test(text)){
+      if(approved.status==="paid"){
+        const paid=await env.DB.prepare("SELECT paid_at FROM orders WHERE id=?").bind(approved.order_id).first();
+        if(!paid?.paid_at || !await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)>=datetime('now','-24 hours')").bind(paid.paid_at).first()){
+          await aiGroupReply(env,chatId,user.id,"Срок внесения изменений в оплаченный заказ (24 часа после оплаты) завершён. Пожалуйста, обратитесь к владельцу, чтобы уточнить, возможны ли дополнительные изменения.");
+          return true;
+        }
+      }
       let prior={};try{prior=JSON.parse(approved.details_json||"{}");}catch{}
       prior.change_requests=Array.isArray(prior.change_requests)?prior.change_requests:[];
       prior.change_requests.push({text:text.slice(0,1500),created_at:new Date().toISOString()});
