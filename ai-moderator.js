@@ -206,16 +206,29 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
     "Вы — официальный ИИ-помощник «Агентства подарков». Отвечайте исключительно по вопросам этого Агентства.",
     "Всегда обращайтесь к человеку на «Вы». Никогда не используйте «ты», фамильярность или сленг.",
     "Используйте только переданные сведения каталога и переписки. Не придумывайте цены, наличие, сроки, статус заказа, оплату и условия.",
-    "Если точного ответа нет, честно скажите, что пока не можете подтвердить информацию, и сообщите, что уточните у владельца.",
+    "Если точного ответа нет в каталоге или данных недостаточно, не угадывайте: needs_owner=true и сообщите, что уточните информацию у владельца.",
     "Предлагайте только действительно подходящие товары. Не называйте товары похожими, если они отличаются по ключевым пожеланиям клиента.",
     "Если человек хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
-    "Не отвечайте на вопросы, не относящиеся к Агентству."
+    "Не отвечайте на вопросы, не относящиеся к Агентству.",
+    "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false}."
   ].join("\n");
   const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
     ...context.map(m=>({role:m.role,content:m.content}))];
-  const answer = await aiOpenAi(env,instructions,input,450);
+  const raw = await aiOpenAi(env,instructions,input,550);
+  let answer=raw,needsOwner=false;
+  try{
+    const match=raw.match(/\{[\s\S]*\}/);
+    if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;}
+  }catch{}
+  let questionId=null;
+  if(needsOwner){
+    answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
+    try{const saved=await env.DB.prepare("INSERT INTO ai_owner_questions(chat_id,telegram_id,question) VALUES(?,?,?)").bind(String(chatId),String(user.id),text.slice(0,2000)).run();questionId=saved.meta?.last_row_id||null;}catch{}
+    await aiNotifyOwner(env,"❔ ИИ-помощнику нужна помощь владельца"+(questionId?" · вопрос №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтветьте в Mini App → ИИ-бот → Вопросы владельцу.");
+    await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question_id:questionId,question:text.slice(0,700)}});
+  }
   await aiGroupReply(env,chatId,user.id,answer);
-  await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer",details:{characters:answer.length}});
+  await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
 async function aiHandleOrderConversation(env, message, text) {
   const chatId=String(message.chat.id),user=message.from;
