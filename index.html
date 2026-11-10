@@ -2389,13 +2389,16 @@ async function loadAiOrders(){
  try{const data=await apiFetch('/api/admin/ai-orders');const orders=data.orders||[];status.textContent='Всего запросов: '+orders.length+'.';orders.forEach(o=>{
   const card=aiAdminNode('div',undefined,'admin-user-detail');const title=aiAdminNode('h4',o.subject||'Индивидуальный заказ');card.append(title);
   const meta=aiAdminNode('p','Клиент: '+(o.first_name||'Участник')+' · Telegram ID: '+o.telegram_id+' · '+formatDate(o.created_at)+' · Статус: '+o.status,'muted');card.append(meta);
-  let details={};try{details=JSON.parse(o.details_json||'{}');}catch{}const summary=aiAdminNode('textarea');summary.rows=4;summary.value=details.summary||(details.messages||[]).join('\\n');summary.placeholder='Пожелания клиента';card.append(summary);
+  let details={};try{details=JSON.parse(o.details_json||'{}');}catch{}const summary=aiAdminNode('textarea');summary.rows=4;summary.value=(details.summary||(details.messages||[]).join('\\n'))+(details.change_requests?.length?'\\n\\nИзменения после согласования:\\n'+details.change_requests.map(x=>x.text).join('\\n'):'');summary.placeholder='Пожелания клиента';card.append(summary);
   const subject=aiAdminNode('input');subject.value=o.subject||'';subject.placeholder='Название заказа';card.append(subject);
   const price=aiAdminNode('input');price.type='number';price.min='1';price.max='100000';price.value=o.approved_stars||o.estimated_stars||'';price.placeholder='Итоговая цена в Stars';card.append(price);
   if(o.status==='review'){
    const save=aiAdminNode('button','Сохранить изменения','primary');save.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update',id:o.id,subject:subject.value,summary:summary.value,approved_stars:Number(price.value)})});toast('Заказ обновлён.');loadAiOrders();}catch(e){toast(e.message);}});card.append(save);
    const approve=aiAdminNode('button','Подтвердить и отправить счёт','secondary');approve.addEventListener('click',async()=>{if(!confirm('Подтвердить заказ и отправить счёт в группу?'))return;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'approve',id:o.id})});toast('Заказ подтверждён. Счёт отправлен в группу.');loadAiOrders();}catch(e){toast(e.message);}});card.append(approve);
    const cancel=aiAdminNode('button','Отклонить заказ','secondary');cancel.addEventListener('click',()=>aiCancelOrder(o.id));card.append(cancel);
+  }else if(['approved','paid'].includes(o.status)){
+   card.append(aiAdminNode('p',(o.payment_status==='paid'?'Оплачен':'Счёт отправлен')+' · заказ Mini App: '+(o.order_id||'—')+(o.paid_at?' · оплата: '+formatDate(o.paid_at):''),'muted'));
+   const saveChanges=aiAdminNode('button','Сохранить изменения пожеланий','secondary');saveChanges.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update_after_approval',id:o.id,subject:subject.value,summary:summary.value})});toast('Пожелания к заказу обновлены.');loadAiOrders();}catch(e){toast(e.message||'Не удалось изменить заказ.');}});card.append(saveChanges);
   }else if(o.order_id){card.append(aiAdminNode('p','Связанный заказ Mini App: '+o.order_id,'muted'));}
   root.append(card);
  });if(!orders.length)root.textContent='ИИ-заказов пока нет.';}catch(e){status.textContent=e.message||'Не удалось загрузить ИИ-заказы.';}
