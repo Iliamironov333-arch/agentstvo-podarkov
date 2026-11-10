@@ -124,3 +124,16 @@ CREATE TABLE IF NOT EXISTS ai_runtime_state (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS ai_owner_questions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id TEXT NOT NULL,
+  telegram_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','answered')),
+  answer TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  answered_at TEXT,
+  answered_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_owner_questions_status ON ai_owner_questions(status,created_at DESC);
