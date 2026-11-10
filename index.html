@@ -2446,7 +2446,7 @@ async function loadAiBotAdmin(){
   const punishmentFields={aiPunishProfanity:'punishment_profanity',aiPunishSpam:'punishment_spam',aiPunishAdvertising:'punishment_advertising',aiPunishLinks:'punishment_suspicious_links',aiPunishRepeated:'punishment_repeated_messages',aiPunishMedia:'punishment_media',aiPunishDefault:'punishment_default',aiWarningEscalation:'warning_escalation_action'};
   Object.entries(punishmentFields).forEach(([id,key])=>{const n=document.getElementById(id);if(n)n.value=v[key]||'warning';});
   const numberFields={aiWarningsBeforeRestriction:'warnings_before_restriction',aiWarningActiveDays:'warning_active_days',aiWarningHistoryDays:'warning_history_days',aiMuteDuration:'mute_duration_minutes',aiRestrictionDuration:'restriction_duration_hours'};
-  const defaults={warnings_before_restriction:3,warning_active_days:20,warning_history_days:60,mute_duration_minutes:60,restriction_duration_hours:24};
+  const defaults={warnings_before_restriction:2,warning_active_days:20,warning_history_days:60,mute_duration_minutes:60,restriction_duration_hours:24};
   Object.entries(numberFields).forEach(([id,key])=>{const n=document.getElementById(id);if(n)n.value=Number(v[key]||defaults[key]);});
   const timeFields={aiNightStart:'night_start',aiNightEnd:'night_end'};
   Object.entries(timeFields).forEach(([id,key])=>{const n=document.getElementById(id);if(n)n.value=v[key]||n.value;});
