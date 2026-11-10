@@ -176,7 +176,7 @@ async function aiGroupReply(env,chatId,userId,text){
   return true;
 }
 async function aiReplyToGroup(env, chatId, user, text, settings) {
-  const recent = await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 12")
+  const recent = await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50")
     .bind(String(chatId),String(user.id)).all();
   const context = (recent.results || []).reverse();
   const products = await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
@@ -315,6 +315,11 @@ async function handleAiTelegramUpdate(update, env) {
   const chatId=String(message.chat.id),user=message.from;
   if(!user?.id || user.is_bot) return false;
   await env.DB.prepare("UPDATE ai_moderator_settings SET group_chat_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=1").bind(chatId).run();
+  const noticeKey="group_notice:"+chatId;
+  const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sent')").bind(noticeKey).run();
+  if(notice.meta?.changes===1){
+    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для контекста обращений и журнала безопасности система сохраняет сообщения и события; не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+  }
   await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key]),text:aiText(message).slice(0,180)}});
   if(message.left_chat_member){await aiLog(env,{chat_id:chatId,actor:user.id,target:message.left_chat_member.id,type:"member_left"});return true;}
   if(message.new_chat_title){await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_title_changed",details:{title:String(message.new_chat_title).slice(0,100)}});return true;}
@@ -430,6 +435,9 @@ async function handleAiScheduled(env) {
   await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now','-60 days')").run();
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
+  await env.DB.prepare("DELETE FROM ai_moderation_events WHERE created_at<datetime('now','-180 days')").run();
+  await env.DB.prepare("DELETE FROM ai_complaints WHERE created_at<datetime('now','-180 days') AND status<>'review'").run();
+  await env.DB.prepare("DELETE FROM ai_group_members WHERE last_seen_at<datetime('now','-180 days')").run();
   const reminders=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.subject,o.id AS order_id FROM ai_order_drafts d JOIN orders o ON o.id=d.order_id WHERE d.status='approved' AND o.payment_status='pending' AND d.reminder_sent_at IS NULL AND d.updated_at<=datetime('now','-24 hours') LIMIT 25").all();
   for(const row of reminders.results||[]){
     try{await aiTelegram(env,"sendMessage",{chat_id:row.chat_id,text:"Напоминание: счёт за Ваш индивидуальный заказ «"+row.subject+"» ожидает оплаты."});await env.DB.prepare("UPDATE ai_order_drafts SET reminder_sent_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.id).run();}catch(error){await aiNotifyOwner(env,"Не удалось отправить напоминание по ИИ-заказу "+row.id+": "+String(error).slice(0,200));}
@@ -510,7 +518,10 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       if(body.summary!==undefined)details.summary=String(body.summary).slice(0,3000);
       const subject=String(body.subject||draft.subject).trim().slice(0,120);
       await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(subject,JSON.stringify(details).slice(0,12000),id).run();
-      if(draft.order_id)await env.DB.prepare("UPDATE custom_orders SET subject=?,answers_json=? WHERE id=?").bind(subject,JSON.stringify(details).slice(0,12000),draft.order_id).run();
+      if(draft.order_id){
+        await env.DB.prepare("UPDATE custom_orders SET subject=?,answers_json=? WHERE id=?").bind(subject,JSON.stringify(details).slice(0,12000),draft.order_id).run();
+        await env.DB.prepare("UPDATE orders SET product_title=? WHERE id=? AND payment_status IN ('pending','paid')").bind(subject,draft.order_id).run();
+      }
       await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_changed_after_approval",details:{draft_id:id,order_id:draft.order_id}});
       return aiJson({ok:true});
     }
