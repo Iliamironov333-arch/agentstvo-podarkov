@@ -517,8 +517,10 @@ async function handleAiTelegramUpdate(update, env) {
       try { await aiReplyToGroup(env,chatId,user,text,settings); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
-          await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОшибка: "+String(error).slice(0,250));
-          await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question:text.slice(0,700)}});
+          let questionId=null;
+          try{const saved=await env.DB.prepare("INSERT INTO ai_owner_questions(chat_id,telegram_id,question) VALUES(?,?,?)").bind(chatId,String(user.id),text.slice(0,2000)).run();questionId=saved.meta?.last_row_id||null;}catch{}
+          await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос"+(questionId?" №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтвет можно добавить в Mini App → ИИ-бот → Вопросы владельцу.\nОшибка: "+String(error).slice(0,250));
+          await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question_id:questionId,question:text.slice(0,700)}});
         }
     }
   }
@@ -574,6 +576,7 @@ async function handleAiScheduled(env) {
   await env.DB.prepare("DELETE FROM ai_moderation_events WHERE created_at<datetime('now','-180 days')").run();
   await env.DB.prepare("DELETE FROM ai_complaints WHERE created_at<datetime('now','-180 days') AND status<>'review'").run();
   await env.DB.prepare("DELETE FROM ai_group_members WHERE last_seen_at<datetime('now','-180 days')").run();
+  await env.DB.prepare("DELETE FROM ai_owner_questions WHERE status='answered' AND answered_at<datetime('now','-180 days')").run();
   const reminders=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.subject,o.id AS order_id FROM ai_order_drafts d JOIN orders o ON o.id=d.order_id WHERE d.status='approved' AND o.payment_status='pending' AND d.reminder_sent_at IS NULL AND d.updated_at<=datetime('now','-24 hours') LIMIT 25").all();
   for(const row of reminders.results||[]){
     try{await aiTelegram(env,"sendMessage",{chat_id:row.chat_id,text:"Напоминание: счёт за Ваш индивидуальный заказ «"+row.subject+"» ожидает оплаты."});await env.DB.prepare("UPDATE ai_order_drafts SET reminder_sent_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.id).run();}catch(error){await aiNotifyOwner(env,"Не удалось отправить напоминание по ИИ-заказу "+row.id+": "+String(error).slice(0,200));}
@@ -595,6 +598,24 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     const body=await aiReadJson(request);const settings=await aiSaveSettings(env,body.settings||{},telegramId);
     await aiLog(env,{actor:telegramId,type:"settings_changed",details:{keys:Object.keys(body.settings||{})}});
     return aiJson({ok:true,settings});
+  }
+  if(path==="/api/admin/ai-questions" && method==="GET") {
+    if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
+    const rows=await env.DB.prepare("SELECT * FROM ai_owner_questions ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END,id DESC LIMIT 100").all();
+    return aiJson({ok:true,questions:rows.results||[]});
+  }
+  if(path==="/api/admin/ai-questions" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Отвечать на вопросы может только владелец."},403);
+    const body=await aiReadJson(request);
+    const row=await env.DB.prepare("SELECT * FROM ai_owner_questions WHERE id=? AND status='open'").bind(Number(body.id)).first();
+    if(!row)return aiJson({error:"Вопрос не найден или уже закрыт."},404);
+    const answer=String(body.answer||"").trim().slice(0,2000);
+    if(!answer)return aiJson({error:"Введите ответ."},400);
+    const sent=await aiGroupReply(env,row.chat_id,row.telegram_id,"Ответ владельца Агентства подарков: "+answer);
+    if(!sent)return aiJson({error:"Подождите 5 секунд перед следующим ответом ИИ."},429);
+    await env.DB.prepare("UPDATE ai_owner_questions SET status='answered',answer=?,answered_at=CURRENT_TIMESTAMP,answered_by=? WHERE id=? AND status='open'").bind(answer,String(telegramId),row.id).run();
+    await aiLog(env,{actor:telegramId,target:row.telegram_id,type:"owner_question_answered",details:{question_id:row.id}});
+    return aiJson({ok:true});
   }
   if(path==="/api/admin/ai-logs" && method==="GET") {
     if(!has("ai_bot_logs"))return aiJson({error:"Недостаточно прав."},403);
