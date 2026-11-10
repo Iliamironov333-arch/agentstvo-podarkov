@@ -404,7 +404,7 @@ async function aiBuildWeeklyReport(env) {
   const periodStart=iso(start),periodEnd=iso(end);
   const existing=await env.DB.prepare("SELECT id FROM ai_weekly_reports WHERE period_start=? AND period_end=?").bind(periodStart,periodEnd).first();
   if(existing)return;
-  const [events,warnings,complaints,orders,paid,topics,prevWarnings,prevComplaints,prevOrders] = await Promise.all([
+  const [events,warnings,complaints,orders,paid,topics,prevWarnings,prevComplaints,prevOrders,messageCount,prevMessageCount] = await Promise.all([
     env.DB.prepare("SELECT event_type,COUNT(*) AS total FROM ai_moderation_events WHERE created_at>=datetime('now','-7 days') GROUP BY event_type").all(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM ai_warnings WHERE issued_at>=datetime('now','-7 days')").first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM ai_complaints WHERE created_at>=datetime('now','-7 days')").first(),
@@ -413,21 +413,24 @@ async function aiBuildWeeklyReport(env) {
     env.DB.prepare("SELECT content FROM ai_group_messages WHERE role='user' AND created_at>=datetime('now','-7 days') ORDER BY id DESC LIMIT 200").all(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM ai_warnings WHERE issued_at>=datetime('now','-14 days') AND issued_at<datetime('now','-7 days')").first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM ai_complaints WHERE created_at>=datetime('now','-14 days') AND created_at<datetime('now','-7 days')").first(),
-    env.DB.prepare("SELECT COUNT(*) AS total FROM ai_order_drafts WHERE created_at>=datetime('now','-14 days') AND created_at<datetime('now','-7 days')").first()
+    env.DB.prepare("SELECT COUNT(*) AS total FROM ai_order_drafts WHERE created_at>=datetime('now','-14 days') AND created_at<datetime('now','-7 days')").first(),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM ai_group_messages WHERE role='user' AND created_at>=datetime('now','-7 days')").first(),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM ai_group_messages WHERE role='user' AND created_at>=datetime('now','-14 days') AND created_at<datetime('now','-7 days')").first()
   ]);
   const eventText=(events.results||[]).map(x=>x.event_type+": "+x.total).join(", ")||"нет";
   const topicText=(topics.results||[]).map(x=>x.content).join("\n").slice(0,10000);
   let popular="Основные темы собраны из сообщений группы.";
-  try { popular=await aiOpenAi(env,"Кратко выделите 5–8 популярных тем из переписки. Не называйте участников и не раскрывайте персональные данные. Верните только список тем.",topicText,250); } catch {}
-  const metrics={events:events.results||[],warnings:Number(warnings?.total||0),complaints:Number(complaints?.total||0),orders:Number(orders?.total||0),paid_orders:Number(paid?.total||0)};
+  try { popular=await aiOpenAi(env,Number(messageCount?.total||0)>100?"Выделите 8–12 популярных тем, кратко опишите главные обсуждения и повторяющиеся вопросы. Не называйте участников и не раскрывайте персональные данные. Верните структурированный список.":"Кратко выделите 5–8 популярных тем из переписки. Не называйте участников и не раскрывайте персональные данные. Верните только список тем.",topicText,Number(messageCount?.total||0)>100?500:250); } catch {}
+  const restrictions=Number((events.results||[]).find(x=>x.event_type==="restriction")?.total||0);
+  const metrics={events:events.results||[],messages:Number(messageCount?.total||0),warnings:Number(warnings?.total||0),restrictions,complaints:Number(complaints?.total||0),orders:Number(orders?.total||0),paid_orders:Number(paid?.total||0)};
   const delta=(current,previous)=>{const d=Number(current||0)-Number(previous||0);return (d>0?"+":"")+d;};
-  const comparison="Предыдущая неделя → текущая:\nПредупреждения: "+Number(prevWarnings?.total||0)+" → "+metrics.warnings+" ("+delta(metrics.warnings,prevWarnings?.total)+")\nЖалобы: "+Number(prevComplaints?.total||0)+" → "+metrics.complaints+" ("+delta(metrics.complaints,prevComplaints?.total)+")\nЗапросы заказов: "+Number(prevOrders?.total||0)+" → "+metrics.orders+" ("+delta(metrics.orders,prevOrders?.total)+")";
+  const comparison="Предыдущая неделя → текущая:\nСообщения: "+Number(prevMessageCount?.total||0)+" → "+metrics.messages+" ("+delta(metrics.messages,prevMessageCount?.total)+")\nПредупреждения: "+Number(prevWarnings?.total||0)+" → "+metrics.warnings+" ("+delta(metrics.warnings,prevWarnings?.total)+")\nЖалобы: "+Number(prevComplaints?.total||0)+" → "+metrics.complaints+" ("+delta(metrics.complaints,prevComplaints?.total)+")\nЗапросы заказов: "+Number(prevOrders?.total||0)+" → "+metrics.orders+" ("+delta(metrics.orders,prevOrders?.total)+")";
   let suggestions="";
   const settings=await aiSettings(env);
   if(settings.owner_suggestions){
     try{suggestions=await aiOpenAi(env,"Предложите 3–5 практических улучшений для Агентства подарков, его группы, каталога, поддержки и оформления заказов. Используйте только наблюдаемые темы переписки; не выдумывайте проблемы. Кратко объясняйте пользу каждого предложения.",topicText,300);}catch{}
   }
-  const report="📊 ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ «АГЕНТСТВА ПОДАРКОВ»\nПериод: "+periodStart+" — "+periodEnd+"\n\nАктивность модерации: "+eventText+"\nПредупреждения: "+metrics.warnings+"\nЖалобы: "+metrics.complaints+"\nЗапросы на заказы через группу: "+metrics.orders+"\nОплаченные ИИ-заказы: "+metrics.paid_orders+"\n\nДинамика:\n"+comparison+"\n\nПопулярные темы:\n"+popular+(suggestions?"\n\nИдеи по улучшению Агентства:\n"+suggestions:"");
+  const report="📊 ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ «АГЕНТСТВА ПОДАРКОВ»\nПериод: "+periodStart+" — "+periodEnd+"\n\nСообщения в группе: "+metrics.messages+"\nАктивность модерации: "+eventText+"\nПредупреждения: "+metrics.warnings+"\nОграничения: "+metrics.restrictions+"\nЖалобы: "+metrics.complaints+"\nЗапросы на заказы через группу: "+metrics.orders+"\nОплаченные ИИ-заказы: "+metrics.paid_orders+"\n\nДинамика:\n"+comparison+"\n\nПопулярные темы:\n"+popular+(suggestions?"\n\nИдеи по улучшению Агентства:\n"+suggestions:"");
   await env.DB.prepare("INSERT OR IGNORE INTO ai_weekly_reports(period_start,period_end,report_text,metrics_json) VALUES(?,?,?,?)").bind(periodStart,periodEnd,report,JSON.stringify({...metrics,comparison})).run();
   await aiNotifyOwner(env,report);
   await aiLog(env,{actor:"ai_moderator",type:"weekly_report_created",details:{period_start:periodStart,period_end:periodEnd}});
