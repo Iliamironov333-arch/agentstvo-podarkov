@@ -50,7 +50,8 @@ async function aiSettings(env) {
   const temporarilyDisabled=!!pause?.value && Date.parse(pause.value.replace(" ","T")+"Z")>Date.now();
   let saved = {};
   try { saved = JSON.parse(row?.settings_json || "{}"); } catch {}
-  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: (row ? row.enabled === 1 : true) && !temporarilyDisabled,
+  const configuredEnabled=row ? row.enabled===1 : true;
+  return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: configuredEnabled && !temporarilyDisabled, configured_enabled:configuredEnabled,
     temporarily_disabled: temporarilyDisabled, disabled_until: pause?.value || null,
     complaints_enabled: row ? row.complaints_enabled === 1 : true, group_chat_id: row?.group_chat_id || null };
 }
@@ -69,7 +70,8 @@ async function aiSaveSettings(env, settings, actor) {
     await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES('disabled_until',datetime('now',?),CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind("+"+minutes+" minutes").run();
   }
   if(settings?.enabled===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='disabled_until'").run();
-  const enabled = current.enabled ? 1 : 0, complaints = current.complaints_enabled ? 1 : 0;
+  const enabled = (Object.prototype.hasOwnProperty.call(settings||{},"enabled") ? settings.enabled===true : current.configured_enabled) ? 1 : 0;
+  const complaints = current.complaints_enabled ? 1 : 0;
   const stored = Object.fromEntries(allowed.map(key => [key, current[key]]));
   await env.DB.prepare("UPDATE ai_moderator_settings SET enabled=?,complaints_enabled=?,settings_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=1")
     .bind(enabled, complaints, JSON.stringify(stored), String(actor)).run();
@@ -133,9 +135,15 @@ function aiClassifyLocal(message, settings) {
   const bad=[/бля(?:д|т)/,/су(?:к|ч)а/,/хуй/,/хуе/,/хуя/,/хуи/,/пизд/,/^еб/,/ебл/,/ебн/,/мудак/,/гандон/,/долбоеб/,/уеб/,/мразь/,/^fuck$/i,/^shit$/i];
   if (settings.profanity && tokens.some(token=>bad.some(pattern=>pattern.test(token)))) return "Нецензурная или оскорбительная лексика";
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
+  for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
   if (settings.suspicious_links && urls.some(url=>/(casino|bet|bets|1xbet|melbet|stake|poker|roulette|казино|ставк|букмек|розыгрыш.*выигрыш|wallet.*connect|verify.*account|login.*secure)/i.test(url+" "+text))) return "Подозрительная азартная, мошенническая или фишинговая ссылка";
   if (settings.advertising && urls.length && /(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только)/i.test(text)) return "Реклама без разрешения";
   return null;
+}
+async function aiIsFlood(env,chatId,userId){
+  const row=await env.DB.prepare("SELECT COUNT(*) AS total FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND created_at>=datetime('now','-10 seconds')").bind(String(chatId),String(userId)).first();
+  const limit=aiNightNow()?3:5;
+  return Number(row?.total||0)>=limit;
 }
 async function aiIsRepeated(env, chatId, userId, text) {
   const recent = await env.DB.prepare("SELECT content,created_at FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' ORDER BY id DESC LIMIT 4")
@@ -280,11 +288,15 @@ async function handleAiTelegramUpdate(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
     await aiApproveOrder(env,update.callback_query);return true;
   }
-  const message=update.message;
+  const message=update.message||update.edited_message;
   if(!message || message.successful_payment || !aiIsGroup(message.chat)) return false;
   const chatId=String(message.chat.id),user=message.from;
   if(!user?.id || user.is_bot) return false;
   await env.DB.prepare("UPDATE ai_moderator_settings SET group_chat_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=1").bind(chatId).run();
+  await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key]),text:aiText(message).slice(0,180)}});
+  if(message.left_chat_member){await aiLog(env,{chat_id:chatId,actor:user.id,target:message.left_chat_member.id,type:"member_left"});return true;}
+  if(message.new_chat_title){await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_title_changed",details:{title:String(message.new_chat_title).slice(0,100)}});return true;}
+  if(message.pinned_message){await aiLog(env,{chat_id:chatId,actor:user.id,type:"message_pinned",details:{message_id:message.pinned_message.message_id}});return true;}
   await aiRememberMember(env,chatId,user);
   const settings=await aiSettings(env);
   if(!settings.enabled)return true;
@@ -312,6 +324,7 @@ async function handleAiTelegramUpdate(update, env) {
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
       await aiWarn(env,chatId,message,violation);return true;
     }
+    if(settings.spam && await aiIsFlood(env,chatId,user.id)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)");return true;}
     if(settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)");return true;
     }
