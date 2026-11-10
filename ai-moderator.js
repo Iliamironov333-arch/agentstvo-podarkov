@@ -19,6 +19,7 @@ const DEFAULT_AI_SETTINGS = {
   media_rules: "Проверяйте только доступные Telegram данные. Если файл нельзя безопасно проверить, отправьте владельцу уведомление и не назначайте автоматическое наказание.",
   complaints_rules: "Жалоба не доказывает вину. Записывайте автора, адресата и контекст; скрытое наблюдение не раскрывайте.",
   night_rules: "С 23:00 до 07:00 по Екатеринбургу тщательнее проверяйте агрессивные сообщения, но не запрещайте обычные спокойные разговоры.",
+  ai_orders_rules: "Собирайте пожелания по одному вопросу за раз. Не обещайте цену и оформление до согласования владельцем. Если подходящего товара нет, предложите индивидуальный заказ.",
   profanity: true,
   spam: true,
   advertising: true,
@@ -278,7 +279,7 @@ async function aiFindCatalogMatches(env, requestText) {
     return [];
   }
 }
-async function aiHandleOrderConversation(env, message, text) {
+async function aiHandleOrderConversation(env, message, text, settings={}) {
   const chatId=String(message.chat.id),user=message.from;
   let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('collecting','review') ORDER BY created_at DESC LIMIT 1")
     .bind(chatId,String(user.id)).first();
@@ -338,7 +339,7 @@ async function aiHandleOrderConversation(env, message, text) {
   if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
     let estimate=0, summary=details.messages.join("\n");
     try {
-      const raw=await aiOpenAi(env,"Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните только JSON: {\"subject\":\"до 120 символов\",\"summary\":\"до 1500 символов\",\"price_stars\":целое число от 250 до 100000}. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.",summary,180);
+      const orderInstructions="Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните JSON с полями subject, summary и price_stars. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.\nДополнительные правила владельца:\n"+String(settings.ai_orders_rules||"").slice(0,3000);const raw=await aiOpenAi(env,orderInstructions,summary,180)
       const match=raw.match(/\{[\s\S]*\}/);if(match){const obj=JSON.parse(match[0]);if(Number.isSafeInteger(Number(obj.price_stars))&&Number(obj.price_stars)>=250&&Number(obj.price_stars)<=100000)estimate=Number(obj.price_stars);draft.subject=String(obj.subject||draft.subject).slice(0,120);details.summary=String(obj.summary||summary).slice(0,1500);}
     } catch {}
     await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -586,7 +587,7 @@ async function handleAiTelegramUpdate(update, env) {
     if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
     const relevant=aiAgencyIntent(text) || replied;
-    const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text) : false;
+    const orderHandled = settings.ai_orders ? await aiHandleOrderConversation(env,message,text,settings) : false;
     if(orderHandled) return true;
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
       try { await aiReplyToGroup(env,chatId,user,text,settings); }
