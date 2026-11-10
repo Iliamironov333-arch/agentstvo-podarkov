@@ -232,6 +232,26 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
   await aiGroupReply(env,chatId,user.id,answer);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
+async function aiFindCatalogMatches(env, requestText) {
+  const rows=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 150").all();
+  const catalog=rows.results||[];
+  if(!catalog.length)return [];
+  try{
+    const raw=await aiOpenAi(env,
+      "Подберите товары каталога только при реальном совпадении с пожеланиями покупателя. Сначала учитывайте обязательные признаки: сезон, место, сюжет, предмет, стиль и назначение. Не предлагайте городскую зиму, если просят зимний лес; не считайте просто похожую тему достаточной. Если точного или действительно подходящего варианта нет, верните пустой массив. Не придумывайте товары. Верните только JSON {\\"matches\\":[{\\"title\\":\\"точное название из каталога\\",\\"why\\":\\"коротко почему подходит\\"}]}. Максимум 3 результата.",
+      "Запрос покупателя: "+String(requestText).slice(0,1200)+"\\nКаталог: "+JSON.stringify(catalog).slice(0,14000),220);
+    const match=raw.match(/\\{[\\s\\S]*\\}/);
+    if(!match)return [];
+    const parsed=JSON.parse(match[0]);
+    return (Array.isArray(parsed.matches)?parsed.matches:[]).slice(0,3).map(item=>{
+      const product=catalog.find(p=>String(p.title).trim().toLowerCase()===String(item.title||"").trim().toLowerCase());
+      return product?{...product,why:String(item.why||"Подходит по описанию").slice(0,180)}:null;
+    }).filter(Boolean);
+  }catch(error){
+    console.error("AI catalog matching failed:",String(error).slice(0,250));
+    return [];
+  }
+}
 async function aiHandleOrderConversation(env, message, text) {
   const chatId=String(message.chat.id),user=message.from;
   let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('collecting','review') ORDER BY created_at DESC LIMIT 1")
@@ -258,10 +278,17 @@ async function aiHandleOrderConversation(env, message, text) {
   if (!draft && !aiOrderIntent(text)) return false;
   if (!draft) {
     const exact=await env.DB.prepare("SELECT title,price_stars FROM products WHERE is_active=1").all();
-    const match=(exact.results||[]).find(p=>text.toLowerCase().includes(String(p.title||"").toLowerCase()));
-    if(match){
-      await aiGroupReply(env,chatId,user.id,"В каталоге есть работа «"+match.title+"» стоимостью "+match.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ.");
-      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_match_for_order",details:{product:match.title,price_stars:match.price_stars}});
+    const exactMatch=(exact.results||[]).find(p=>String(p.title||"").length>0&&text.toLowerCase().includes(String(p.title).toLowerCase()));
+    if(exactMatch){
+      await aiGroupReply(env,chatId,user.id,"В каталоге есть работа «"+exactMatch.title+"» стоимостью "+exactMatch.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ.");
+      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_match_for_order",details:{product:exactMatch.title,price_stars:exactMatch.price_stars}});
+      return true;
+    }
+    const matches=await aiFindCatalogMatches(env,text);
+    if(matches.length){
+      const options=matches.map(p=>"• «"+p.title+"» — "+p.price_stars+" ⭐. "+p.why).join("\\n");
+      await aiGroupReply(env,chatId,user.id,"Я проверил каталог. Возможно, Вам подойдут эти работы:\\n"+options+"\\n\\nПодскажите, пожалуйста, подходит ли один из вариантов? Если нет, обсудим индивидуальный заказ.");
+      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_semantic_matches",details:{products:matches.map(p=>p.title)}});
       return true;
     }
     const id=crypto.randomUUID();
