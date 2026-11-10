@@ -70,7 +70,7 @@ async function aiSaveSettings(env, settings, actor) {
     const minutes=Math.max(5,Math.min(1440,Number(settings.moderation_disabled_minutes)));
     await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES('moderation_disabled_until',datetime('now',?),CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind("+"+minutes+" minutes").run();
   }
-  if(settings?.moderation_enabled===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='moderation_disabled_until'").run();
+  if(settings?.resume_moderation===true)await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key='moderation_disabled_until'").run();
   const enabled = (Object.prototype.hasOwnProperty.call(settings||{},"enabled") ? settings.enabled===true : current.configured_enabled) ? 1 : 0;
   const complaints = current.complaints_enabled ? 1 : 0;
   const stored = Object.fromEntries(allowed.map(key => [key, current[key]]));
