@@ -87,6 +87,7 @@ function aiText(message) { return String(message?.text || message?.caption || ""
 function aiSafeName(user) { return [user?.first_name,user?.last_name].filter(Boolean).join(" ").slice(0,100) || "Участник"; }
 async function aiRememberMember(env, chatId, user) {
   if (!user?.id || user.is_bot) return;
+  await env.DB.prepare("INSERT INTO users(telegram_id,username,first_name) VALUES(?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,updated_at=CURRENT_TIMESTAMP").bind(String(user.id),user.username||null,user.first_name||null).run();
   await env.DB.prepare("INSERT INTO ai_group_members(chat_id,telegram_id,username,first_name,last_name,last_seen_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(chat_id,telegram_id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,last_seen_at=CURRENT_TIMESTAMP")
     .bind(String(chatId),String(user.id),user.username || null,user.first_name || null,user.last_name || null).run();
 }
@@ -137,7 +138,7 @@ function aiClassifyLocal(message, settings) {
   const urls = [...text.matchAll(/https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+/gi)].map(m=>m[0]);
   for(const entity of [...(message.entities||[]),...(message.caption_entities||[])])if(entity.type==="text_link"&&entity.url)urls.push(String(entity.url));
   if (settings.suspicious_links && urls.some(url=>/(casino|bet|bets|1xbet|melbet|stake|poker|roulette|казино|ставк|букмек|розыгрыш.*выигрыш|wallet.*connect|verify.*account|login.*secure)/i.test(url+" "+text))) return "Подозрительная азартная, мошенническая или фишинговая ссылка";
-  if (settings.advertising && urls.length && /(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только)/i.test(text)) return "Реклама без разрешения";
+  if (settings.advertising && (/(куплю|продам|подписывай|реклама|заходи в канал|мой канал|промокод|заработок|инвестици|скидка только|покупайте у меня|заказывайте у меня|переходите по ссылке)/i.test(text))) return "Реклама без разрешения";
   return null;
 }
 async function aiIsFlood(env,chatId,userId){
@@ -320,7 +321,7 @@ async function handleAiTelegramUpdate(update, env) {
   if(notice.meta?.changes===1){
     await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для контекста обращений и журнала безопасности система сохраняет сообщения и события; не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
   }
-  await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key]),text:aiText(message).slice(0,180)}});
+  await aiLog(env,{chat_id:chatId,actor:user.id,type:update.edited_message?"edited_message_checked":"message_checked",details:{message_id:message.message_id,has_text:!!aiText(message),media_types:["photo","video","document","audio","voice","animation","sticker","video_note"].filter(key=>!!message[key])}});
   if(message.left_chat_member){await aiLog(env,{chat_id:chatId,actor:user.id,target:message.left_chat_member.id,type:"member_left"});return true;}
   if(message.new_chat_title){await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_title_changed",details:{title:String(message.new_chat_title).slice(0,100)}});return true;}
   if(message.pinned_message){await aiLog(env,{chat_id:chatId,actor:user.id,type:"message_pinned",details:{message_id:message.pinned_message.message_id}});return true;}
