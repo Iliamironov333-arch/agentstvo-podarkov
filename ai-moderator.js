@@ -333,6 +333,30 @@ function aiBase64(buffer){
   for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+0x8000,bytes.length)));
   return btoa(binary);
 }
+async function aiTranscribeAudio(env,message){
+  const media=message.voice||message.audio;
+  if(!media?.file_id)return null;
+  if(!env.OPENAI_API_KEY)throw new Error("OPENAI_API_KEY is not configured for audio review");
+  const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
+  if(!file?.file_path||Number(file.file_size||0)>10*1024*1024)throw new Error("Audio exceeds the automatic review limit");
+  const response=await fetch("https://api.telegram.org/file/bot"+env.BOT_TOKEN+"/"+file.file_path);
+  if(!response.ok)throw new Error("Telegram audio download failed");
+  const buffer=await response.arrayBuffer();
+  if(buffer.byteLength>10*1024*1024)throw new Error("Audio exceeds the automatic review limit");
+  const ext=String(file.file_path).split(".").pop().toLowerCase();
+  const supported=["ogg","oga","mp3","mp4","mpeg","mpga","m4a","wav","webm"];
+  if(!supported.includes(ext))throw new Error("Unsupported audio format");
+  const mime=ext==="ogg"||ext==="oga"?"audio/ogg":ext==="mp3"?"audio/mpeg":ext==="m4a"?"audio/mp4":ext==="wav"?"audio/wav":ext==="webm"?"audio/webm":"audio/mp4";
+  const form=new FormData();
+  form.append("file",new Blob([buffer],{type:mime}),ext==="oga"?"voice.ogg":"voice."+ext);
+  form.append("model",env.OPENAI_TRANSCRIPTION_MODEL||"gpt-transcribe");
+  form.append("languages[]","ru");
+  form.append("prompt","Русская речь в группе Агентства подарков. Сохраняйте произнесённые слова без добавления новых.");
+  const result=await fetch("https://api.openai.com/v1/audio/transcriptions",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY},body:form});
+  const data=await result.json().catch(()=>({}));
+  if(!result.ok)throw new Error("Audio transcription API HTTP "+result.status);
+  return String(data.text||"").trim().slice(0,3500);
+}
 async function aiInspectImage(env,message){
   if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
   const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
@@ -391,7 +415,16 @@ async function handleAiTelegramUpdate(update, env) {
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"members_joined",details:{count:message.new_chat_members.length}});
     return true;
   }
-  const text=aiText(message);
+  let text=aiText(message);
+  if(settings.media_checks && (message.voice||message.audio)){
+    try{
+      const transcript=await aiTranscribeAudio(env,message);
+      if(transcript){text=transcript;await aiLog(env,{chat_id:chatId,actor:user.id,type:"audio_transcribed",details:{message_id:message.message_id,characters:transcript.length}});}
+    }catch(error){
+      await aiWatch(env,chatId,user.id,"Не удалось автоматически проверить аудиосообщение","audio_review");
+      await aiNotifyOwner(env,"⚠️ Не удалось проверить аудиосообщение участника "+user.id+". Участник помещён в скрытое наблюдение на 24 часа. Ошибка: "+String(error).slice(0,200));
+    }
+  }
   const file=message.document||message.video||message.audio||message.voice||message.animation||message.sticker||message.photo||message.video_note;
   if(file && settings.media_checks) {
     const suspicious=message.document && /(apk|exe|scr|bat|cmd|js|vbs|ps1|jar|dmg|pkg)$/i.test(String(message.document.file_name||""));
