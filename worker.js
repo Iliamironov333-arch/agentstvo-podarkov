@@ -462,8 +462,9 @@ async function handleWebhook(request, env) {
     await handleAiTelegramUpdate(update, env);
     return json({ ok: true });
   }
-  if (update.message && !update.message.successful_payment &&
-      (update.message.chat?.type === "group" || update.message.chat?.type === "supergroup")) {
+  const groupUpdateMessage = update.message || update.edited_message;
+  if (groupUpdateMessage && !groupUpdateMessage.successful_payment &&
+      (groupUpdateMessage.chat?.type === "group" || groupUpdateMessage.chat?.type === "supergroup")) {
     await handleAiTelegramUpdate(update, env);
     return json({ ok: true });
   }
