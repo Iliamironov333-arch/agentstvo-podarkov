@@ -712,7 +712,7 @@ function adminPermissionForPath(path, method) {
   return "owner_only";
 }
 function defaultAdminPermissions(role = "owner") {
-  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key) || role === "owner"]));
+  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key) || role === "owner" || key === "ai_bot_manage"]));
 }
 
 export default {
