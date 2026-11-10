@@ -172,8 +172,13 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
   if (!output.trim()) throw new Error("Empty OpenAI response");
   return output.trim().slice(0,3500);
 }
-async function aiInspectText(env,text){
-  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» на очевидное нарушение правил: реклама сторонних услуг/каналов, спам, массовая рассылка, мошенничество, фишинг, азартные предложения, оскорбления и агрессивные выпады. Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Если не уверены, выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая причина по-русски\",\"confidence\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
+async function aiInspectText(env,text,settings){
+  const categories=[];
+  if(settings.advertising)categories.push("реклама сторонних услуг и каналов");
+  if(settings.spam)categories.push("спам и массовая рассылка");
+  if(settings.suspicious_links)categories.push("мошеннические, фишинговые и азартные ссылки");
+  if(settings.profanity)categories.push("оскорбления и агрессивные выпады");
+  const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review. Верните только JSON: {\"decision\":\"ok|review|violation\",\"reason\":\"краткая причина по-русски\",\"confidence\":число от 0 до 1}. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
   const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
@@ -467,7 +472,7 @@ async function handleAiTelegramUpdate(update, env) {
     const hasSpamSignal=/(реклама|продам|куплю|подписывай|промокод|заработок|розыгрыш|фишинг|мошен)/i.test(text);
     if(moderationActive && !violation && ((settings.suspicious_links&&hasLink)||((settings.spam||settings.advertising)&&hasSpamSignal))){
       try{
-        const aiCheck=await aiInspectText(env,text);
+        const aiCheck=await aiInspectText(env,text,settings);
         if(aiCheck.decision==="violation" && aiCheck.confidence>=0.9)violation=aiCheck.reason;
         else if(aiCheck.decision==="review" || (aiCheck.decision==="violation"&&aiCheck.confidence<0.9)){
           await aiWatch(env,chatId,user.id,"Сообщение требует проверки: "+aiCheck.reason,"text_review");
