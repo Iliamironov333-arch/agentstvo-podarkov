@@ -192,7 +192,7 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
 }
 async function aiHandleOrderConversation(env, message, text) {
   const chatId=String(message.chat.id),user=message.from;
-  let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1")
+  let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('collecting','review') ORDER BY created_at DESC LIMIT 1")
     .bind(chatId,String(user.id)).first();
   if(!draft){
     const approved=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('approved','paid') ORDER BY created_at DESC LIMIT 1").bind(chatId,String(user.id)).first();
@@ -227,6 +227,12 @@ async function aiHandleOrderConversation(env, message, text) {
   details.messages=Array.isArray(details.messages)?details.messages:[];details.messages.push(text.slice(0,2000));
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
     .bind(JSON.stringify(details).slice(0,12000),draft.id).run();
+  if(draft.status==="review"){
+    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review'").bind(JSON.stringify(details).slice(0,12000),draft.id).run();
+    await aiNotifyOwner(env,"➕ Клиент дополнил запрос на индивидуальный заказ\nЗаказ: "+draft.id+"\nTelegram ID: "+user.id+"\nДополнение: "+text.slice(0,800));
+    await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Благодарю, я добавил Ваши пожелания к запросу и сообщил владельцу."});
+    return true;
+  }
   if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
     let estimate=0, summary=details.messages.join("\n");
     try {
@@ -260,14 +266,18 @@ async function aiApproveOrder(env, callback) {
   const orderId=crypto.randomUUID();
   const title=String(draft.subject||"Индивидуальный заказ").slice(0,120);
   const amount=Number(draft.approved_stars);
-  await env.DB.batch([
-    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) VALUES(?,?,NULL,?,1,?,0,?,'pending','awaiting_payment')")
+  const created=await env.DB.batch([
+    env.DB.prepare("UPDATE ai_order_drafts SET status='approved',order_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review' AND approved_stars>0")
+      .bind(orderId,id),
+    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) SELECT ?,?,NULL,?,1,?,0,?,'pending','awaiting_payment' WHERE changes()=1")
       .bind(orderId,String(draft.telegram_id),title,amount,amount),
-    env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) VALUES(?,?,?,?,?,?,?,'pending')")
-      .bind(orderId,String(draft.telegram_id),draft.username,draft.first_name,title,draft.details_json,amount),
-    env.DB.prepare("UPDATE ai_order_drafts SET status='approved',order_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review'")
-      .bind(orderId,id)
+    env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) SELECT ?,?,?,?,?,?, ?,'pending' WHERE changes()=1")
+      .bind(orderId,String(draft.telegram_id),draft.username,draft.first_name,title,draft.details_json,amount)
   ]);
+  if(!created[0]?.meta?.changes || created[0].meta.changes!==1 || !created[1]?.meta?.changes || created[1].meta.changes!==1 || !created[2]?.meta?.changes || created[2].meta.changes!==1){
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже подтверждён или изменён. Обновите раздел ИИ-заказов.",show_alert:true});
+    return false;
+  }
   const payload="ai_order_"+crypto.randomUUID();
   await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,?,'order',?,?,0,NULL,'pending')")
     .bind(payload,String(draft.telegram_id),orderId,amount).run();
@@ -276,13 +286,19 @@ async function aiApproveOrder(env, callback) {
     invoiceUrl=await aiTelegram(env,"createInvoiceLink",{title:title.slice(0,32),description:"Индивидуальный заказ Агентства подарков",payload,provider_token:"",currency:"XTR",prices:[{label:title.slice(0,32),amount}]});
   } catch(error) {
     await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=?").bind(payload).run();
-    await aiNotifyOwner(env,"⚠️ Заказ "+orderId+" создан, но счёт не удалось сформировать: "+String(error).slice(0,300));
+    await env.DB.batch([
+      env.DB.prepare("UPDATE ai_order_drafts SET status='review',order_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?").bind(id,orderId),
+      env.DB.prepare("DELETE FROM custom_orders WHERE id=? AND status='pending'").bind(orderId),
+      env.DB.prepare("DELETE FROM orders WHERE id=? AND payment_status='pending'").bind(orderId)
+    ]);
+    await aiNotifyOwner(env,"⚠️ Заказ "+orderId+" не отправлен: счёт не удалось сформировать. Запрос возвращён в ИИ-заказы для повторного подтверждения. "+String(error).slice(0,300));
     if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ создан, но счёт не сформирован. Проверьте уведомление.",show_alert:true});
     return;
   }
   await aiTelegram(env,"sendMessage",{chat_id:draft.chat_id,text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nДля оплаты используйте кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+amount+" ⭐",url:invoiceUrl}]]}});
   if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ подтверждён, счёт отправлен в группу."});
   await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
+  return true;
 }
 async function handleAiTelegramUpdate(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
@@ -475,12 +491,25 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   if(path==="/api/admin/ai-orders" && method==="GET") {
     if(!has("ai_orders_view"))return aiJson({error:"Недостаточно прав."},403);
-    const rows=await env.DB.prepare("SELECT * FROM ai_order_drafts ORDER BY created_at DESC LIMIT 100").all();
+    const rows=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id ORDER BY d.created_at DESC LIMIT 100").all();
     return aiJson({ok:true,orders:rows.results||[]});
   }
   if(path==="/api/admin/ai-orders" && method==="POST") {
     if(!has("ai_orders_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
+    if(body.action==="update_after_approval") {
+      const id=String(body.id||"");
+      const draft=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('approved','paid')").bind(id).first();
+      if(!draft)return aiJson({error:"Согласованный заказ не найден."},404);
+      if(draft.payment_status==="paid" && (!draft.paid_at || !await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)>=datetime('now','-24 hours')").bind(draft.paid_at).first()))return aiJson({error:"Срок редактирования после оплаты — 24 часа — завершён."},403);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      if(body.summary!==undefined)details.summary=String(body.summary).slice(0,3000);
+      const subject=String(body.subject||draft.subject).trim().slice(0,120);
+      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(subject,JSON.stringify(details).slice(0,12000),id).run();
+      if(draft.order_id)await env.DB.prepare("UPDATE custom_orders SET subject=?,answers_json=? WHERE id=?").bind(subject,JSON.stringify(details).slice(0,12000),draft.order_id).run();
+      await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_changed_after_approval",details:{draft_id:id,order_id:draft.order_id}});
+      return aiJson({ok:true});
+    }
     if(body.action==="update") {
       const id=String(body.id||"");
       const draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE id=? AND status='review'").bind(id).first();
