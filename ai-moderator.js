@@ -385,7 +385,6 @@ async function handleAiTelegramUpdate(update, env) {
           await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОшибка: "+String(error).slice(0,250));
           await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question:text.slice(0,700)}});
         }
-      }
     }
   }
   return true;
