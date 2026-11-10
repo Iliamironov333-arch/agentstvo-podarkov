@@ -689,7 +689,8 @@ async function handleAiScheduled(env) {
   const weekday=nowParts.find(p=>p.type==="weekday")?.value;
   const hour=Number(nowParts.find(p=>p.type==="hour")?.value||0),minute=Number(nowParts.find(p=>p.type==="minute")?.value||0);
   if(weekday==="Sat" && hour===8) await aiBuildWeeklyReport(env);
-  await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now','-60 days')").run();
+  const moderationSettings=await aiSettings(env);
+  await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now',?) AND active_until<=CURRENT_TIMESTAMP").bind("-"+Number(moderationSettings.warning_history_days||60)+" days").run();
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
   await env.DB.prepare("DELETE FROM ai_moderation_events WHERE created_at<datetime('now','-180 days')").run();
