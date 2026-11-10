@@ -332,7 +332,10 @@ async function cancelPendingOrderAndRefund(env, orderId, telegramId) {
 
 async function releaseExpiredOrderReservations(env) {
   try {
-    const expired = await env.DB.prepare("SELECT id,telegram_id FROM orders WHERE payment_status='pending' AND created_at<datetime('now','-1 day') ORDER BY created_at LIMIT 100").all();
+    const hasAiDrafts = await tableExists(env,"ai_order_drafts");
+    const expired = await env.DB.prepare(hasAiDrafts
+      ? "SELECT id,telegram_id FROM orders WHERE payment_status='pending' AND created_at<datetime('now','-1 day') AND id NOT IN (SELECT order_id FROM ai_order_drafts WHERE order_id IS NOT NULL AND status='approved') ORDER BY created_at LIMIT 100"
+      : "SELECT id,telegram_id FROM orders WHERE payment_status='pending' AND created_at<datetime('now','-1 day') ORDER BY created_at LIMIT 100").all();
     let released = 0;
     for (const order of expired.results || []) {
       if (await cancelPendingOrderAndRefund(env,order.id,String(order.telegram_id))) released++;
@@ -707,8 +710,8 @@ function adminPermissionForPath(path, method) {
       path === "/api/admin/technical-status") return "system_manage";
   return "owner_only";
 }
-function defaultAdminPermissions() {
-  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key)]));
+function defaultAdminPermissions(role = "owner") {
+  return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key) || role === "owner"]));
 }
 
 export default {
@@ -772,7 +775,7 @@ export default {
         }
         let permissions = rootOwner || staff?.role === "owner" ? defaultAdminPermissions() : {};
         if (!rootOwner && staff?.role === "moderator") {
-          try { permissions = { ...defaultAdminPermissions(), ...JSON.parse(staff.permissions_json || "{}") }; }
+          try { permissions = { ...defaultAdminPermissions("moderator"), ...JSON.parse(staff.permissions_json || "{}") }; }
           catch { permissions = {}; }
           for (const key of Object.keys(permissions)) permissions[key] = permissions[key] === true;
         }
