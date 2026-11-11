@@ -800,9 +800,12 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
       if(details.source!=="miniapp_workshop")return aiJson({error:"Ответы через мастерскую доступны только для заказов из ИИ-мастерской."},400);
       details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
-      details.owner_messages.push({content:reply.slice(0,350),created_at:new Date().toISOString(),sender:"owner"});
+      const ownerMessage={content:reply.slice(0,350),created_at:new Date().toISOString(),sender:"owner"};
+      details.owner_messages.push(ownerMessage);
       details.owner_messages=details.owner_messages.slice(-8);
-      details.conversation=Array.isArray(details.conversation)?details.conversation.slice(-16):[];
+      details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+      details.conversation.push({role:"owner",content:ownerMessage.content});
+      details.conversation=details.conversation.slice(-16);
       details.summary=String(details.summary||"").slice(0,2000);
       await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),id).run();
       await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_workshop_owner_reply",details:{draft_id:id,characters:reply.length}});
