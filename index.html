@@ -407,7 +407,11 @@ body.dark-theme.season-summer:before{color:#8ee0aa!important;opacity:.25!importa
 
 
 /* Seasonal falling particles: start above the sticky brand header and fall at a steady pace */
-.season-particles{display:none;position:fixed;inset:0;overflow:hidden;pointer-events:none!important;z-index:6;contain:strict}
+.season-particles{display:none;position:fixed;inset:0;overflow:hidden;pointer-events:none!important;z-index:0!important;contain:strict}
+/* Защитный слой: декоративные эффекты никогда не перехватывают касания. */
+.leaf-layer,.leaf-layer *,.season-particles,.season-particles *{pointer-events:none!important}
+.bottom{z-index:30!important;pointer-events:auto!important}
+.bottom button{pointer-events:auto!important;touch-action:manipulation}
 body.season-summer .season-particles,body.season-spring .season-particles,body.season-winter .season-particles{display:block}
 .season-particles span{position:absolute;top:-12vh;left:var(--x);font-size:var(--size);opacity:var(--alpha,.58);animation:seasonParticleFall var(--duration) linear var(--delay) infinite;will-change:transform}
 .season-particles span:nth-child(1){--x:4%;--size:22px;--duration:12s;--delay:-1s}
