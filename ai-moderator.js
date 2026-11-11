@@ -3,6 +3,7 @@ const DEFAULT_AI_SETTINGS = {
   moderation_enabled: true,
   complaints_enabled: true,
   night_mode: true,
+  night_whitelist: "",
   night_start: "23:00",
   night_end: "07:00",
   greeting_enabled: true,
@@ -79,7 +80,8 @@ async function aiSettings(env) {
   const configuredEnabled=row ? row.enabled===1 : true;
   return { ...DEFAULT_AI_SETTINGS, ...saved, enabled: configuredEnabled, configured_enabled:configuredEnabled,
     moderation_temporarily_disabled: moderationTemporarilyDisabled, moderation_disabled_until: pause?.value || null,
-    complaints_enabled: row ? row.complaints_enabled === 1 : true, group_chat_id: row?.group_chat_id || null };
+    complaints_enabled: row ? row.complaints_enabled === 1 : true, group_chat_id: row?.group_chat_id || null,
+    night_whitelist: String(env.ADMIN_TELEGRAM_ID || saved.night_whitelist || "") };
 }
 async function aiSaveSettings(env, settings, actor) {
   const allowed = Object.keys(DEFAULT_AI_SETTINGS);
@@ -684,12 +686,46 @@ async function aiBuildWeeklyReport(env) {
   await aiNotifyOwner(env,report);
   await aiLog(env,{actor:"ai_moderator",type:"weekly_report_created",details:{period_start:periodStart,period_end:periodEnd}});
 }
+async function aiApplyNightMode(env, settings) {
+  const chatId=String(settings.group_chat_id || "");
+  if(!chatId) return;
+  const stateKey="night_mode_permissions:"+chatId;
+  const saved=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key=?").bind(stateKey).first();
+  const nightEnabled=settings.night_mode===true && aiNightNow(settings);
+  if(nightEnabled && !saved) {
+    const ownerId=String(env.ADMIN_TELEGRAM_ID || "");
+    if(!ownerId) throw new Error("ADMIN_TELEGRAM_ID не настроен: ночной белый список пуст.");
+    const owner=await aiTelegram(env,"getChatMember",{chat_id:chatId,user_id:Number(ownerId)});
+    if(!["creator","administrator"].includes(owner?.status)) {
+      throw new Error("Владелец из ночного белого списка должен быть администратором группы, иначе Telegram ограничит и его.");
+    }
+    const chat=await aiTelegram(env,"getChat",{chat_id:chatId});
+    if(!chat?.permissions || typeof chat.permissions!=="object") {
+      throw new Error("Telegram не вернул исходные права группы; ночной режим не применён, чтобы не потерять настройки.");
+    }
+    const original=JSON.stringify(chat.permissions);
+    const locked={can_send_messages:false,can_send_audios:false,can_send_documents:false,can_send_photos:false,can_send_videos:false,can_send_video_notes:false,can_send_voice_notes:false,can_send_polls:false,can_send_other_messages:false,can_add_web_page_previews:false};
+    await aiTelegram(env,"setChatPermissions",{chat_id:chatId,permissions:locked,use_independent_chat_permissions:true});
+    await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(stateKey,original).run();
+    await aiLog(env,{chat_id:chatId,actor:"ai_moderator",type:"night_mode_started",details:{whitelist:ownerId,admins_exempt:true}});
+    await aiNotifyOwner(env,"🌙 Ночной режим включён. Отправка сообщений закрыта для обычных участников. Вы и все администраторы остаётесь в белом списке.");
+  } else if(!nightEnabled && saved) {
+    let permissions;
+    try { permissions=JSON.parse(saved.value); } catch { throw new Error("Не удалось прочитать сохранённые права группы; восстановление остановлено для безопасности."); }
+    await aiTelegram(env,"setChatPermissions",{chat_id:chatId,permissions,use_independent_chat_permissions:true});
+    await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key=?").bind(stateKey).run();
+    await aiLog(env,{chat_id:chatId,actor:"ai_moderator",type:"night_mode_ended"});
+    await aiNotifyOwner(env,"☀️ Ночной режим завершён. Исходные права участников восстановлены.");
+  }
+}
 async function handleAiScheduled(env) {
   const nowParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Yekaterinburg",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
   const weekday=nowParts.find(p=>p.type==="weekday")?.value;
   const hour=Number(nowParts.find(p=>p.type==="hour")?.value||0),minute=Number(nowParts.find(p=>p.type==="minute")?.value||0);
   if(weekday==="Sat" && hour===8) await aiBuildWeeklyReport(env);
   const moderationSettings=await aiSettings(env);
+  try { await aiApplyNightMode(env,moderationSettings); }
+  catch(error) { console.error("AI night mode failed:",String(error).slice(0,400)); await aiNotifyOwner(env,"⚠️ Не удалось переключить ночной режим группы: "+String(error).slice(0,300)); }
   await env.DB.prepare("DELETE FROM ai_warnings WHERE issued_at<datetime('now',?) AND active_until<=CURRENT_TIMESTAMP").bind("-"+Number(moderationSettings.warning_history_days||60)+" days").run();
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
