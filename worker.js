@@ -807,6 +807,10 @@ export default {
       }
       if (path === "/api/telegram/webhook" && method === "POST") {
         if (!env.DB || !env.BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) return json({ error: "Webhook is not configured" }, 500, origin);
+        // Self-heal Telegram's registered secret before validating the incoming update.
+        // If this request carried the old secret, Telegram will retry after setWebhook.
+        try { await syncTelegramWebhook(env); }
+        catch (error) { console.error("Telegram webhook preflight sync failed:", String(error).slice(0,500)); }
         return handleWebhook(request, env);
       }
       if (!path.startsWith("/api/")) return json({ error: "Not found" }, 404, origin);
