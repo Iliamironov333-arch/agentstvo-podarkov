@@ -594,6 +594,7 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
   <div class="panel" id="adminBackupPanel">
    <div class="sectionhead"><h3>🛡️ Резервные копии D1</h3><button class="secondary" type="button" onclick="loadAdminBackupStatus()">↻ Проверить</button></div>
    <p class="muted">Cloudflare D1 Time Travel хранит точки восстановления автоматически в рамках срока хранения вашего тарифа. SQL-экспорт создаёт отдельный файл с временной ссылкой. Во время экспорта база может временно быть недоступна.</p>
+   <p class="notice">Для SQL-экспорта нужен секрет CLOUDFLARE_API_TOKEN с правами D1 Read и D1 Write. Если он не настроен, используйте независимую JSON-копию в техническом центре ниже — она формируется напрямую из подключённой D1.</p>
    <p id="adminBackupStatus" class="notice" aria-live="polite">Проверяем доступность резервного копирования…</p>
    <div class="row-actions"><button class="primary" type="button" id="adminBackupExportButton" onclick="createAdminBackup()">Создать SQL-копию</button><button class="secondary" type="button" id="adminBackupPollButton" onclick="createAdminBackup(true)" disabled>Продолжить экспорт</button></div>
    <div id="adminBackupDownload"></div>
