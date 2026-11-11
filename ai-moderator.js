@@ -786,7 +786,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   if(path==="/api/admin/ai-orders" && method==="GET") {
     if(!has("ai_orders_view"))return aiJson({error:"Недостаточно прав."},403);
-    const rows=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id ORDER BY d.created_at DESC LIMIT 100").all();
+    const rows=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('review','approved','paid') ORDER BY d.created_at DESC LIMIT 100").all();
     return aiJson({ok:true,orders:rows.results||[]});
   }
   if(path==="/api/admin/ai-orders" && method==="POST") {
