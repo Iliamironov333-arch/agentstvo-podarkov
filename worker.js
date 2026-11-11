@@ -452,6 +452,35 @@ async function createVipSupportAnswer(env,message){
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
 }
 
+async function syncTelegramWebhook(env) {
+  if (!env.BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET || !env.DB) return;
+  const expectedUrl = "https://agentstvo-podarkov.iliamironov333.workers.dev/api/telegram/webhook";
+  const secretHash = toHex(new Uint8Array(await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(env.TELEGRAM_WEBHOOK_SECRET)
+  )));
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS webhook_sync_state (id INTEGER PRIMARY KEY CHECK (id=1), secret_hash TEXT NOT NULL, checked_at TEXT NOT NULL)").run();
+  const previous = await env.DB.prepare("SELECT secret_hash, checked_at FROM webhook_sync_state WHERE id=1").first();
+  if (previous && previous.secret_hash === secretHash) {
+    const fresh = await env.DB.prepare("SELECT CASE WHEN datetime(?) > datetime('now','-5 minutes') THEN 1 ELSE 0 END AS fresh")
+      .bind(previous.checked_at).first();
+    if (fresh?.fresh === 1) return;
+  }
+  const info = await telegram(env, "getWebhookInfo", {});
+  const hasForbiddenError = /403|forbidden|wrong response/i.test(String(info.last_error_message || ""));
+  if (!previous || info.url !== expectedUrl || hasForbiddenError) {
+    await telegram(env, "setWebhook", {
+      url: expectedUrl,
+      secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+      allowed_updates: ["message", "edited_message", "callback_query", "pre_checkout_query"],
+      drop_pending_updates: false,
+      max_connections: 40
+    });
+    console.log("Telegram webhook synchronized with current Worker secret.");
+  }
+  await env.DB.prepare("INSERT INTO webhook_sync_state (id,secret_hash,checked_at) VALUES (1,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET secret_hash=excluded.secret_hash,checked_at=CURRENT_TIMESTAMP")
+    .bind(secretHash).run();
+}
+
 async function handleWebhook(request, env) {
   const supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(supplied || "", env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -757,6 +786,7 @@ export default {
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
+    ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
   async fetch(request, env) {
