@@ -66,8 +66,13 @@ async function aiAdminNotification(env,type,title,body,referenceId=null){
   catch(error){console.error("AI admin notification failed",String(error).slice(0,200));}
 }
 async function aiNotifyOwner(env, text) {
+  const message=String(text).slice(0,3900);
+  try{
+    const title=message.split("\n")[0].slice(0,180)||"Уведомление ИИ-модератора";
+    await env.DB.prepare("INSERT INTO admin_notifications(type,title,body,reference_id) VALUES('ai_moderator',?,?,NULL)").bind(title,message.slice(0,3000)).run();
+  }catch(error){console.error("AI Mini App notification failed",String(error).slice(0,200));}
   if (!env.ADMIN_TELEGRAM_ID) return;
-  try { await aiTelegram(env, "sendMessage", { chat_id: String(env.ADMIN_TELEGRAM_ID), text: String(text).slice(0,3900) }); }
+  try { await aiTelegram(env, "sendMessage", { chat_id: String(env.ADMIN_TELEGRAM_ID), text: message }); }
   catch (error) { console.error("AI moderator owner notification failed", String(error).slice(0,300)); }
 }
 async function aiLog(env, event) {
@@ -326,7 +331,6 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
       details.step="submitted";
       await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),active.id).run();
       await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и укажите итоговую цену. До Вашего подтверждения счёт не отправляется.");
-      await aiAdminNotification(env,"group_order","Новый запрос из группы",details.summary,active.id);
       await aiGroupReply(env,chatId,user.id,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
     }
@@ -450,7 +454,6 @@ async function aiApproveOrder(env, callback) {
     }
     await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
     await aiNotifyOwner(env,"⭐ ИИ-заказ подтверждён\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nЦена: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nСчёт: "+due+" ⭐");
-    await aiAdminNotification(env,due>0?"order_approved":"order_paid",due>0?"ИИ-заказ подтверждён":"ИИ-заказ оплачен с баланса",title+" · Цена "+amount+" Stars · Списано с баланса "+balanceUsed+" · К оплате "+due,orderId);
   }else{
     await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
     await aiNotifyOwner(env,"💰 ИИ-заказ полностью оплачен с баланса\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nСписано: "+balanceUsed+" ⭐");
