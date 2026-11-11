@@ -517,7 +517,7 @@ async function handleWebhook(request, env) {
     const q = update.pre_checkout_query;
     let valid = false;
     try {
-      const intent = await env.DB.prepare("SELECT payload,telegram_id,amount_stars,status FROM payment_intents WHERE payload=?")
+      const intent = await env.DB.prepare("SELECT payload,telegram_id,kind,plan_type,amount_stars,status FROM payment_intents WHERE payload=?")
         .bind(q.invoice_payload).first();
       valid = !!intent && (intent.kind === "topup" && String(intent.plan_type||"").startsWith("group_invoice:") || String(intent.telegram_id) === String(q.from.id)) &&
         Number(intent.amount_stars) === Number(q.total_amount) &&
