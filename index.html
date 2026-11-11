@@ -1030,6 +1030,7 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCra
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
+ if (id === 'aiWorkshopView') loadCraftConversation();
  if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView') loadAnnouncements();
 }
@@ -2294,36 +2295,61 @@ async function sendVipSupport(){const i=document.getElementById('vipSupportMessa
 let craftMessages=[];
 let craftQuestionCount=0;
 let craftConversationReady=false;
+let craftDraftId='';
+let craftOwnerMessages=[];
+let craftPollTimer=null;
+function newCraftId(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)});}
 function renderCraftChat(){
  const root=document.getElementById('craftChatLog');if(!root)return;root.replaceChildren();
- craftMessages.forEach(m=>{const bubble=document.createElement('div');bubble.style.cssText='max-width:94%;align-self:'+(m.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(m.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5';const label=document.createElement('b');label.textContent=m.role==='user'?'Ты':'ИИ-мастер';label.style.display='block';label.style.marginBottom='4px';const body=document.createElement('span');body.textContent=m.content;bubble.append(label,body);root.append(bubble);});
+ const all=[...craftMessages,...craftOwnerMessages.map(m=>({role:'owner',content:m.content}))];
+ all.forEach(m=>{const bubble=document.createElement('div');bubble.style.cssText='max-width:94%;align-self:'+(m.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(m.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5';const label=document.createElement('b');label.textContent=m.role==='user'?'Вы':m.role==='owner'?'Мастер Агентства':'ИИ-мастер';label.style.display='block';label.style.marginBottom='4px';const body=document.createElement('span');body.textContent=m.content;bubble.append(label,body);root.append(bubble);});
  root.scrollTop=root.scrollHeight;
  const count=document.getElementById('craftQuestionCount');if(count)count.textContent=craftQuestionCount+' / 16 вопросов';
 }
+function startCraftPolling(){
+ if(craftPollTimer)clearInterval(craftPollTimer);
+ if(!craftDraftId)return;
+ craftPollTimer=setInterval(pollCraftMessages,5000);
+}
+async function pollCraftMessages(){
+ if(!craftDraftId)return;
+ try{const d=await apiFetch('/api/craft/messages?draft_id='+encodeURIComponent(craftDraftId));const old=craftOwnerMessages.length;craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];if(craftOwnerMessages.length!==old)renderCraftChat();}catch(e){console.warn('Не удалось обновить переписку ИИ-мастерской:',e);}
+}
+async function loadCraftConversation(){
+ if(!craftDraftId){try{craftDraftId=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}}
+ if(!craftDraftId)return;
+ try{
+  const d=await apiFetch('/api/craft/messages?draft_id='+encodeURIComponent(craftDraftId));
+  if(Array.isArray(d.conversation)&&d.conversation.length){craftMessages=d.conversation;craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];craftQuestionCount=Math.max(0,craftMessages.filter(m=>m.role==='assistant').length-1);craftConversationReady=true;const p=document.getElementById('craftResultPanel');if(p)p.classList.remove('hidden');const final=craftMessages.filter(m=>m.role==='assistant').slice(-1)[0];const result=document.getElementById('craftResultText');if(result)result.textContent=final?.content||'';const status=document.getElementById('craftResultStatus');if(status)status.textContent=d.status==='paid'?'Заказ оплачен. Переписка с мастером остаётся доступна здесь.':'Подбор отправлен владельцу. Здесь появятся его ответы.';const button=document.getElementById('craftSendBtn');if(button){button.disabled=true;button.textContent='Подбор готов';}renderCraftChat();startCraftPolling();}
+ }catch(e){console.warn('Не удалось восстановить диалог мастерской:',e);}
+}
 function resetCraftConversation(){
- craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем поделку или подарок. Сначала расскажи, что примерно хочется создать — даже если идея пока очень общая.'}];
+ if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
+ craftDraftId=newCraftId();craftOwnerMessages=[];
+ try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
+ craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
  craftQuestionCount=0;craftConversationReady=false;
  const panel=document.getElementById('craftResultPanel');if(panel)panel.classList.add('hidden');
  const input=document.getElementById('craftChatInput');if(input)input.value='';
  const button=document.getElementById('craftSendBtn');if(button){button.disabled=false;button.textContent='Отправить ответ';}
- const status=document.getElementById('craftResultStatus');if(status)status.textContent='Помощник задаёт вопросы по одному и не спешит с готовой инструкцией.';
+ const status=document.getElementById('craftResultStatus');if(status)status.textContent='Мастер уточняет пожелания по одному вопросу и подготовит предложение с предварительной ценой.';
  renderCraftChat();
 }
 async function sendCraftMessage(){
  const input=document.getElementById('craftChatInput'),button=document.getElementById('craftSendBtn'),status=document.getElementById('craftResultStatus'),message=input.value.trim();
- if(!message){status.textContent='Напиши ответ, чтобы продолжить.';return;}
+ if(!message){status.textContent='Напишите ответ, чтобы продолжить.';return;}
  if(!craftMessages.length)resetCraftConversation();
- if(craftConversationReady){status.textContent='Итог уже готов. Начни новый диалог, если хочешь придумать другую работу.';return;}
+ if(craftConversationReady){status.textContent='Итог уже готов. Чтобы придумать другую работу, начните новый диалог.';return;}
  if(craftQuestionCount>=16){status.textContent='Лимит вопросов достигнут. Готовим итоговый подбор…';}
- craftMessages.push({role:'user',content:message});input.value='';button.disabled=true;button.textContent='Мастер думает…';status.textContent='Анализируем пожелания и бюджет…';
+ craftMessages.push({role:'user',content:message});input.value='';button.disabled=true;button.textContent='Мастер думает…';status.textContent='Анализируем пожелания и подбираем варианты…';
  try{
-  const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages})});
+  const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   craftMessages.push({role:'assistant',content:d.reply||'Помощник не вернул сообщение.'});
-  if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Подбор готов. Цены предварительные; окончательную стоимость подтвердит владелец Агентства.';}
-  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответь на следующий вопрос.';}
+  if(d.ready){craftConversationReady=true;craftDraftId=d.draft_id||craftDraftId;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предложение сохранено и передано владельцу. Итоговую цену можно будет увидеть после согласования.';startCraftPolling();}
+  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();
- }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуй ещё раз.';input.value=message;}
- finally{button.disabled=craftConversationReady;button.textContent=craftConversationReady?'Проект готов':'Отправить ответ';}
+ }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуйте ещё раз.';input.value=message;}
+ finally{button.disabled=craftConversationReady;button.textContent=craftConversationReady?'Подбор готов':'Отправить ответ';}
 }
 
 
