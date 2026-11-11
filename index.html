@@ -716,7 +716,7 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
     <h4>🗄️ Резервные копии и восстановление D1</h4>
     <p class="muted">Cloudflare D1 Time Travel автоматически сохраняет точки восстановления базы. Доступный период зависит от тарифа Cloudflare. Это восстановление состояния базы за прошлое время, а не отдельный файл для скачивания.</p>
     <p id="adminBackupTimeTravelStatus" class="notice" aria-live="polite">Проверяем доступность точки восстановления…</p>
-    <button class="secondary" id="adminBackupRefreshButton" type="button" onclick="loadAdminBackupStatus()">↻ Проверить точку восстановления</button>
+    <button class="secondary" id="adminBackupRefreshButton" type="button" onclick="loadAdminTimeTravelStatus()">↻ Проверить точку восстановления</button>
     <p class="muted">Восстановление перезаписывает данные базы. Здесь доступна проверка и копирование bookmark; запуск отката намеренно оставлен отдельной защищённой операцией.</p>
     <p class="muted">Дополнительно можно скачать независимый JSON-экспорт со структурой и данными таблиц. Он может содержать личные данные покупателей и приватные заметки — храните файл в безопасном месте.</p>
     <button class="secondary" id="adminBackupDownloadButton" type="button" onclick="downloadAdminBackup()">Скачать резервную копию D1 (JSON)</button>
@@ -1358,7 +1358,7 @@ async function downloadAdminBackup(){
  finally{button.disabled=false;}
 }
 
-async function loadAdminBackupStatus(){
+async function loadAdminTimeTravelStatus(){
  const status=document.getElementById('adminBackupTimeTravelStatus'),button=document.getElementById('adminBackupRefreshButton');
  if(!status)return;
  if(button)button.disabled=true;
@@ -1437,7 +1437,7 @@ async function loadAdminTechnicalCenter(){
   const migrationTitle=document.createElement('h4');migrationTitle.textContent='Готовность миграций';tables.append(migrationTitle);
   const migrationLabels={'0004_order_item_images':'0004 · Изображения в заказах','0005_delivery_retry_lease':'0005 · Безопасный повтор доставки','0006_admin_action_log':'0006 · Журнал действий владельца','0007_user_blocks':'0007 · Блокировки покупателей','0008_support_human_takeover':'0008 · Передача ИИ-диалогов владельцу','0009_support_internal_notes':'0009 · Приватные заметки CRM','0010_announcements':'0010 · Объявления','0011_mass_mailing':'0011 · Массовые рассылки','0012_system_monitoring':'0012 · Журнал системных ошибок','0013_promo_codes':'0013 · Промокоды','0014_promo_code_scopes':'0014 · Ограничения промокодов по товарам и категориям'};
   Object.entries(d.migrations||{}).forEach(([key,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=migrationLabels[key]||key;const right=document.createElement('b');right.textContent=ready?'Готова':'Не применена';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
-  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminBackupStatus()]);
+  await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminTimeTravelStatus()]);
  }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
 }
 async function loadAdminFeatureFlags(){
