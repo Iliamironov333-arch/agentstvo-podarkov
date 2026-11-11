@@ -924,14 +924,14 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook'],['system','🛡️ Система','Переключатели и журнал ошибок']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
   const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
  });
  hero.after(nav);
- let anchor=nav;for(const key of ['store','cheats','operations','ai','aiorders','reports','server','system']){anchor.after(sections[key]);anchor=sections[key];}
+ let anchor=nav;for(const key of ['store','cheats','operations','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
  const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
  const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
  original.forEach(node=>{
@@ -939,7 +939,7 @@ function initAdminCategories(){
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
-  else if(txt.includes('Защищённый доступ'))key='system';
+  else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
  });
  // Гарантируем, что сезонное оформление попадёт именно в раздел «Чит-панель».
