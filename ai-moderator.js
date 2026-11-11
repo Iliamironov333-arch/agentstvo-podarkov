@@ -291,10 +291,10 @@ function aiToneInstruction(tone){
   return tones[tone]||tones.respectful;
 }
 async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
-  const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
+  const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' AND last_activity_at>=datetime('now','-30 minutes') ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
   const lower=String(text||"").toLowerCase().trim();
   const explicit=/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить)/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
-  if(active && (/^(?:кстати|другой вопрос|сменим тему|теперь другой вопрос|а теперь|не по теме|давай поговорим|расскажи мне|хочу обсудить)\b/i.test(lower) || /^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower) && /[?？]/.test(text))){
+  if(active && (/^(?:кстати|другой вопрос|сменим тему|теперь другой вопрос|а теперь|не по теме|давай поговорим|расскажи мне|хочу обсудить|привет|здравствуйте|добрый день|добрый вечер|спасибо|пока|как дела)\b/i.test(lower) || /^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower) && /[?？]/.test(text))){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_paused_topic_change",details:{draft_id:active.id}});
     return false;
@@ -375,7 +375,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     instructions.push(modes[settings.companion_tone]||modes.friendly);
   }
   if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
-  instructions.push("ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: не предлагайте клиенту оформить заказ и не вставляйте предложение о заказе в разговор. Оформление начинается только по собственной ясной прямой просьбе клиента. Консультация, ориентация, вопросы о товарах, идеи и обычная беседа не являются согласием. При смене темы отвечайте на новую тему, не продолжайте прежний сценарий заказа.");
+  instructions.push("ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: не предлагайте клиенту оформить заказ и не вставляйте предложение о заказе в разговор. Оформление начинается только по собственной ясной прямой просьбе клиента. Консультация, ориентация, вопросы о товарах, идеи и обычная беседа не являются согласием. При смене темы отвечайте на новую тему, не продолжайте прежний сценарий заказа. Черновик оформления в группе активен не дольше 30 минут бездействия; не считайте новые приветствия, благодарность или обычные вопросы ответами на старый заказ.");
   const input=[{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},...context.map(m=>({role:m.role,content:m.content}))];
   const raw=await aiOpenAi(env,instructions.join("\n"),input,650);
   let answer=raw,needsOwner=false,ignore=false;
