@@ -61,6 +61,10 @@ async function aiTelegram(env, method, body) {
   if (!response.ok || !data.ok) throw new Error(data.description || ("Telegram " + method + " failed"));
   return data.result;
 }
+async function aiAdminNotification(env,type,title,body,referenceId=null){
+  try{await env.DB.prepare("INSERT INTO admin_notifications(type,title,body,reference_id) VALUES(?,?,?,?)").bind(String(type).slice(0,60),String(title).slice(0,180),String(body||"").slice(0,3000),referenceId?String(referenceId).slice(0,120):null).run();}
+  catch(error){console.error("AI admin notification failed",String(error).slice(0,200));}
+}
 async function aiNotifyOwner(env, text) {
   if (!env.ADMIN_TELEGRAM_ID) return;
   try { await aiTelegram(env, "sendMessage", { chat_id: String(env.ADMIN_TELEGRAM_ID), text: String(text).slice(0,3900) }); }
@@ -322,6 +326,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
       details.step="submitted";
       await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),active.id).run();
       await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и укажите итоговую цену. До Вашего подтверждения счёт не отправляется.");
+      await aiAdminNotification(env,"group_order","Новый запрос из группы",details.summary,active.id);
       await aiGroupReply(env,chatId,user.id,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
     }
@@ -445,6 +450,7 @@ async function aiApproveOrder(env, callback) {
     }
     await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
     await aiNotifyOwner(env,"⭐ ИИ-заказ подтверждён\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nЦена: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nСчёт: "+due+" ⭐");
+    await aiAdminNotification(env,due>0?"order_approved":"order_paid",due>0?"ИИ-заказ подтверждён":"ИИ-заказ оплачен с баланса",title+" · Цена "+amount+" Stars · Списано с баланса "+balanceUsed+" · К оплате "+due,orderId);
   }else{
     await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
     await aiNotifyOwner(env,"💰 ИИ-заказ полностью оплачен с баланса\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nСписано: "+balanceUsed+" ⭐");
@@ -865,6 +871,19 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       await env.DB.prepare("UPDATE ai_complaints SET status='dismissed',resolved_at=CURRENT_TIMESTAMP,resolved_by=? WHERE id=? AND status='review'").bind(String(telegramId),Number(body.id)).run();
     } else return aiJson({error:"Действие не разрешено или неизвестно."},403);
     await aiLog(env,{actor:telegramId,type:"admin_action",details:{action:body.action,id:body.id}});
+    return aiJson({ok:true});
+  }
+  if(path==="/api/admin/notifications" && method==="GET") {
+    if(!ownerOnly())return aiJson({error:"Уведомления владельца доступны только владельцу."},403);
+    const rows=await env.DB.prepare("SELECT id,type,title,body,reference_id,created_at,read_at FROM admin_notifications ORDER BY id DESC LIMIT 60").all();
+    return aiJson({ok:true,notifications:rows.results||[]});
+  }
+  if(path==="/api/admin/notifications" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Управлять уведомлениями может только владелец."},403);
+    const body=await aiReadJson(request),id=Number(body.id);
+    if(body.action==="read_all")await env.DB.prepare("UPDATE admin_notifications SET read_at=CURRENT_TIMESTAMP WHERE read_at IS NULL").run();
+    else if(Number.isSafeInteger(id)&&id>0)await env.DB.prepare("UPDATE admin_notifications SET read_at=CURRENT_TIMESTAMP WHERE id=? AND read_at IS NULL").bind(id).run();
+    else return aiJson({error:"Укажите уведомление."},400);
     return aiJson({ok:true});
   }
   if(path==="/api/admin/ai-complaints" && method==="GET") {
