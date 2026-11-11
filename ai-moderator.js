@@ -29,6 +29,9 @@ const DEFAULT_AI_SETTINGS = {
   media_checks: true,
   ai_answers: true,
   ai_orders: true,
+  companion_mode: false,
+  companion_tone: "friendly",
+  global_tone: "respectful",
   owner_suggestions: true,
   punishment_default: "warning",
   punishment_profanity: "warning",
@@ -90,6 +93,8 @@ async function aiSaveSettings(env, settings, actor) {
     const value = settings[key];
     if (typeof DEFAULT_AI_SETTINGS[key] === "boolean") current[key] = value === true;
     else if (key === "answer_interval_seconds") current[key] = Math.max(5, Math.min(60, Number(value) || 5));
+    else if (key === "global_tone") current[key] = ["friendly","respectful","promotional","creative"].includes(String(value)) ? String(value) : current[key];
+    else if (key === "companion_tone") current[key] = ["friendly","respectful","promotional"].includes(String(value)) ? String(value) : current[key];
     else if (["warnings_before_restriction","warning_active_days","warning_history_days","mute_duration_minutes","restriction_duration_hours"].includes(key)) {
       const limits={warnings_before_restriction:[1,20],warning_active_days:[1,365],warning_history_days:[1,730],mute_duration_minutes:[1,10080],restriction_duration_hours:[1,8760]};
       const [min,max]=limits[key],number=Number(value);
@@ -257,62 +262,117 @@ function aiAgencyIntent(text) {
   if(!aboutAgency)return false;
   return /[?？]|\b(что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти)\b/i.test(value);
 }
-async function aiGroupReply(env,chatId,userId,text){
+async function aiGroupReply(env,chatId,userId,text,replyToMessageId=null){
   const settings=await aiSettings(env);
-  const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId)).first();
+  const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId),String(userId||"")).first();
   if(last && (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000<Number(settings.answer_interval_seconds||5))return false;
-  await aiTelegram(env,"sendMessage",{chat_id:chatId,text:String(text).slice(0,3500),allow_sending_without_reply:true});
+  const payload={chat_id:chatId,text:String(text).slice(0,3500),allow_sending_without_reply:true};
+  if(replyToMessageId)payload.reply_to_message_id=Number(replyToMessageId);
+  await aiTelegram(env,"sendMessage",payload);
   await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)").bind(String(chatId),String(userId||""),"assistant",String(text).slice(0,3500)).run();
   return true;
 }
-async function aiReplyToGroup(env, chatId, user, text, settings) {
-  const recent = await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50")
-    .bind(String(chatId),String(user.id)).all();
-  const context = (recent.results || []).reverse();
-  const products = await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
-  const catalog = (products.results || []).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
-  const instructions = [
-    "Вы — живой, внимательный и компетентный ИИ-помощник «Агентства подарков». Не превращайте каждое упоминание подарков или заказа в продажу.",
-    "Всегда обращайтесь к клиенту на «Вы», но говорите естественно, тепло и разнообразно. Не повторяйте одну и ту же заготовку в каждом ответе.",
-    "Подбирайте форму ответа по ситуации: иногда коротко и по делу, иногда с пояснением, иногда с дружелюбным вопросом или лёгкой уместной шуткой. Не шутите в жалобах, спорах и вопросах оплаты.",
-    "Добавляйте обычно 1–2 подходящих эмодзи, если они уместны (например 🎁 😊 ✨). Не ставьте эмодзи в каждое предложение.",
-    "Не будьте бездумно покладистым: анализируйте смысл и контекст, мягко исправляйте неверные предположения и задавайте уточняющие вопросы, если запрос неоднозначен. Не соглашайтесь с тем, что противоречит фактам или правилам Агентства.",
-    "Вы — справочный консультант мини-приложения «Агентство подарков». В группе ВЫ НЕ СОЗДАЁТЕ ЗАКАЗЫ, НЕ СОБИРАЕТЕ заявки и не предлагаете оформлять заказ в каждом ответе. Ваша основная задача — ответить на вопрос и помочь человеку разобраться.",
-    "Знание Mini App: стартовый экран содержит разделы «Магазин» (открывает каталог готовых работ), «Создать своё» (отдельный опрос из 8 шагов для индивидуальной работы), «ИИ-мастерская» (отдельный диалог с творческим консультантом), «Мои заказы», «Мой баланс», «Поддержка». Чтобы найти каталог, нажмите «Магазин» на главном экране. Готовые товары выбираются в каталоге; индивидуальный заказ через опрос оформляется в «Создать своё»; творческая консультация находится в «ИИ-мастерская». Не путайте эти разделы.",
-    "Если спрашивают, что можно заказать, перечислите виды готовых работ из каталога и объясните, что можно посмотреть их в «Магазин». Не отвечайте «опишите, что хотите заказать» автоматически. Сначала дайте полезный обзор вариантов.",
-    "Перед ответом определите намерение по смыслу всего сообщения и контекста, а не по одному слову. Фразы «бот поможет вам», «где кнопка каталога», «как открыть магазин» и упоминания заказа в рекламном или объяснительном тексте не являются заявкой.",
-    "Если спрашивают «что можно заказать», дайте краткий обзор фактически доступных товаров из переданного каталога, укажите путь Mini App → «Магазин» и не заканчивайте ответ навязчивым призывом купить. Если спрашивают про навигацию, просто объясните путь.",
-
-    "Если спрашивают, где каталог, как открыть Mini App, где заказы или как найти ИИ-мастерскую, объясните точный путь по разделам выше. Никогда не называйте вопрос о навигации оформленным заказом.",
-    "Если человек рассказывает другим, что «бот поможет вам», рекламирует возможности помощника, цитирует текст или обсуждает работу бота, это НЕ запрос на покупку.",
-    "Групповой чат — справка и общение. Не создавайте здесь черновики, не отправляйте запрос владельцу и не запускайте сбор заказа, даже если человек пишет «хочу заказать». Для оформления направьте в Mini App: «Создать своё» или «ИИ-мастерская». Исключение — только если владелец отдельно включит специальный групповой сценарий в будущем.",
-    "Используйте только переданные сведения каталога и переписки. Не придумывайте цены, наличие, сроки, статус заказа, оплату и условия.",
-    "Если точного ответа нет в каталоге или данных недостаточно, не угадывайте: needs_owner=true и сообщите, что уточните информацию у владельца.",
-    "Предлагайте только действительно подходящие товары. Не называйте товары похожими, если они отличаются по ключевым пожеланиям клиента.",
-    "Даже при явном желании заказать в группе не собирайте параметры и не создавайте заявку: кратко объясните, где открыть «Создать своё» или «ИИ-мастерскую» в Mini App.",
-    "Не отвечайте на вопросы, не относящиеся к Агентству. Если сообщение не связано с Агентством, верните ignore=true; бот должен промолчать.",
-    "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
+function aiToneInstruction(tone){
+  const tones={
+    friendly:"Глобальный тон: дружелюбный, живой, тёплый и естественный. Поддерживайте человека, но не фамильярничайте.",
+    respectful:"Глобальный тон: уважительный, спокойный и ясный. Общайтесь вежливо, профессионально и без лишней эмоциональности.",
+    promotional:"Глобальный тон: мягко-рекламный. Помогайте заметить подходящие идеи и возможности Агентства, но не давите и не превращайте каждый ответ в продажу.",
+    creative:"Глобальный тон: творческий и вдохновляющий. Предлагайте необычные идеи, образные варианты и интересные решения, оставаясь точными в фактах."
+  };
+  return tones[tone]||tones.respectful;
+}
+async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
+  const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
+  const lower=String(text||"").toLowerCase().trim();
+  const explicit=/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить)/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
+  if(!active&&!explicit)return false;
+  if(!settings.ai_orders){
+    await aiGroupReply(env,chatId,user.id,"Я с удовольствием помогу разобраться с идеей и каталогом. Оформление заказов через группу сейчас отключено; можно воспользоваться Mini App → «Создать своё».",replyToMessageId);
+    return true;
+  }
+  let details={};if(active){try{details=JSON.parse(active.details_json||"{}");}catch{}}
+  if(!active){
+    const id=crypto.randomUUID();
+    details={source:"group",group_chat_id:String(chatId),conversation:[{role:"user",content:String(text).slice(0,1000)}],order_fields:{},step:"item"};
+    await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status,group_message_id) VALUES(?,?,?,?,?,?,?,0,'collecting',?)")
+      .bind(id,String(chatId),String(user.id),user.username||null,user.first_name||null,"Заказ из группы",JSON.stringify(details),replyToMessageId?Number(replyToMessageId):null).run();
+    await aiGroupReply(env,chatId,user.id,"Конечно, помогу оформить — спокойно и по шагам 😊\nЧто именно Вы хотите заказать?",replyToMessageId);
+    return true;
+  }
+  details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+  details.conversation.push({role:"user",content:String(text).slice(0,1000)});
+  details.order_fields=details.order_fields||{};
+  if(/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
+    await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
+    await aiGroupReply(env,chatId,user.id,"Хорошо, сбор заказа остановлен. Если захотите вернуться к идее, я помогу 😊",replyToMessageId);return true;
+  }
+  if(details.step==="item"){
+    details.order_fields.item=String(text).trim().slice(0,700);details.step="details";
+    await aiGroupReply(env,chatId,user.id,"Понял! А каким Вы представляете изделие: цвета, стиль, надпись, рисунок или другие важные детали?",replyToMessageId);
+  }else if(details.step==="details"){
+    details.order_fields.details=String(text).trim().slice(0,1200);details.step="quantity";
+    await aiGroupReply(env,chatId,user.id,"Отлично, записал. Сколько таких изделий Вам нужно? Если одно — так и напишите.",replyToMessageId);
+  }else if(details.step==="quantity"){
+    details.order_fields.quantity=String(text).trim().slice(0,100);details.step="confirm";
+    await aiGroupReply(env,chatId,user.id,"Проверьте, пожалуйста, всё ли верно:\n\nИзделие: "+details.order_fields.item+"\nПожелания: "+details.order_fields.details+"\nКоличество: "+details.order_fields.quantity+"\n\nЕсли всё правильно, ответьте «Да, всё верно». Если нужно остановиться — напишите «Отмена».",replyToMessageId);
+  }else if(details.step==="confirm"){
+    if(/^(да|верно|всё верно|все верно|подтверждаю|да,?\s*всё верно|да,?\s*все верно)[.! ]*$/i.test(lower)){
+      const subject=String(details.order_fields.item||"Индивидуальный заказ").slice(0,120);
+      details.summary="Изделие: "+details.order_fields.item+". Пожелания: "+details.order_fields.details+". Количество: "+details.order_fields.quantity+".";
+      details.step="submitted";
+      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),active.id).run();
+      await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и укажите итоговую цену. До Вашего подтверждения счёт не отправляется.");
+      await aiGroupReply(env,chatId,user.id,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
+      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
+    }
+    details.step="item";details.order_fields={};
+    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
+    await aiGroupReply(env,chatId,user.id,"Хорошо, давайте начнём описание заново. Что именно хотите заказать?",replyToMessageId);return true;
+  }
+  details.conversation=details.conversation.slice(-16);
+  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
+  return true;
+}
+async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=null){
+  if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId))return;
+  const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
+  const context=(recent.results||[]).reverse();
+  const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
+  const catalog=(products.results||[]).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
+  const instructions=[
+    "Вы — персональный ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников.",
+    "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами.",
+    "Помогайте придумать интересную идею для подарка или изделия: задавайте один уместный уточняющий вопрос, предлагайте несколько конкретных идей и описаний. Не требуйте сразу оформить заказ.",
+    "Если человек хочет понять, что можно заказать, опирайтесь на реальный каталог и реальные товары. Если подходящей готовой работы нет, можно помочь придумать индивидуальную идею, не обещая, что Агентство уже производит её.",
+    "Помощь сделать поделку самостоятельно дома — запасной сценарий. Предлагайте её только если человек прямо просит инструкцию для самостоятельного изготовления либо явно выбирает самостоятельный вариант. Не переводите обычный запрос о товаре в DIY.",
+    "Вы можете быть собеседником: поддержать человека, поговорить, отреагировать на его идею или сомнение. Не превращайте дружескую беседу в рекламу или заказ.",
+    "Не начинайте сбор заказа по одному упоминанию покупки. Сбор запускается только после ясной прямой просьбы оформить заказ. Вопросы «что можно заказать?», «придумай описание», «какая идея интереснее?» и просьбы поддержать НЕ являются согласием на оформление.",
+    "Если заказ явно запрошен, задавайте вопросы по одному. Соберите изделие, пожелания/персонализацию и количество; покажите итоговое резюме и получите явное подтверждение клиента. Только после подтверждения создавайте заявку. Не называйте цену и не подтверждайте заказ самостоятельно.",
+    "После готового сбора заявка поступает владельцу в Mini App → ИИ-заказы и в его Telegram. Владелец проверяет описание, назначает цену и подтверждает. До его подтверждения счёт не отправляется.",
+    "Mini App: «Магазин» — каталог готовых работ; «Создать своё» — опрос для индивидуального заказа; «ИИ-мастерская» — творческий диалог; «Мои заказы» — статус заказов; «Мой баланс» — баллы и операции; «Поддержка» — обращение.",
+    "Не придумывайте товары, цены, сроки, наличие, оплату, обещания и решения владельца. Если точного ответа нет, честно скажите об этом и передайте вопрос владельцу.",
+    "Не отвечайте на посторонние сообщения, если Вас не спросили и не упомянули. Верните ignore=true, если сообщение не относится к Агентству и не является обращением к собеседнику.",
+    "Верните только JSON вида {\"answer\":\"ответ\",\"needs_owner\":true или false,\"ignore\":true или false}."
   ];
+  instructions.push(aiToneInstruction(settings.global_tone));
+  if(settings.companion_mode){
+    const modes={friendly:"В режиме собеседника будьте особенно дружелюбным, поддерживающим и внимательным, без фамильярности.",respectful:"В режиме собеседника отвечайте спокойно, уважительно и сдержанно.",promotional:"В режиме собеседника мягко показывайте интересные возможности Агентства, но никогда не навязывайте заказ."};
+    instructions.push(modes[settings.companion_tone]||modes.friendly);
+  }
   if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
-  const instructionText=instructions.join("\n");
-  const input = [{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},
-    ...context.map(m=>({role:m.role,content:m.content}))];
-  const raw = await aiOpenAi(env,instructionText,input,550);
+  const input=[{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},...context.map(m=>({role:m.role,content:m.content}))];
+  const raw=await aiOpenAi(env,instructions.join("\n"),input,650);
   let answer=raw,needsOwner=false,ignore=false;
-  try{
-    const match=raw.match(/\{[\s\S]*\}/);
-    if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}
-  }catch{}
+  try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}}catch{}
   if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
   if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
   let questionId=null;
   if(needsOwner){
-    answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
     try{const saved=await env.DB.prepare("INSERT INTO ai_owner_questions(chat_id,telegram_id,question) VALUES(?,?,?)").bind(String(chatId),String(user.id),text.slice(0,2000)).run();questionId=saved.meta?.last_row_id||null;}catch{}
     await aiNotifyOwner(env,"❔ ИИ-помощнику нужна помощь владельца"+(questionId?" · вопрос №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтветьте в Mini App → ИИ-бот → Вопросы владельцу.");
-    await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_answer_unknown",severity:"warning",details:{question_id:questionId,question:text.slice(0,700)}});
+    answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
   }
-  await aiGroupReply(env,chatId,user.id,answer);
+  await aiGroupReply(env,chatId,user.id,answer,replyToMessageId);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
 async function aiApproveOrder(env, callback) {
@@ -558,13 +618,14 @@ async function handleAiTelegramUpdate(update, env) {
     const existingWatch=moderationActive ? await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first() : null;
     if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
-    const relevant=aiAgencyIntent(text) || replied;
+    const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
+    const relevant=aiAgencyIntent(text) || replied || !!activeGroupOrder;
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
-      try { await aiReplyToGroup(env,chatId,user,text,settings); }
+      try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id); }
       catch(error) {
-          await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.");
+          await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.",message.message_id);
           let questionId=null;
           try{const saved=await env.DB.prepare("INSERT INTO ai_owner_questions(chat_id,telegram_id,question) VALUES(?,?,?)").bind(chatId,String(user.id),text.slice(0,2000)).run();questionId=saved.meta?.last_row_id||null;}catch{}
           await aiNotifyOwner(env,"❔ ИИ-модератор не смог ответить на вопрос"+(questionId?" №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтвет можно добавить в Mini App → ИИ-бот → Вопросы владельцу.\nОшибка: "+String(error).slice(0,250));
