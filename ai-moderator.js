@@ -384,6 +384,27 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   await aiGroupReply(env,chatId,user.id,answer,replyToMessageId);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
+async function aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder}){
+  await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND status='pending'").bind(orderId).run();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE ai_order_drafts SET status='review',order_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?").bind(id,orderId),
+    env.DB.prepare("DELETE FROM custom_orders WHERE id=?").bind(orderId),
+    env.DB.prepare("DELETE FROM orders WHERE id=?").bind(orderId)
+  ]);
+  if(balanceUsed>0){
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(balanceUsed,String(draft.telegram_id)),
+      env.DB.prepare("INSERT OR IGNORE INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES(?,?,'custom_order_refund',?,?)").bind(String(draft.telegram_id),balanceUsed,"Возврат баланса: не удалось отправить подтверждение заказа "+orderId,"ai-order-refund:"+orderId)
+    ]);
+  }
+  await aiNotifyOwner(env,"⚠️ ИИ-заказ не удалось отправить покупателю. Запрос возвращён в ИИ-заказы, списание баланса отменено.\nID черновика: "+id+"\nКлиент: "+draft.telegram_id+"\n"+String(error).slice(0,250));
+  if(isGroupOrder){
+    try{await aiTelegram(env,"sendMessage",{chat_id:String(draft.chat_id),reply_to_message_id:draft.group_message_id||undefined,text:"Не удалось отправить подтверждение в личный чат. Проверьте, что Вы открыли бота и нажали Start. Владелец сможет повторить подтверждение."});}
+    catch(groupError){console.error("AI group order delivery notice failed",String(groupError).slice(0,250));}
+  }
+  if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Не удалось отправить заказ покупателю. Запрос возвращён в ИИ-заказы, баланс восстановлен.",show_alert:true});
+  return false;
+}
 async function aiApproveOrder(env, callback) {
   const owner=String(env.ADMIN_TELEGRAM_ID||"");
   const realCallback = !String(callback.id||"").startsWith("admin_");
@@ -396,6 +417,20 @@ async function aiApproveOrder(env, callback) {
   if(!draft){if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже обработан или не найден.",show_alert:true});return;}
   if(!draft.approved_stars || Number(draft.approved_stars)<1) {
     if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Сначала укажите итоговую цену в Mini App → ИИ-заказы.",show_alert:true});return;
+  }
+  let draftDetails={};
+  try{draftDetails=JSON.parse(draft.details_json||"{}");}catch{}
+  const isGroupOrder=draftDetails.source==="group";
+  if(isGroupOrder){
+    try{
+      await aiTelegram(env,"sendChatAction",{chat_id:String(draft.telegram_id),action:"typing"});
+    }catch(error){
+      await aiNotifyOwner(env,"⚠️ Групповой заказ пока не подтверждён. Покупатель ещё не открыл личный чат с ботом.\nID черновика: "+id+"\nКлиент: "+draft.telegram_id+"\nПопросите покупателя открыть бота и нажать Start, затем повторно подтвердите заказ в Mini App → ИИ-заказы. Баланс не списывался.");
+      try{await aiTelegram(env,"sendMessage",{chat_id:String(draft.chat_id),reply_to_message_id:draft.group_message_id||undefined,text:"Чтобы получить подтверждение и счёт, откройте личный чат с ботом и нажмите Start. После этого владелец сможет повторно подтвердить заказ. Баланс пока не списывался."});}
+      catch(groupError){console.error("AI group order start notice failed",String(groupError).slice(0,250));}
+      if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Покупатель должен открыть личный чат с ботом и нажать Start. Заказ не подтверждён, баланс не списывался.",show_alert:true});
+      return false;
+    }
   }
   const orderId=crypto.randomUUID();
   const title=String(draft.subject||"Индивидуальный заказ").slice(0,120);
@@ -452,10 +487,14 @@ async function aiApproveOrder(env, callback) {
       if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Не удалось сформировать счёт. Запрос возвращён в ИИ-заказы.",show_alert:true});
       return false;
     }
-    await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
+    try{
+      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
+    }catch(error){return await aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder});}
     await aiNotifyOwner(env,"⭐ ИИ-заказ подтверждён\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nЦена: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nСчёт: "+due+" ⭐");
   }else{
-    await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
+    try{
+      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
+    }catch(error){return await aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder});}
     await aiNotifyOwner(env,"💰 ИИ-заказ полностью оплачен с баланса\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nСписано: "+balanceUsed+" ⭐");
   }
   await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
