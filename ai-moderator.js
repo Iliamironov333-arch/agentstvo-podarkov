@@ -450,29 +450,8 @@ async function handleAiTelegramUpdate(update, env) {
     } catch {}
   }
   if(isOwner) {
-    const ownerText=aiText(message);
-    // Упоминание бота в сообщении для клиентов не является обращением к ИИ.
-    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\s*\/ask(?:@[\w]+)?(?:\s|$)/i.test(ownerText);
-    if(!addressedDirectly) {
-      await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
-      return true;
-    }
-    if(ownerText) {
-      try {
-        const ownerInstructions=[
-          "Вы общаетесь не с клиентом, а с владельцем и руководителем «Агентства подарков».",
-          "Относитесь к владельцу с уважением, отвечайте спокойно, профессионально и прямо. Обращайтесь на «Вы».",
-          "Не предлагайте владельцу товары, каталог, покупку или оформление заказа. Не используйте клиентские приветствия и фразы вроде «Чем могу помочь с покупкой?»",
-          "Владелец может давать распоряжения, обсуждать работу проекта и задавать вопросы. Не утверждайте, что выполнили действие, если оно фактически не выполнено.",
-          "Если вопрос требует доступа к данным или действий, которых у вас нет, честно объясните ограничение."
-        ].join("\\n");
-        const answer=await aiOpenAi(env,ownerInstructions,ownerText,500);
-        await aiTelegram(env,"sendMessage",{chat_id:chatId,text:String(answer||"Я Вас услышал.").slice(0,3500),reply_to_message_id:message.message_id,allow_sending_without_reply:true});
-        await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"owner_direct_answer",details:{message_id:message.message_id}});
-      } catch(error) {
-        await aiNotifyOwner(env,"⚠️ Не удалось ответить на обращение владельца в группе: "+String(error).slice(0,250));
-      }
-    }
+    // Владелец пишет клиентам от своего имени. ИИ никогда не отвечает на его сообщения.
+    await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
     return true;
   }
   if(!settings.enabled)return true;
