@@ -468,6 +468,22 @@ async function handleWebhook(request, env) {
     await handleAiTelegramUpdate(update, env);
     return json({ ok: true });
   }
+  // Personal bot commands must be handled separately from group moderation.
+  const incomingMessage = update.message;
+  if (incomingMessage?.chat?.type === "private" && typeof incomingMessage.text === "string") {
+    const command = incomingMessage.text.trim().split(/\\s+/, 1)[0].split("@")[0].toLowerCase();
+    if (command === "/start") {
+      if (incomingMessage.from?.id) await ensureUser(env, incomingMessage.from);
+      await telegram(env, "sendMessage", {
+        chat_id: incomingMessage.chat.id,
+        text: "🎁 Добро пожаловать в «Агентство подарков»!\\n\\nЗдесь можно посмотреть каталог, выбрать подарок и оформить заказ. Нажмите кнопку ниже, чтобы открыть мини-приложение.",
+        reply_markup: {
+          inline_keyboard: [[{ text: "🎁 Открыть Агентство подарков", web_app: { url: SITE_ORIGIN + "/" } }]]
+        }
+      });
+      return json({ ok: true });
+    }
+  }
   if (update.pre_checkout_query) {
     const q = update.pre_checkout_query;
     let valid = false;
