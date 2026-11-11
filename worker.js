@@ -612,10 +612,12 @@ async function handleWebhook(request, env) {
       if(custom){
         await env.DB.prepare("UPDATE custom_orders SET status='new' WHERE id=? AND telegram_id=? AND status='pending'").bind(order.id,telegramId).run();
         try {
-          const aiDraft = await env.DB.prepare("SELECT id,chat_id FROM ai_order_drafts WHERE order_id=? AND status='approved'").bind(order.id).first();
+          const aiDraft = await env.DB.prepare("SELECT id,chat_id,telegram_id,details_json FROM ai_order_drafts WHERE order_id=? AND status='approved'").bind(order.id).first();
           if (aiDraft) {
             await env.DB.prepare("UPDATE ai_order_drafts SET status='paid',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(aiDraft.id).run();
-            await telegram(env,"sendMessage",{chat_id:aiDraft.chat_id,text:"✅ Оплата Вашего индивидуального заказа успешно получена! Заказ передан в работу."});
+            let draftDetails={};try{draftDetails=JSON.parse(aiDraft.details_json||"{}");}catch{}
+            const customerChatId=draftDetails.source==="group"?String(aiDraft.telegram_id):String(aiDraft.chat_id);
+            await telegram(env,"sendMessage",{chat_id:customerChatId,text:"✅ Оплата Вашего индивидуального заказа успешно получена! Заказ передан владельцу в работу."});
           }
         } catch (error) { console.error("AI custom order confirmation failed:",String(error).slice(0,300)); }
         await notifyOwner(env,"🎨 Оплачен индивидуальный заказ\nID: "+order.id+"\nПокупатель: "+telegramId+"\nРабота: "+custom.subject+"\nИтого: "+order.total_stars+" ⭐\nСписано с баланса: "+Number(order.balance_applied_stars||0)+" ⭐\nОплачено Telegram: "+payment.total_amount+" ⭐");
