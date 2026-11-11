@@ -253,15 +253,6 @@ async function aiInspectText(env,text,settings){
 function aiAgencyIntent(text) {
   return /(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|сделать для меня)/i.test(text);
 }
-function aiOrderIntent(text) {
-  const value=String(text||"").trim();
-  if(!value)return false;
-  if(/\bбот\b.{0,100}\b(поможет|помогу|помогает|предложит|подскажет)\b/i.test(value))return false;
-  if(/(напишите|обратитесь|скажите|задайте|переходите|откройте).{0,100}(боту|помощник|каталог|мини-?приложени)/i.test(value))return false;
-  if(/(бот|помощник).{0,100}(можете|можно|поможет|помогу).{0,60}(оформить|заказать|купить)/i.test(value))return false;
-  return /(?:^|[.!?]\s*)(?:я\s+)?(?:хочу|мне\s+(?:нужен|нужна|нужно|нужны)|мне\s+бы\s+хотелось|можно\s+мне|оформите\s+мне|закажите\s+мне|подберите\s+мне|ищу\s+себе).{0,100}(?:заказ|подар|товар|работ|открытк|рисунок|поделк|купить|заказать|оформить)/i.test(value)
-    || /(?:^|[.!?]\s*)(?:хочу\s+заказать|хочу\s+купить|хочу\s+приобрести|заказать\s+для\s+себя|купить\s+для\s+себя)/i.test(value);
-}
 async function aiGroupReply(env,chatId,userId,text){
   const settings=await aiSettings(env);
   const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId)).first();
@@ -316,100 +307,6 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
   }
   await aiGroupReply(env,chatId,user.id,answer);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
-}
-async function aiFindCatalogMatches(env, requestText) {
-  const rows=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 150").all();
-  const catalog=rows.results||[];
-  if(!catalog.length)return [];
-  try{
-    const raw=await aiOpenAi(env,
-      "Подберите товары каталога только при реальном совпадении с пожеланиями покупателя. Сначала учитывайте обязательные признаки: сезон, место, сюжет, предмет, стиль и назначение. Не предлагайте городскую зиму, если просят зимний лес; не считайте просто похожую тему достаточной. Если точного или действительно подходящего варианта нет, верните пустой массив. Не придумывайте товары. Верните только JSON {\"matches\":[{\"title\":\"точное название из каталога\",\"why\":\"коротко почему подходит\"}]}. Максимум 3 результата.",
-      "Запрос покупателя: "+String(requestText).slice(0,1200)+"\nКаталог: "+JSON.stringify(catalog).slice(0,14000),220);
-    const match=raw.match(/\{[\s\S]*\}/);
-    if(!match)return [];
-    const parsed=JSON.parse(match[0]);
-    return (Array.isArray(parsed.matches)?parsed.matches:[]).slice(0,3).map(item=>{
-      const product=catalog.find(p=>String(p.title).trim().toLowerCase()===String(item.title||"").trim().toLowerCase());
-      return product?{...product,why:String(item.why||"Подходит по описанию").slice(0,180)}:null;
-    }).filter(Boolean);
-  }catch(error){
-    console.error("AI catalog matching failed:",String(error).slice(0,250));
-    return [];
-  }
-}
-async function aiHandleOrderConversation(env, message, text, settings={}) {
-  const chatId=String(message.chat.id),user=message.from;
-  let draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('collecting','review') ORDER BY created_at DESC LIMIT 1")
-    .bind(chatId,String(user.id)).first();
-  if(!draft){
-    const approved=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('approved','paid') ORDER BY created_at DESC LIMIT 1").bind(chatId,String(user.id)).first();
-    if(approved && /(изменить|поменять|исправить|добавить|забыл сказать|ещё пожелани|другой цвет|другой размер|другой стиль)/i.test(text)){
-      if(approved.status==="paid"){
-        const paid=await env.DB.prepare("SELECT paid_at FROM orders WHERE id=?").bind(approved.order_id).first();
-        if(!paid?.paid_at || !await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)>=datetime('now','-24 hours')").bind(paid.paid_at).first()){
-          await aiGroupReply(env,chatId,user.id,"Срок внесения изменений в оплаченный заказ (24 часа после оплаты) завершён. Пожалуйста, обратитесь к владельцу, чтобы уточнить, возможны ли дополнительные изменения.");
-          return true;
-        }
-      }
-      let prior={};try{prior=JSON.parse(approved.details_json||"{}");}catch{}
-      prior.change_requests=Array.isArray(prior.change_requests)?prior.change_requests:[];
-      prior.change_requests.push({text:text.slice(0,1500),created_at:new Date().toISOString()});
-      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(prior).slice(0,12000),approved.id).run();
-      await aiNotifyOwner(env,"✏️ Клиент просит изменить уже согласованный заказ\nЗаказ: "+approved.id+"\nКлиент: "+user.id+"\nПожелание: "+text.slice(0,900)+"\nПроверьте карточку в Mini App → ИИ-заказы.");
-      await aiGroupReply(env,chatId,user.id,"Благодарю, я передал Ваши новые пожелания владельцу. Он проверит возможность изменения заказа.");
-      return true;
-    }
-  }
-  if (!draft && !aiOrderIntent(text)) return false;
-  if (!draft) {
-    const exact=await env.DB.prepare("SELECT title,price_stars FROM products WHERE is_active=1").all();
-    const exactMatch=(exact.results||[]).find(p=>String(p.title||"").length>0&&text.toLowerCase().includes(String(p.title).toLowerCase()));
-    if(exactMatch){
-      await aiGroupReply(env,chatId,user.id,"В каталоге есть работа «"+exactMatch.title+"» стоимостью "+exactMatch.price_stars+" ⭐. Вы можете открыть Mini App, найти её в каталоге и оформить покупку. Если Вам нужна другая работа, я помогу обсудить индивидуальный заказ.");
-      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_match_for_order",details:{product:exactMatch.title,price_stars:exactMatch.price_stars}});
-      return true;
-    }
-    const matches=await aiFindCatalogMatches(env,text);
-    if(matches.length){
-      const options=matches.map(p=>"• «"+p.title+"» — "+p.price_stars+" ⭐. "+p.why).join("\\n");
-      await aiGroupReply(env,chatId,user.id,"Я проверил каталог. Возможно, Вам подойдут эти работы:\\n"+options+"\\n\\nПодскажите, пожалуйста, подходит ли один из вариантов? Если нет, обсудим индивидуальный заказ.");
-      await aiLog(env,{chat_id:chatId,actor:user.id,type:"catalog_semantic_matches",details:{products:matches.map(p=>p.title)}});
-      return true;
-    }
-    const id=crypto.randomUUID();
-    const subject=text.slice(0,120) || "Индивидуальный заказ";
-    await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,status) VALUES(?,?,?,?,?,?,?,'collecting')")
-      .bind(id,chatId,String(user.id),user.username||null,aiSafeName(user),subject,JSON.stringify({messages:[text]})).run();
-    await aiNotifyOwner(env,"📝 Новый запрос на индивидуальный заказ\nКлиент: "+aiSafeName(user)+" ("+user.id+")\nОписание: "+text.slice(0,800));
-    await aiGroupReply(env,chatId,user.id,"С удовольствием помогу Вам оформить индивидуальный заказ. Расскажите, пожалуйста, какую работу Вы хотите получить и какие особенности для Вас важны?");
-    return true;
-  }
-  let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
-  details.messages=Array.isArray(details.messages)?details.messages:[];details.messages.push(text.slice(0,2000));
-  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
-    .bind(JSON.stringify(details).slice(0,12000),draft.id).run();
-  if(draft.status==="review"){
-    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review'").bind(JSON.stringify(details).slice(0,12000),draft.id).run();
-    await aiNotifyOwner(env,"➕ Клиент дополнил запрос на индивидуальный заказ\nЗаказ: "+draft.id+"\nTelegram ID: "+user.id+"\nДополнение: "+text.slice(0,800));
-    await aiGroupReply(env,chatId,user.id,"Благодарю, я добавил Ваши пожелания к запросу и сообщил владельцу.");
-    return true;
-  }
-  if(details.messages.length>=2 && details.messages.join(" ").length>=60) {
-    let estimate=0, summary=details.messages.join("\n");
-    try {
-      const orderInstructions="Составьте краткое резюме индивидуального заказа и предложите предварительную цену в целых Telegram Stars. Верните JSON с полями subject, summary и price_stars. Цена ориентировочная, окончательно утверждает владелец. Не конвертируйте бюджет в рублях.\nДополнительные правила владельца:\n"+String(settings.ai_orders_rules||"").slice(0,3000);const raw=await aiOpenAi(env,orderInstructions,summary,180)
-      const match=raw.match(/\{[\s\S]*\}/);if(match){const obj=JSON.parse(match[0]);if(Number.isSafeInteger(Number(obj.price_stars))&&Number(obj.price_stars)>=250&&Number(obj.price_stars)<=100000)estimate=Number(obj.price_stars);draft.subject=String(obj.subject||draft.subject).slice(0,120);details.summary=String(obj.summary||summary).slice(0,1500);}
-    } catch {}
-    await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',last_activity_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?")
-      .bind(draft.subject,JSON.stringify(details).slice(0,12000),estimate,draft.id).run();
-    const card="🎁 ЗАПРОС НА ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draft.id+"\nКлиент: "+aiSafeName(user)+" (@"+(user.username||"нет username")+")\nTelegram ID: "+user.id+"\nОписание: "+(details.summary||summary).slice(0,1600)+"\nПредварительная оценка ИИ: "+estimate+" ⭐\n\nПроверьте и при необходимости измените заказ в Mini App → ИИ-заказы.";
-    const sent=await aiTelegram(env,"sendMessage",{chat_id:env.ADMIN_TELEGRAM_ID,text:card,reply_markup:{inline_keyboard:[[{text:"Подтвердить заказ",callback_data:"ai_order_approve:"+draft.id}]]}});
-    await env.DB.prepare("UPDATE ai_order_drafts SET group_message_id=? WHERE id=?").bind(sent.message_id,draft.id).run();
-    await aiGroupReply(env,chatId,user.id,"Благодарю за подробности! Я подготовил запрос на индивидуальный заказ и передал его владельцу на согласование. "+(estimate>0?"Предварительная стоимость — "+estimate+" ⭐. ":"")+"Окончательную цену подтвердит владелец.");
-    return true;
-  }
-  await aiGroupReply(env,chatId,user.id,"Благодарю! Уточните, пожалуйста, ещё одну деталь: какой результат или особенности работы для Вас наиболее важны?");
-  return true;
 }
 async function aiApproveOrder(env, callback) {
   const owner=String(env.ADMIN_TELEGRAM_ID||"");
