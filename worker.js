@@ -727,7 +727,8 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/dashboard") return "dashboard_view";
   if (path === "/api/admin/error-log" || path === "/api/admin/error-resolve" ||
       path === "/api/admin/feature-flags" || path === "/api/admin/system-controls" ||
-      path === "/api/admin/technical-status") return "system_manage";
+      path === "/api/admin/technical-status" || path === "/api/admin/server-diagnostics" ||
+      path === "/api/admin/webhook-reconnect") return "system_manage";
   return "owner_only";
 }
 function defaultAdminPermissions(role = "owner") {
@@ -826,6 +827,93 @@ export default {
         if (!rootOwner && requiredPermission === "staff_manage") {
           return json({ error: "Управление должностями доступно только основному владельцу." }, 403, origin);
         }
+
+        if (path === "/api/admin/server-diagnostics" && method === "GET") {
+          const checkedAt = new Date().toISOString();
+          const expectedWebhookUrl = new URL("/api/telegram/webhook", request.url).toString();
+          const result = {
+            checked_at: checkedAt,
+            worker: { ok: true, url: new URL(request.url).origin },
+            database: { ok: false },
+            telegram: { ok: false },
+            webhook_secret_configured: !!env.TELEGRAM_WEBHOOK_SECRET,
+            webhook: { url: null, matches_expected: false, pending_update_count: 0, last_error_message: null, allowed_updates: [] },
+            group: { id: null, bot_is_admin: false },
+            overall_ok: false
+          };
+          try { await env.DB.prepare("SELECT 1 AS ready").first(); result.database.ok = true; }
+          catch (error) { result.database.error = String(error.message || error).slice(0,240); }
+          let bot = null;
+          try { bot = await telegram(env, "getMe", {}); result.telegram = { ok: true, username: bot.username || null, id: bot.id || null }; }
+          catch (error) { result.telegram.error = String(error.message || error).slice(0,240); }
+          try {
+            const info = await telegram(env, "getWebhookInfo", {});
+            result.webhook = {
+              url: info.url || null,
+              matches_expected: info.url === expectedWebhookUrl,
+              pending_update_count: Number(info.pending_update_count || 0),
+              last_error_message: info.last_error_message || null,
+              last_error_date: info.last_error_date || null,
+              allowed_updates: Array.isArray(info.allowed_updates) ? info.allowed_updates : [],
+              has_custom_certificate: !!info.has_custom_certificate,
+              ip_address: info.ip_address || null
+            };
+          } catch (error) { result.webhook.error = String(error.message || error).slice(0,240); }
+          try {
+            if (await tableExists(env, "ai_moderator_settings")) {
+              const settings = await env.DB.prepare("SELECT group_chat_id FROM ai_moderator_settings WHERE id=1").first();
+              const groupId = settings?.group_chat_id ? String(settings.group_chat_id) : null;
+              result.group.id = groupId;
+              if (groupId && bot) {
+                try {
+                  await telegram(env, "getChat", { chat_id: groupId });
+                  const member = await telegram(env, "getChatMember", { chat_id: groupId, user_id: bot.id });
+                  result.group.bot_status = member.status || "unknown";
+                  result.group.bot_is_admin = ["administrator","creator"].includes(member.status);
+                  result.group.can_delete_messages = member.status === "creator" || member.can_delete_messages === true;
+                  result.group.can_restrict_members = member.status === "creator" || member.can_restrict_members === true;
+                } catch (error) { result.group.error = String(error.message || error).slice(0,240); }
+              }
+            } else result.group.error = "Таблица настроек ИИ-модератора не найдена.";
+          } catch (error) { result.group.error = String(error.message || error).slice(0,240); }
+          result.overall_ok = result.worker.ok && result.database.ok && result.telegram.ok &&
+            result.webhook.matches_expected && result.webhook_secret_configured &&
+            (!result.group.id || result.group.bot_is_admin);
+          return json(result, 200, origin);
+        }
+        if (path === "/api/admin/webhook-reconnect" && method === "POST") {
+          const secret = String(env.TELEGRAM_WEBHOOK_SECRET || "");
+          if (!secret) return json({ ok: false, error: "TELEGRAM_WEBHOOK_SECRET не настроен в Worker." }, 503, origin);
+          if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) return json({ ok: false, error: "TELEGRAM_WEBHOOK_SECRET содержит символы, которые Telegram не принимает. Задайте новый секрет в Cloudflare." }, 409, origin);
+          const webhookUrl = new URL("/api/telegram/webhook", request.url).toString();
+          try {
+            await telegram(env, "setWebhook", {
+              url: webhookUrl,
+              secret_token: secret,
+              allowed_updates: ["message","edited_message","callback_query","pre_checkout_query"],
+              drop_pending_updates: false,
+              max_connections: 40
+            });
+            const info = await telegram(env, "getWebhookInfo", {});
+            const matches = info.url === webhookUrl;
+            if (await tableExists(env, "admin_action_log")) {
+              await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
+                .bind(telegramId,"telegram_webhook_reconnected",JSON.stringify({url:webhookUrl,matches_expected:matches,pending_update_count:Number(info.pending_update_count||0)})).run();
+            }
+            return json({
+              ok: matches,
+              url: info.url || null,
+              matches_expected: matches,
+              pending_update_count: Number(info.pending_update_count || 0),
+              last_error_message: info.last_error_message || null,
+              allowed_updates: Array.isArray(info.allowed_updates) ? info.allowed_updates : [],
+              message: matches ? "Webhook зарегистрирован и проверен." : "Telegram вернул другой адрес webhook."
+            }, matches ? 200 : 502, origin);
+          } catch (error) {
+            return json({ ok: false, error: String(error.message || error).slice(0,500) }, 502, origin);
+          }
+        }
+
         if (path === "/api/admin/staff" && method === "GET") {
           const rows = await env.DB.prepare("SELECT s.telegram_id,s.role,s.permissions_json,s.status,s.created_at,s.updated_at,u.username,u.first_name FROM admin_staff s LEFT JOIN users u ON u.telegram_id=s.telegram_id ORDER BY s.created_at DESC").all();
           return json({ ok: true, staff: rows.results || [], permission_keys: ADMIN_PERMISSION_KEYS }, 200, origin);
