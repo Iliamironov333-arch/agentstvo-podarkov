@@ -2287,7 +2287,7 @@ export default {
 
       if (path === "/api/craft/create" && method === "POST") {
         const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
-        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>1500))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
+        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           const result=await createCraftAnswer(env,messages);
@@ -2302,9 +2302,9 @@ export default {
               estimatedStars=estimate.price_stars;
               const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
               const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-              const details={source:"miniapp_workshop",summary:result.reply,messages:messages.filter(m=>m.role==="user").map(m=>m.content),conversation:messages,owner_messages:[],estimate_note:estimate.note};
+              const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-16).map(m=>({role:m.role,content:String(m.content||"").slice(0,350)})),owner_messages:[],estimate_note:String(estimate.note||"").slice(0,180)};
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'review')")
-                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details).slice(0,12000),estimatedStars).run();
+                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
               await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-МАСТЕРСКОЙ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
             } else {
               draftId=existing.id;
