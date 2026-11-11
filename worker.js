@@ -181,9 +181,14 @@ async function ensureUser(env, user) {
     .bind(String(user.id), user.username || null, user.first_name || null).run();
 }
 async function notifyOwner(env, message) {
+  const textMessage=String(message||"").slice(0,3900);
+  try{
+    const title=textMessage.split("\n")[0].slice(0,180)||"Уведомление Агентства";
+    await env.DB.prepare("INSERT INTO admin_notifications(type,title,body,reference_id) VALUES('agency',?,?,NULL)").bind(title,textMessage.slice(0,3000)).run();
+  }catch(error){console.error("Mini App owner notification failed:",String(error).slice(0,250));}
   if (!env.ADMIN_TELEGRAM_ID || !env.BOT_TOKEN) return;
   try {
-    await telegram(env, "sendMessage", { chat_id: env.ADMIN_TELEGRAM_ID, text: message });
+    await telegram(env, "sendMessage", { chat_id: env.ADMIN_TELEGRAM_ID, text: textMessage });
   } catch (error) { console.error("Owner notification failed:", String(error)); }
 }
 async function deliverOrderImages(env, orderId, telegramId) {
