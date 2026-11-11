@@ -800,6 +800,8 @@ export default {
     if (method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
     try {
       if (path === "/api/health" && method === "GET") {
+        try { await syncTelegramWebhook(env); }
+        catch (error) { console.error("Telegram webhook health sync failed:", String(error).slice(0,500)); }
         return json({ ok: true, service: "agentstvo-podarkov-api",
           databaseConfigured: !!env.DB, botConfigured: !!env.BOT_TOKEN }, 200, origin);
       }
