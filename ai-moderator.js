@@ -654,8 +654,9 @@ async function handleAiTelegramUpdate(update, env) {
     const existingWatch=moderationActive ? await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first() : null;
     if(existingWatch) await aiLog(env,{chat_id:chatId,actor:user.id,target:user.id,type:"watched_message",details:{message_id:message.message_id}});
     const replied=message.reply_to_message?.from?.is_bot===true;
+    const mentionedBot=(message.entities||[]).some(entity=>entity.type==="text_mention"&&entity.user?.is_bot) || (!!env.BOT_USERNAME&&new RegExp("@"+String(env.BOT_USERNAME).replace(/^@/,""),"i").test(text));
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || !!activeGroupOrder;
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder;
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
