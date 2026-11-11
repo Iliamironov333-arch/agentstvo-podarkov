@@ -553,6 +553,14 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
   <div id="adminStaffList"></div>
   <div id="adminStaffPermissionEditor" class="admin-user-detail hidden"></div>
  </div>
+ <div class="panel" id="adminServerDiagnosticsPanel">
+  <div class="sectionhead"><h3>🔌 Проверка сервера и Telegram</h3><button class="secondary" type="button" onclick="loadAdminServerDiagnostics()">↻ Проверить всё</button></div>
+  <p class="muted">Автоматическая проверка Worker, D1, Telegram Bot API, регистрации webhook и доступа бота к подключённой группе. Секреты не показываются.</p>
+  <div id="adminServerDiagnosticsStatus" class="notice" aria-live="polite">Ожидает проверки…</div>
+  <div id="adminServerDiagnosticsResults"></div>
+  <div class="row-actions"><button class="primary" type="button" id="adminWebhookReconnectButton" onclick="reconnectAdminWebhook()">Переподключить webhook</button><button class="secondary" type="button" onclick="loadAdminServerDiagnostics()">Повторить диагностику</button></div>
+  <p class="notice">Переподключение сохраняет очередь ожидающих обновлений Telegram. Оно не удаляет данные, заказы или платежи.</p>
+ </div>
  <div class="sectionhead"><h3>Обзор Агентства</h3><button class="secondary" type="button" id="adminRefreshBtn" onclick="loadAdminDashboard()">↻ Обновить</button></div>
  <div class="admin-metrics" id="adminMetrics">
   <div class="admin-metric"><span>Пользователи</span><strong id="adminUsers">—</strong></div>
@@ -915,21 +923,22 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['system','🛡️ Система','Резервные копии и диагностика']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook'],['system','🛡️ Система','Переключатели и журнал ошибок']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
   const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
  });
  hero.after(nav);
- let anchor=nav;for(const key of ['store','cheats','operations','ai','aiorders','reports','system']){anchor.after(sections[key]);anchor=sections[key];}
+ let anchor=nav;for(const key of ['store','cheats','operations','ai','aiorders','reports','server','system']){anchor.after(sections[key]);anchor=sections[key];}
  const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
  const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
  original.forEach(node=>{
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
-  else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||txt.includes('Защищённый доступ'))key='system';
+  else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
+  else if(txt.includes('Защищённый доступ'))key='system';
   sections[key].appendChild(node);
  });
  // Гарантируем, что сезонное оформление попадёт именно в раздел «Чит-панель».
@@ -1020,7 +1029,7 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCra
  if (id === 'vipSupportView') refreshVipHelpCard();
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView') loadAnnouncements();
 }
 
@@ -1374,6 +1383,45 @@ async function loadAdminBackupStatus(){
   });
   status.append(label,code,copy);
  }catch(e){status.textContent=e.message||'Не удалось проверить Time Travel.';}
+ finally{if(button)button.disabled=false;}
+}
+
+async function loadAdminServerDiagnostics(){
+ const status=document.getElementById('adminServerDiagnosticsStatus'),root=document.getElementById('adminServerDiagnosticsResults');
+ if(!status||!root)return;
+ status.textContent='Проверяем Worker, D1, Telegram и webhook…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/server-diagnostics');
+  const checks=[
+   ['Cloudflare Worker',data.worker?.ok?'Доступен':'Проблема: '+(data.worker?.error||'нет ответа'),!!data.worker?.ok],
+   ['База D1',data.database?.ok?'Подключена':'Ошибка: '+(data.database?.error||'нет соединения'),!!data.database?.ok],
+   ['Telegram Bot API',data.telegram?.ok?'Доступен'+(data.telegram.username?' · @'+data.telegram.username:''):'Ошибка: '+(data.telegram?.error||'нет ответа'),!!data.telegram?.ok],
+   ['Webhook URL',data.webhook?.matches_expected?'Совпадает с адресом Worker':(data.webhook?.url?'Другой адрес: '+data.webhook.url:'Не зарегистрирован'),!!data.webhook?.matches_expected],
+   ['Доставка Telegram',data.webhook?.last_error_message?'Последняя ошибка: '+data.webhook.last_error_message:(Number(data.webhook?.pending_update_count||0)>0?'Ожидают обработки: '+data.webhook.pending_update_count:'Нет зарегистрированных ошибок'),!data.webhook?.last_error_message],
+   ['Секрет webhook',data.webhook_secret_configured?'Задан в Worker; Telegram не раскрывает его значение':'Не задан в Worker',!!data.webhook_secret_configured],
+   ['Группа',data.group?.id?(data.group.bot_is_admin?'Бот администратор · ':'Бот не администратор · ')+data.group.id:(data.group?.error||'ID группы пока не записан'),!!data.group?.bot_is_admin]
+  ];
+  checks.forEach(([label,value,ok])=>{
+   const row=document.createElement('div');row.className='lineitem';
+   const left=document.createElement('span');left.textContent=label;
+   const right=document.createElement('b');right.textContent=value;right.style.color=ok?'var(--green)':'var(--red)';
+   row.append(left,right);root.append(row);
+  });
+  const meta=document.createElement('p');meta.className='notice';
+  meta.textContent='Проверено: '+formatDate(data.checked_at)+' · Ожидающие обновления: '+Number(data.webhook?.pending_update_count||0)+' · Разрешённые типы: '+(data.webhook?.allowed_updates||[]).join(', ');
+  root.append(meta);
+  status.textContent=data.overall_ok?'Все основные проверки пройдены.':'Есть проблемы — смотри строки выше. Нажми «Переподключить webhook», если адрес или регистрация webhook не совпадают.';
+ }catch(e){status.textContent=e.message||'Не удалось выполнить диагностику.';}
+}
+async function reconnectAdminWebhook(){
+ const button=document.getElementById('adminWebhookReconnectButton'),status=document.getElementById('adminServerDiagnosticsStatus');
+ if(!confirm('Зарегистрировать webhook Telegram на адрес текущего Cloudflare Worker? Ожидающие обновления сохранятся.'))return;
+ if(button)button.disabled=true;if(status)status.textContent='Переподключаем webhook…';
+ try{
+  const data=await apiFetch('/api/admin/webhook-reconnect',{method:'POST',body:JSON.stringify({})});
+  if(status)status.textContent=data.ok?'Webhook зарегистрирован и проверен.':'Telegram не подтвердил регистрацию: '+(data.error||'неизвестная ошибка');
+  await loadAdminServerDiagnostics();
+ }catch(e){if(status)status.textContent=e.message||'Не удалось переподключить webhook.';}
  finally{if(button)button.disabled=false;}
 }
 
