@@ -1335,6 +1335,22 @@ export default {
           }
           const final=await env.DB.prepare("SELECT payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(id,String(c.telegram_id)).first();
           const due=Math.max(0,price-Number(final?.balance_applied_stars||0));
+          let invoiceUrl="";
+          if(due>0){
+            const payload="custom_order_"+makeId();
+            await env.DB.prepare("INSERT INTO payment_intents (payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES (?,?,'order',?,?,0,NULL,'pending')")
+              .bind(payload,String(c.telegram_id),id,due).run();
+            try{
+              invoiceUrl=await createInvoice(env,"Индивидуальный заказ","Оплата индивидуальной работы Агентства подарков",payload,due);
+              await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Ваша индивидуальная работа согласована!\n\n"+c.subject+"\nИтоговая цена: "+price+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось оплатить: "+due+" ⭐. Нажмите кнопку ниже для оплаты.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
+            }catch(error){
+              await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(payload).run();
+              console.error("Custom order invoice delivery failed:",String(error).slice(0,250));
+              throw new Error("Цена сохранена, но не удалось отправить счёт покупателю. Повторите подтверждение цены.");
+            }
+          } else {
+            await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Ваша индивидуальная работа полностью оплачена с внутреннего баланса. Заказ передан владельцу Агентства подарков."});
+          }
           await notifyOwner(env,"🎨 Цена индивидуального заказа назначена\nID: "+id+"\nПокупатель: "+c.telegram_id+"\nИтог: "+price+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось: "+due+" ⭐");
           try{await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Агентство подарков\n\nИтоговая стоимость индивидуальной работы: "+price+" ⭐.\n"+(due===0?"Заказ полностью оплачен с внутреннего баланса.":"Списано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐. Осталось оплатить: "+due+" ⭐. Откройте Mini App → Заказы → Оплатить.")});}catch(e){console.error("Custom price notification failed:",String(e).slice(0,250));}
           return json({ok:true,order_id:id,price_stars:price,payment_status:final?.payment_status,balance_used_stars:Number(final?.balance_applied_stars||0),invoice_amount_stars:due},200,origin);
@@ -2018,6 +2034,10 @@ export default {
         const estimate=await estimateCustomOrderPrice(env,{style:a.style,subject,format:a.format,palette:a.palette,materials,complexity:a.complexity,deadline:a.deadline,wishes,budget_rub:Number.isFinite(Number(a.budget_rub))&&Number(a.budget_rub)>0?Math.min(1000000,Number(a.budget_rub)):null},fallbackStars);
         const total=estimate.price_stars,saved=JSON.stringify({style:a.style,subject,format:a.format,palette:a.palette,materials,complexity:a.complexity,deadline:a.deadline,wishes,ai_estimate_stars:total,ai_estimate_source:estimate.source,ai_estimate_note:estimate.note});
         await env.DB.prepare("INSERT INTO custom_orders (id,telegram_id,username,first_name,subject,answers_json,total_stars,status) VALUES (?,?,?,?,?,?,?,'new')").bind(id,telegramId,user.username||null,user.first_name||null,subject,saved,total).run();
+        // Опрос «Создать своё» сразу создаёт запись в обычных заказах.
+        // Владелец позже сможет изменить цену в админ-панели и выставить счёт.
+        await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,balance_applied_stars) VALUES (?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',0)")
+          .bind(id,telegramId,"Индивидуальная работа: "+subject,total,total).run();
         const L={style:{classic:"Классический",watercolor:"Акварельный",perspective:"С перспективой",autumn:"Осенний",realistic:"Реалистичный",artist_choice:"На усмотрение художника"},format:{postcard:"Открытка",a5:"А5",a4:"А4",large:"Большой формат"},palette:{natural:"Естественная",bright:"Яркая",pastel:"Пастельная",custom:"На усмотрение художника"},materials:{watercolor:"Акварель",gouache:"Гуашь",pastel:"Пастель",pencils:"Цветные карандаши",markers:"Фломастеры",liners:"Линеры"},complexity:{simple:"Простая",medium:"Средняя",detailed:"Высокая"},deadline:{standard:"Обычный срок",priority:"Приоритетный заказ"}};
         await notifyOwner(env,"🎨 НОВЫЙ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+id+"\nПокупатель: "+(user.first_name||"Без имени")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\nЧто изобразить: "+subject+"\nСтиль: "+L.style[a.style]+"\nФормат: "+L.format[a.format]+"\nЦвета: "+L.palette[a.palette]+"\nМатериалы: "+materials.map(x=>L.materials[x]).join(", ")+"\nСложность: "+L.complexity[a.complexity]+"\nСрок: "+L.deadline[a.deadline]+"\nПожелания: "+(wishes||"Не указаны")+"\n\nПредварительная оценка ИИ: "+total+" ⭐. "+estimate.note+"\nОкончательную цену подтверждает владелец.");
         return json({ok:true,order_id:id,total_stars:total,estimate_source:estimate.source,estimate_note:estimate.note,status:"new"},200,origin);
@@ -2273,8 +2293,39 @@ export default {
         const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
         if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>1500))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
-        try{const result=await createCraftAnswer(env,messages);return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used},200,origin);}
-        catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
+        try{
+          const result=await createCraftAnswer(env,messages);
+          let draftId=null,estimatedStars=0;
+          if(result.ready){
+            draftId=String(b.conversation_id||"");
+            if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
+            const existing=await env.DB.prepare("SELECT id,telegram_id,status FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+            if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
+            if(!existing){
+              const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
+              estimatedStars=estimate.price_stars;
+              const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
+              const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
+              const details={source:"miniapp_workshop",summary:result.reply,messages:messages.filter(m=>m.role==="user").map(m=>m.content),conversation:messages,owner_messages:[],estimate_note:estimate.note};
+              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'review')")
+                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details).slice(0,12000),estimatedStars).run();
+              await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-МАСТЕРСКОЙ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
+            } else {
+              draftId=existing.id;
+              const row=await env.DB.prepare("SELECT estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+              estimatedStars=Number(row?.estimated_stars||0);
+            }
+          }
+          return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
+        }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
+      }
+      if (path === "/api/craft/messages" && method === "GET") {
+        const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
+        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
+        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],status:draft.status},200,origin);
       }
       if (path === "/api/vip/support" && method === "POST") {
         const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
