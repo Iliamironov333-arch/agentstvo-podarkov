@@ -2323,6 +2323,21 @@ export default {
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
       }
+      if (path === "/api/craft/messages" && method === "POST") {
+        const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
+        if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
+        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
+        details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+        details.conversation.push({role:"user",content:message});
+        details.conversation=details.conversation.slice(-16);
+        details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-8):[];
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
+        await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
+        return json({ok:true,conversation:details.conversation},200,origin);
+      }
       if (path === "/api/vip/support" && method === "POST") {
         const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
         if(!vip)return json({error:"VIP-помощь доступна только при действующей VIP-подписке."},403,origin);
