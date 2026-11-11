@@ -452,7 +452,7 @@ async function handleAiTelegramUpdate(update, env) {
   if(isOwner) {
     const ownerText=aiText(message);
     // Упоминание бота в сообщении для клиентов не является обращением к ИИ.
-    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\s*\\/ask(?:@[\w]+)?(?:\s|$)/i.test(ownerText);
+    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\s*\/ask(?:@[\w]+)?(?:\s|$)/i.test(ownerText);
     if(!addressedDirectly) {
       await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
       return true;
