@@ -294,14 +294,14 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
   const lower=String(text||"").toLowerCase().trim();
   const explicit=/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить)/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
-  if(active && (/^(?:кстати|другой вопрос|сменим тему|теперь другой вопрос)\\b/i.test(lower) || /^(?:а\\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\\b/i.test(lower) && /[?？]/.test(text))){
+  if(active && (/^(?:кстати|другой вопрос|сменим тему|теперь другой вопрос|а теперь|не по теме|давай поговорим|расскажи мне|хочу обсудить)\b/i.test(lower) || /^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower) && /[?？]/.test(text))){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_paused_topic_change",details:{draft_id:active.id}});
     return false;
   }
   if(!active&&!explicit)return false;
   if(!settings.ai_orders){
-    await aiGroupReply(env,chatId,user.id,"Я с удовольствием помогу разобраться с идеей и каталогом. Оформление заказов через группу сейчас отключено; можно воспользоваться Mini App → «Создать своё».",replyToMessageId);
+    await aiGroupReply(env,chatId,user.id,"Я могу помочь сориентироваться по каталогу и возможностям Агентства. Сбор заказов в этой группе сейчас отключён.",replyToMessageId);
     return true;
   }
   let details={};if(active){try{details=JSON.parse(active.details_json||"{}");}catch{}}
@@ -808,10 +808,8 @@ async function handleAiScheduled(env) {
   for(const row of reminders.results||[]){
     try{await aiTelegram(env,"sendMessage",{chat_id:row.chat_id,text:"Напоминание: счёт за Ваш индивидуальный заказ «"+row.subject+"» ожидает оплаты."});await env.DB.prepare("UPDATE ai_order_drafts SET reminder_sent_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.id).run();}catch(error){await aiNotifyOwner(env,"Не удалось отправить напоминание по ИИ-заказу "+row.id+": "+String(error).slice(0,200));}
   }
-  const inactive=await env.DB.prepare("SELECT id,chat_id,telegram_id,subject FROM ai_order_drafts WHERE status='collecting' AND reminder_sent_at IS NULL AND last_activity_at<=datetime('now','-24 hours') LIMIT 25").all();
-  for(const row of inactive.results||[]){
-    try{await aiTelegram(env,"sendMessage",{chat_id:row.chat_id,text:"Здравствуйте! Хотите продолжить обсуждение Вашего индивидуального заказа «"+row.subject+"»? Я могу помочь уточнить детали."});await env.DB.prepare("UPDATE ai_order_drafts SET reminder_sent_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.id).run();}catch{}
-  }
+  // Не отправляем клиентам инициативные напоминания о продолжении оформления заказа.
+  await env.DB.prepare("UPDATE ai_order_drafts SET reminder_sent_at=CURRENT_TIMESTAMP WHERE status='collecting' AND reminder_sent_at IS NULL AND last_activity_at<=datetime('now','-24 hours')").run();
 }
 async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,permissions) {
   const ownerOnly = () => rootOwner === true;
