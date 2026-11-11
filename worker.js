@@ -417,12 +417,27 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   }
 }
 
+async function getGlobalAiToneInstruction(env){
+ try{
+  const row=await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
+  const saved=JSON.parse(row?.settings_json||"{}");
+  const tone=saved.global_tone||"respectful";
+  const map={
+   friendly:"Общий тон Агентства: дружелюбный, живой и поддерживающий, без фамильярности.",
+   respectful:"Общий тон Агентства: уважительный, спокойный, ясный и профессиональный.",
+   promotional:"Общий тон Агентства: мягко-рекламный, показывай полезные возможности и идеи без давления и навязывания покупки.",
+   creative:"Общий тон Агентства: творческий и вдохновляющий, предлагай интересные формулировки и идеи, не выдумывая факты."
+  };
+  return map[tone]||map.respectful;
+ }catch{return "Общий тон Агентства: уважительный, спокойный и ясный.";}
+}
 async function createCraftAnswer(env,messages){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
  const questionsUsed=Math.max(0,assistantTurns-1);
  const forceFinal=questionsUsed>=16;
  const instructions=[
+  await getGlobalAiToneInstruction(env),
   "Ты — консультант по индивидуальным заказам Агентства подарков. Твоя задача — помочь клиенту выбрать и заказать готовую авторскую работу у Агентства, а НЕ научить клиента делать поделку самостоятельно.",
   "Главная цель диалога: понять задумку и бюджет клиента, предложить подходящие варианты готовых работ, рассчитать предварительную стоимость заказа и подготовить понятное резюме для владельца.",
   "Сначала уточни идею, для кого подарок и по какому поводу. Затем последовательно уточни бюджет только в рублях, размер, стиль, желаемые цвета, материалы/технику, уровень детализации, важные элементы и желаемый срок. Не спрашивай, в какой валюте считать, и не предлагай выбирать между рублями и Telegram Stars: бюджет индивидуальной работы обсуждается в рублях. Не задавай вопрос, если ответ уже есть в переписке.",
@@ -446,7 +461,7 @@ async function createCraftAnswer(env,messages){
  return {reply:a,ready,questions_used:questionsUsed};
 }
 async function createVipSupportAnswer(env,message){
- const instructions=["Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
+ const instructions=[await getGlobalAiToneInstruction(env),"Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
  const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:1000})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("VIP support failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("VIP-помощь временно недоступна.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
