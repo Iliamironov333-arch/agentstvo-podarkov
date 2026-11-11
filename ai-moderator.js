@@ -293,7 +293,8 @@ function aiToneInstruction(tone){
 async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' AND last_activity_at>=datetime('now','-30 minutes') ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
   const lower=String(text||"").toLowerCase().trim();
-  const explicit=/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить)/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
+  const orientationQuestion=/^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower)&&/[?？]/.test(text);
+  const explicit=!orientationQuestion&&/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить|(?:оформи(?:те)?|закажи(?:те)?)\s+(?:мне\s+)?(?:этот\s+)?заказ|мне\s+(?:нужно|надо)\s+(?:оформить|заказать)|я\s+решил(?:а)?\s+(?:оформить|заказать))/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
   if(active && (/^(?:кстати|другой вопрос|сменим тему|теперь другой вопрос|а теперь|не по теме|давай поговорим|расскажи мне|хочу обсудить|привет|здравствуйте|добрый день|добрый вечер|спасибо|пока|как дела)\b/i.test(lower) || /^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower) && /[?？]/.test(text))){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_paused_topic_change",details:{draft_id:active.id}});
