@@ -253,7 +253,15 @@ async function aiInspectText(env,text,settings){
 function aiAgencyIntent(text) {
   return /(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|сделать для меня)/i.test(text);
 }
-function aiOrderIntent(text) { return /(хочу|можно|могу|можете|нужно|надо|закаж|куп|оформ).{0,70}(заказ|подар|работ|товар|открытк|рисунок|поделк)|заказать|оформить заказ|хочу приобрести|хочу купить|купить товар|купить работу/i.test(text); }
+function aiOrderIntent(text) {
+  const value=String(text||"").trim();
+  if(!value)return false;
+  if(/\\bбот\\b.{0,100}\\b(поможет|помогу|помогает|предложит|подскажет)\\b/i.test(value))return false;
+  if(/(напишите|обратитесь|скажите|задайте|переходите|откройте).{0,100}(боту|помощник|каталог|мини-?приложени)/i.test(value))return false;
+  if(/(бот|помощник).{0,100}(можете|можно|поможет|помогу).{0,60}(оформить|заказать|купить)/i.test(value))return false;
+  return /(?:^|[.!?]\\s*)(?:я\\s+)?(?:хочу|мне\\s+(?:нужен|нужна|нужно|нужны)|мне\\s+бы\\s+хотелось|можно\\s+мне|оформите\\s+мне|закажите\\s+мне|подберите\\s+мне|ищу\\s+себе).{0,100}(?:заказ|подар|товар|работ|открытк|рисунок|поделк|купить|заказать|оформить)/i.test(value)
+    || /(?:^|[.!?]\\s*)(?:хочу\\s+заказать|хочу\\s+купить|хочу\\s+приобрести|заказать\\s+для\\s+себя|купить\\s+для\\s+себя)/i.test(value);
+}
 async function aiGroupReply(env,chatId,userId,text){
   const settings=await aiSettings(env);
   const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId)).first();
@@ -269,14 +277,19 @@ async function aiReplyToGroup(env, chatId, user, text, settings) {
   const products = await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
   const catalog = (products.results || []).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
   const instructions = [
-    "Вы — официальный ИИ-помощник «Агентства подарков». Отвечайте исключительно по вопросам этого Агентства.",
-    "Всегда обращайтесь к человеку на «Вы». Никогда не используйте «ты», фамильярность или сленг.",
+    "Вы — живой, внимательный и компетентный ИИ-помощник «Агентства подарков». Не превращайте каждое упоминание подарков или заказа в продажу.",
+    "Всегда обращайтесь к клиенту на «Вы», но говорите естественно, тепло и разнообразно. Не повторяйте одну и ту же заготовку в каждом ответе.",
+    "Подбирайте форму ответа по ситуации: иногда коротко и по делу, иногда с пояснением, иногда с дружелюбным вопросом или лёгкой уместной шуткой. Не шутите в жалобах, спорах и вопросах оплаты.",
+    "Добавляйте обычно 1–2 подходящих эмодзи, если они уместны (например 🎁 😊 ✨). Не ставьте эмодзи в каждое предложение.",
+    "Не будьте бездумно покладистым: анализируйте смысл и контекст, мягко исправляйте неверные предположения и задавайте уточняющие вопросы, если запрос неоднозначен. Не соглашайтесь с тем, что противоречит фактам или правилам Агентства.",
+    "Сначала определите, кто и к кому обращается. Если человек рассказывает другим, что «бот поможет вам», рекламирует возможности помощника, цитирует текст или обсуждает работу бота, это НЕ запрос на покупку и НЕ просьба оформить заказ.",
+    "Не считайте слова «бот», «подарок», «заказ» или «купить» сами по себе намерением клиента заказать товар. Для запуска заказа должно быть ясно, что сам автор хочет приобрести или оформить что-то для себя.",
     "Используйте только переданные сведения каталога и переписки. Не придумывайте цены, наличие, сроки, статус заказа, оплату и условия.",
     "Если точного ответа нет в каталоге или данных недостаточно, не угадывайте: needs_owner=true и сообщите, что уточните информацию у владельца.",
     "Предлагайте только действительно подходящие товары. Не называйте товары похожими, если они отличаются по ключевым пожеланиям клиента.",
-    "Если человек хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
+    "Если человек явно хочет индивидуальный заказ, задайте один самый полезный уточняющий вопрос. Не утверждайте, что заказ уже оформлен.",
     "Не отвечайте на вопросы, не относящиеся к Агентству. Если сообщение не связано с Агентством, верните ignore=true; бот должен промолчать.",
-    "Верните только JSON вида {\"answer\":\"готовый ответ клиенту на русском языке\",\"needs_owner\":true или false,\"ignore\":true или false}."
+    "Верните только JSON вида {\\"answer\\":\\"готовый ответ клиенту на русском языке\\",\\"needs_owner\\":true или false,\\"ignore\\":true или false}."
   ];
   if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
   const instructionText=instructions.join("\n");
@@ -528,10 +541,17 @@ async function handleAiTelegramUpdate(update, env) {
   if(message.pinned_message){await aiLog(env,{chat_id:chatId,actor:user.id,type:"message_pinned",details:{message_id:message.pinned_message.message_id}});return true;}
   await aiRememberMember(env,chatId,user);
   const settings=await aiSettings(env);
-  const isOwner=!!env.ADMIN_TELEGRAM_ID && String(user.id)===String(env.ADMIN_TELEGRAM_ID);
+  let isOwner=!!env.ADMIN_TELEGRAM_ID && String(user.id)===String(env.ADMIN_TELEGRAM_ID);
+  if(!isOwner) {
+    try {
+      const member=await aiTelegram(env,"getChatMember",{chat_id:chatId,user_id:Number(user.id)});
+      isOwner=member?.status==="creator";
+    } catch {}
+  }
   if(isOwner) {
     const ownerText=aiText(message);
-    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\\s*(?:бот|ии|ассистент|помощник)(?:[,:!?.\\s]|$)/i.test(ownerText) || /^\\s*\\//.test(ownerText);
+    // Упоминание бота в сообщении для клиентов не является обращением к ИИ.
+    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\\s*\\/ask(?:@[\\w]+)?(?:\\s|$)/i.test(ownerText);
     if(!addressedDirectly) {
       await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
       return true;
