@@ -2326,7 +2326,6 @@ async function loadCraftConversation(){
 function resetCraftConversation(){
  if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
  craftDraftId=newCraftId();craftOwnerMessages=[];
- try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
  craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
  craftQuestionCount=0;craftConversationReady=false;
  const panel=document.getElementById('craftResultPanel');if(panel)panel.classList.add('hidden');
@@ -2345,7 +2344,7 @@ async function sendCraftMessage(){
  try{
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   craftMessages.push({role:'assistant',content:d.reply||'Помощник не вернул сообщение.'});
-  if(d.ready){craftConversationReady=true;craftDraftId=d.draft_id||craftDraftId;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предложение сохранено и передано владельцу. Итоговую цену можно будет увидеть после согласования.';startCraftPolling();}
+  if(d.ready){craftConversationReady=true;craftDraftId=d.draft_id||craftDraftId;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предложение сохранено и передано владельцу. Предварительная оценка ИИ: '+Number(d.estimated_stars||0)+' ⭐. Владелец может изменить итоговую цену перед отправкой счёта.';startCraftPolling();}
   else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();
  }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуйте ещё раз.';input.value=message;}
