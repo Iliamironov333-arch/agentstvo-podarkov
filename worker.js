@@ -800,10 +800,17 @@ export default {
     if (method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
     try {
       if (path === "/api/health" && method === "GET") {
+        let webhookSync = "ok";
+        let webhookSyncError = null;
         try { await syncTelegramWebhook(env); }
-        catch (error) { console.error("Telegram webhook health sync failed:", String(error).slice(0,500)); }
+        catch (error) {
+          webhookSync = "failed";
+          webhookSyncError = String(error).slice(0,500);
+          console.error("Telegram webhook health sync failed:", webhookSyncError);
+        }
         return json({ ok: true, service: "agentstvo-podarkov-api",
-          databaseConfigured: !!env.DB, botConfigured: !!env.BOT_TOKEN }, 200, origin);
+          databaseConfigured: !!env.DB, botConfigured: !!env.BOT_TOKEN,
+          webhookSync, webhookSyncError }, 200, origin);
       }
       if (path === "/api/telegram/webhook" && method === "POST") {
         if (!env.DB || !env.BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) return json({ error: "Webhook is not configured" }, 500, origin);
