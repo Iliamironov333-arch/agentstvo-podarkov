@@ -915,6 +915,19 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-orders" && method==="POST") {
     if(!has("ai_orders_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
+    if(body.action==="reply_workshop") {
+      const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,3000);
+      if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
+      const draft=await env.DB.prepare("SELECT id,telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('review','approved','paid')").bind(id).first();
+      if(!draft)return aiJson({error:"Диалог мастерской не найден."},404);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      if(details.source!=="miniapp_workshop")return aiJson({error:"Ответы через мастерскую доступны только для заказов из ИИ-мастерской."},400);
+      details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
+      details.owner_messages.push({content:reply,created_at:new Date().toISOString(),sender:"owner"});
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,12000),id).run();
+      await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_workshop_owner_reply",details:{draft_id:id,characters:reply.length}});
+      return aiJson({ok:true});
+    }
     if(body.action==="update_after_approval") {
       const id=String(body.id||"");
       const draft=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('approved','paid')").bind(id).first();
