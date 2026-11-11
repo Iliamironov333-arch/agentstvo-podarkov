@@ -256,11 +256,11 @@ function aiAgencyIntent(text) {
 function aiOrderIntent(text) {
   const value=String(text||"").trim();
   if(!value)return false;
-  if(/\\bбот\\b.{0,100}\\b(поможет|помогу|помогает|предложит|подскажет)\\b/i.test(value))return false;
+  if(/\bбот\b.{0,100}\b(поможет|помогу|помогает|предложит|подскажет)\b/i.test(value))return false;
   if(/(напишите|обратитесь|скажите|задайте|переходите|откройте).{0,100}(боту|помощник|каталог|мини-?приложени)/i.test(value))return false;
   if(/(бот|помощник).{0,100}(можете|можно|поможет|помогу).{0,60}(оформить|заказать|купить)/i.test(value))return false;
-  return /(?:^|[.!?]\\s*)(?:я\\s+)?(?:хочу|мне\\s+(?:нужен|нужна|нужно|нужны)|мне\\s+бы\\s+хотелось|можно\\s+мне|оформите\\s+мне|закажите\\s+мне|подберите\\s+мне|ищу\\s+себе).{0,100}(?:заказ|подар|товар|работ|открытк|рисунок|поделк|купить|заказать|оформить)/i.test(value)
-    || /(?:^|[.!?]\\s*)(?:хочу\\s+заказать|хочу\\s+купить|хочу\\s+приобрести|заказать\\s+для\\s+себя|купить\\s+для\\s+себя)/i.test(value);
+  return /(?:^|[.!?]\s*)(?:я\s+)?(?:хочу|мне\s+(?:нужен|нужна|нужно|нужны)|мне\s+бы\s+хотелось|можно\s+мне|оформите\s+мне|закажите\s+мне|подберите\s+мне|ищу\s+себе).{0,100}(?:заказ|подар|товар|работ|открытк|рисунок|поделк|купить|заказать|оформить)/i.test(value)
+    || /(?:^|[.!?]\s*)(?:хочу\s+заказать|хочу\s+купить|хочу\s+приобрести|заказать\s+для\s+себя|купить\s+для\s+себя)/i.test(value);
 }
 async function aiGroupReply(env,chatId,userId,text){
   const settings=await aiSettings(env);
@@ -551,7 +551,7 @@ async function handleAiTelegramUpdate(update, env) {
   if(isOwner) {
     const ownerText=aiText(message);
     // Упоминание бота в сообщении для клиентов не является обращением к ИИ.
-    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\\s*\\/ask(?:@[\\w]+)?(?:\\s|$)/i.test(ownerText);
+    const addressedDirectly=!!message.reply_to_message?.from?.is_bot || /^\s*\\/ask(?:@[\w]+)?(?:\s|$)/i.test(ownerText);
     if(!addressedDirectly) {
       await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
       return true;
