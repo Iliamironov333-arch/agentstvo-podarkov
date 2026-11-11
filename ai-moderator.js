@@ -382,6 +382,10 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}}catch{}
   if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
   if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
+  // Жёсткая страховка от рекламного призыва оформить заказ в обычном ответе.
+  if(/(?:хотите|желаете|давайте|предлагаю|предлагаем|можете|готовы|не хотите)\s+(?:оформить|создать|разместить)\s+(?:заказ|заявку)|(?:закажите|оформите)\s+(?:сейчас|прямо сейчас|у нас)|(?:оставьте|создайте)\s+(?:заявку|заказ)/i.test(answer)){
+    answer="Я могу подсказать, как устроен каталог и какие возможности есть в Агентстве. Если у Вас есть вопрос, с удовольствием помогу разобраться.";
+  }
   let questionId=null;
   if(needsOwner){
     try{const saved=await env.DB.prepare("INSERT INTO ai_owner_questions(chat_id,telegram_id,question) VALUES(?,?,?)").bind(String(chatId),String(user.id),text.slice(0,2000)).run();questionId=saved.meta?.last_row_id||null;}catch{}
