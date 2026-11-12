@@ -2138,8 +2138,12 @@ async function loadAdminOrphanImages(){
  if(!status||!root)return;
  status.textContent='Проверяем Cloudinary и сверяем с каталогом…';root.replaceChildren();
  try{
-  const data=await apiFetch('/api/admin/product-images');
-  const items=Array.isArray(data.orphans)?data.orphans:[];
+  let cursor=null;const items=[];
+  do{
+   const page=await apiFetch('/api/admin/product-images'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
+   if(Array.isArray(page.orphans))items.push(...page.orphans);
+   cursor=page.next_cursor||null;
+  }while(cursor);
   status.textContent=items.length?'Найдено неиспользуемых фотографий: '+items.length:'Неиспользуемых фотографий не найдено.';
   items.forEach(asset=>{
    const row=document.createElement('div');row.className='admin-orphan-row';
