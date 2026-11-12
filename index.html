@@ -2092,7 +2092,12 @@ function selectAdminPhotoBatch(input){
   adminProductsCache.forEach(product=>{
    const option=document.createElement('option');option.value=String(product.id);option.textContent=(product.title||'Без названия')+' · ID '+product.id;select.append(option);
   });
-  select.addEventListener('change',()=>{item.productId=select.value;});
+  select.addEventListener('change',()=>{
+   const next=select.value;
+   if(next&&adminPhotoBatch.some(other=>other!==item&&!other.uploaded&&other.productId===next)){toast('Один товар можно назначить только одной фотографии в этой загрузке.');select.value=item.productId;return;}
+   item.productId=next;
+  });
+  item.meta=meta;
   info.append(name,meta,select);row.append(img,info);list.append(row);
  });
  if(button)button.disabled=!files.length||!adminProductsCache.length;
@@ -2100,9 +2105,9 @@ function selectAdminPhotoBatch(input){
 }
 async function uploadAdminPhotoBatch(){
  const button=document.getElementById('adminPhotoBatchUpload');
- const ready=adminPhotoBatch.filter(item=>item.productId);
+ const ready=adminPhotoBatch.filter(item=>!item.uploaded&&item.productId);
  if(!ready.length){toast('Назначь фотографии товарам.');return;}
- const missing=adminPhotoBatch.length-ready.length;
+ const missing=adminPhotoBatch.filter(item=>!item.uploaded&&!item.productId).length;
  if(missing&&!confirm('У '+missing+' фотографий не выбран товар. Загрузить только назначенные?'))return;
  if(button){button.disabled=true;button.textContent='Загрузка…';}
  let uploaded=0,failed=0;
@@ -2112,19 +2117,20 @@ async function uploadAdminPhotoBatch(){
     const compressed=await prepareAdminProductImage(item.file);
     const form=new FormData();form.append('product_id',item.productId);form.append('image',compressed,'product-image.webp');
     await apiFetch('/api/admin/product-image-upload',{method:'POST',body:form});
+    item.uploaded=true;if(item.meta)item.meta.textContent='Загружено в Cloudinary';
     uploaded++;
-   }catch(error){failed++;console.error('Photo Studio upload failed:',error);}
+   }catch(error){failed++;if(item.meta)item.meta.textContent='Ошибка: '+(error.message||'загрузка не удалась');console.error('Photo Studio upload failed:',error);}
   }
   toast('Загружено: '+uploaded+'. Ошибок: '+failed+'.');
-  if(uploaded){
+  if(uploaded)await loadAdminProducts();
+  if(adminPhotoBatch.length&&adminPhotoBatch.every(item=>item.uploaded)){
    adminPhotoBatch.forEach(item=>{if(item.previewUrl)URL.revokeObjectURL(item.previewUrl);});
    adminPhotoBatch=[];
    const input=document.getElementById('adminPhotoBatchInput');if(input)input.value='';
    document.getElementById('adminPhotoBatchList')?.replaceChildren();
-   await loadAdminProducts();
   }
  }finally{
-  if(button){button.disabled=!adminPhotoBatch.length;button.textContent='Загрузить выбранные фотографии';}
+  if(button){button.disabled=!adminPhotoBatch.some(item=>!item.uploaded&&item.productId);button.textContent='Загрузить выбранные фотографии';}
  }
 }
 async function loadAdminOrphanImages(){
