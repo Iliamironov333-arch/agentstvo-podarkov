@@ -846,6 +846,16 @@ export default {
       if (!path.startsWith("/api/")) return json({ error: "Not found" }, 404, origin);
       if (!env.DB || !env.BOT_TOKEN) return json({ error: "Server is not configured" }, 500, origin);
 
+      const productImageMatch = path.match(/^\\/api\\/product-image\\/([^/]+)$/);
+      if (productImageMatch && method === "GET") {
+        const image = await env.DB.prepare("SELECT mime_type,image_data FROM product_images WHERE product_id=?").bind(decodeURIComponent(productImageMatch[1])).first();
+        if (!image) return json({ error: "Изображение не найдено." }, 404, origin);
+        const binary = atob(image.image_data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        return new Response(bytes, { status: 200, headers: { "Content-Type": image.mime_type, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff", ...corsHeaders(origin) } });
+      }
+
       const user = await validateTelegram(request.headers.get("X-Telegram-Init-Data"), env.BOT_TOKEN);
       if (!user) return json({ error: "Telegram authentication failed. Откройте Mini App через Telegram." }, 401, origin);
       const telegramId = String(user.id);
@@ -1154,6 +1164,24 @@ export default {
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
         }
+        if (path === "/api/admin/product-image-upload" && method === "POST") {
+          const form = await request.formData();
+          const id = typeof form.get("product_id") === "string" ? String(form.get("product_id")).trim().slice(0,100) : "";
+          const file = form.get("image");
+          if (!id || !file || typeof file.arrayBuffer !== "function") return json({error:"Выберите товар и файл изображения."},400,origin);
+          if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
+          if (file.size < 1 || file.size > 900*1024) return json({error:"Размер изображения после сжатия не должен превышать 900 КБ."},413,origin);
+          const product = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
+          if (!product) return json({error:"Сначала сохраните товар."},404,origin);
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          let binary = "";
+          for (let offset=0;offset<bytes.length;offset+=0x8000) binary += String.fromCharCode(...bytes.subarray(offset,Math.min(offset+0x8000,bytes.length)));
+          const encoded = btoa(binary);
+          const imageUrl = new URL("/api/product-image/"+encodeURIComponent(id),request.url).toString();
+          await env.DB.prepare("INSERT INTO product_images (product_id,mime_type,image_data,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id) DO UPDATE SET mime_type=excluded.mime_type,image_data=excluded.image_data,updated_at=CURRENT_TIMESTAMP").bind(id,file.type,encoded).run();
+          await env.DB.prepare("UPDATE products SET image_url=? WHERE id=?").bind(imageUrl,id).run();
+          return json({ok:true,image_url:imageUrl,size_bytes:bytes.length},200,origin);
+        }
         if (path === "/api/admin/product-save" && method === "POST") {
           const body = await readJson(request);
           const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
@@ -1175,6 +1203,7 @@ export default {
             if (!existing) return json({ error: "Товар не найден." }, 404, origin);
             await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=? WHERE id=?")
               .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
+            if (!imageUrl) await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run();
           } else {
             const newId = makeId();
             await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new) VALUES (?,?,?,?,?,?,?,1)")
