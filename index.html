@@ -500,6 +500,12 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 .ai-instructions-card{border-color:#c28b39}
 @media(max-width:420px){.ai-feature-head{grid-template-columns:minmax(0,1fr) 44px auto;gap:6px}.ai-feature-head button{font-size:11px;padding:8px 7px}.ai-two-fields{grid-template-columns:1fr}}
 @media(min-width:650px){.ai-control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-instructions-card{grid-column:1/-1}}
+.work-detail-overlay{position:fixed;inset:0;z-index:9999;background:rgba(20,14,8,.72);display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+.work-detail-overlay.open{display:flex}.work-detail-panel{position:relative;width:min(100%,560px);max-height:min(92vh,900px);overflow:auto;background:var(--panel,#fff);color:var(--text,#24180f);border:1px solid var(--line,#ead9c4);border-radius:24px;padding:18px;box-shadow:0 24px 80px #0005}
+.work-detail-close{position:sticky;top:0;float:right;z-index:2;border:0;border-radius:50%;width:38px;height:38px;background:var(--surface,#f3e7d8);color:inherit;font-size:18px}
+.work-detail-image{clear:both;width:100%;aspect-ratio:4/3;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:8px 0 18px}
+.work-detail-image img{width:100%;height:100%;object-fit:contain}.work-detail-content h2{font-size:24px;margin:0 0 10px}.work-detail-price{font-size:22px;font-weight:800;margin:8px 0 14px}
+.work-detail-description{font-size:15px;line-height:1.65;white-space:pre-wrap;margin:0 0 18px}.product .art img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
 </style>
 </head>
 <body>
@@ -515,7 +521,9 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
  <div class="promo-line">🍂 Скидка 10% на всё — сервер применяет её при создании счёта</div>
 </header>
 <nav id="filters">
- <button class="active" data-filter="all">Все подарки</button>
+ <button class="active" data-filter="all">Все работы</button>
+ <button data-filter="autumn">🍂 Осень</button>
+ <button data-filter="new">✨ Новинки</button>
  <button data-filter="winter">Зима и Новый год</button>
  <button data-filter="art">Картины</button>
  <button data-filter="animals">Животные</button>
@@ -897,7 +905,7 @@ async function loadProducts() {
  try {
   const data = await apiFetch('/api/products');
   if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
-  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null]);
+  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.created_at || null]);
   catalogLoaded = true;
   drawProducts();
   drawCart();
@@ -1074,14 +1082,29 @@ function persistCart() {
 function drawProducts() {
  const root = document.getElementById('products');
  root.innerHTML = '';
- const shown = products.filter(p => activeFilter === 'all' || p[4] === activeFilter);
+ const autumnIds = new Set(['3','22','23','29','33','36','41']);
+ const now = Date.now();
+ const shown = products.filter(p => {
+  if(activeFilter==='all') return true;
+  if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
+  if(activeFilter==='new') {
+   if(!p[7] || !p[8]) return false;
+   const created=Date.parse(String(p[8]).replace(' ','T')+'Z');
+   return Number.isFinite(created) && now-created<=30*24*60*60*1000 && now>=created;
+  }
+  return p[4]===activeFilter;
+ });
  document.getElementById('count').textContent = `${shown.length} работ`;
 
  shown.forEach(p => {
   const qty = Number(cart[p[0]] || 0);
   const el = document.createElement('article');
   el.className = 'product';
-  el.innerHTML = `<div class="art"><span>${p[3]}</span></div><div class="productbody"><h3>${p[1]}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+  el.querySelector('.art').addEventListener('click',()=>openProductDetail(p));
+  el.querySelector('h3').addEventListener('click',()=>openProductDetail(p));
+  el.querySelector('.art').style.cursor='pointer';
+  el.querySelector('h3').style.cursor='pointer';
 
   const buyButton=document.createElement('button');buyButton.type='button';buyButton.className='secondary buy-now';buyButton.textContent='⚡ Купить сразу';buyButton.dataset.productId=String(p[0]);buyButton.disabled=p[2]==null;buyButton.style.cssText='width:100%;margin-top:8px';buyButton.onclick=()=>buyProductNow(p[0]);el.querySelector('.productbody').appendChild(buyButton);
 
@@ -1101,6 +1124,26 @@ function drawProducts() {
  });
 }
 
+function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function openProductDetail(product){
+ let modal=document.getElementById('workDetailModal');
+ if(!modal){
+  modal=document.createElement('div');modal.id='workDetailModal';modal.className='work-detail-overlay';
+  modal.innerHTML='<div class="work-detail-panel" role="dialog" aria-modal="true" aria-label="Страница работы"><button type="button" class="work-detail-close" aria-label="Закрыть">✕</button><div class="work-detail-content"></div></div>';
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
+  modal.querySelector('.work-detail-close').addEventListener('click',()=>modal.classList.remove('open'));
+  document.body.append(modal);
+ }
+ const content=modal.querySelector('.work-detail-content');content.replaceChildren();
+ const image=document.createElement('div');image.className='work-detail-image';
+ if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];image.append(img);}else image.textContent=product[3]||'🎁';
+ const title=document.createElement('h2');title.textContent=product[1];
+ const price=document.createElement('div');price.className='work-detail-price';price.textContent=money(product[2]);
+ const description=document.createElement('p');description.className='work-detail-description';description.textContent=product[6]||'Описание этой работы скоро появится.';
+ const add=document.createElement('button');add.type='button';add.className='primary';add.textContent='Добавить в корзину';add.disabled=product[2]==null;
+ add.addEventListener('click',()=>{cart[product[0]]=Number(cart[product[0]]||0)+1;persistCart();drawProducts();drawCart();modal.classList.remove('open');toast('Работа добавлена в корзину.');});
+ content.append(image,title,price,description,add);modal.classList.add('open');
+}
 function updateDeliveryMethodUI(){
  const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
  const fields=document.getElementById('deliveryAddressFields');
@@ -2496,13 +2539,14 @@ async function openCase() {
 }
 
 updateDeliveryMethodUI();
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+document.querySelectorAll('#filters button[data-filter]').forEach(b => b.onclick = () => {
  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active',x === b));
  activeFilter = b.dataset.filter;
  showView('catalogView');
  drawProducts();
 });
 
+document.addEventListener('keydown',event=>{if(event.key==='Escape')document.getElementById('workDetailModal')?.classList.remove('open')});
 document.addEventListener('click',event=>{
  const orderButton=event.target.closest('button[data-order-action][data-order-id]');
  if(orderButton){const id=orderButton.dataset.orderId;if(orderButton.dataset.orderAction==='pay')payExistingOrder(id);else if(orderButton.dataset.orderAction==='cancel')cancelExistingOrder(id);}
