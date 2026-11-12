@@ -514,7 +514,11 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 .work-detail-close{position:sticky;top:0;float:right;z-index:2;border:0;border-radius:50%;width:38px;height:38px;background:var(--surface,#f3e7d8);color:inherit;font-size:18px}
 .work-detail-image{clear:both;width:100%;aspect-ratio:4/3;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:8px 0 18px}
 .work-detail-image img{width:100%;height:100%;object-fit:contain}.work-detail-content h2{font-size:24px;margin:0 0 10px}.work-detail-price{font-size:22px;font-weight:800;margin:8px 0 14px}
-.work-detail-description{font-size:15px;line-height:1.65;white-space:pre-wrap;margin:0 0 18px}.product .art img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.work-detail-description{font-size:15px;line-height:1.65;white-space:pre-wrap;margin:0 0 18px}
+/* Фото в карточке каталога всегда остаётся внутри компактной области и не растягивает карточку. */
+.product .art{height:112px;min-height:112px;max-height:112px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.product .art img{display:block;width:100%;height:100%;min-height:0;max-height:100%;object-fit:cover;border-radius:0}
+@media(min-width:600px){.product .art{height:140px;min-height:140px;max-height:140px}}
 </style>
 </head>
 <body>
