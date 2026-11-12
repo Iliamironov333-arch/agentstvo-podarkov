@@ -528,6 +528,8 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
  <button data-filter="art">Картины</button>
  <button data-filter="animals">Животные</button>
  <button data-filter="home">Дома и здания</button>
+ <button data-filter="handmade">🎁 Поделки</button>
+ <button data-filter="services">👑 Услуги</button>
 </nav>
 <main>
 <section id="menuView">
@@ -1082,7 +1084,7 @@ function persistCart() {
 function drawProducts() {
  const root = document.getElementById('products');
  root.innerHTML = '';
- const autumnIds = new Set(['3','22','23','29','33','36','41']);
+ const autumnIds = new Set(['3','15','22','23','29','33','36','41','54','72','75']);
  const now = Date.now();
  const shown = products.filter(p => {
   if(activeFilter==='all') return true;
