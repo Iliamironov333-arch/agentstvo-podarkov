@@ -958,14 +958,14 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['operations','📦 Управление','Пользователи, заказы, поддержка и акции'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
   const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
  });
  hero.after(nav);
- let anchor=nav;for(const key of ['store','cheats','operations','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
+ let anchor=nav;for(const key of ['store','photos','cheats','operations','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
  const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
  const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
  original.forEach(node=>{
@@ -976,6 +976,9 @@ function initAdminCategories(){
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
  });
+ // Фотостудия — самостоятельный раздел, не спрятанный внутри панели каталога.
+ const photoStudioPanel=root.querySelector('#adminPhotoStudioPanel');
+ if(photoStudioPanel)sections.photos.appendChild(photoStudioPanel);
  // Гарантируем, что сезонное оформление попадёт именно в раздел «Чит-панель».
  const seasonPanel=root.querySelector('#adminSeasonThemesPanel');
  const cheatHeading=Array.from(root.querySelectorAll('.sectionhead')).find(el=>(el.textContent||'').includes('🎛️ Чит-панель'));
@@ -2292,6 +2295,7 @@ function applyAdminPermissionVisibility(){
  showPanel('#adminBackupPanel',adminHasPermission('backup_manage'));
  showPanel('#adminPromosPanel',adminHasPermission('promos_manage'));
  showPanel('#adminCatalogPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
+ showPanel('#adminPhotoStudioPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
  showPanel('#adminSystemControlsPanel',adminHasPermission('system_manage'));
  showPanel('#adminAnalyticsPanel',adminHasPermission('analytics_view'));
  showPanel('#adminSupportPanel',adminHasPermission('support_view')||adminHasPermission('support_reply'));
