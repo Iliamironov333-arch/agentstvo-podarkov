@@ -238,7 +238,7 @@ async function processPendingOrderPostcards(env, limit = 10) {
 }
 
 async function getProducts(env) {
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER)")
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER)")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
@@ -1177,7 +1177,7 @@ export default {
               .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
           } else {
             const newId = makeId();
-            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active) VALUES (?,?,?,?,?,?,?)")
+            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new) VALUES (?,?,?,?,?,?,?,1)")
               .bind(newId, title, description || null, imageUrl || null, category, price, isActive).run();
             return json({ ok: true, id: newId, created: true }, 201, origin);
           }
