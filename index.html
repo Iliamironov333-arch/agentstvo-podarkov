@@ -649,7 +649,7 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
     <input type="hidden" id="adminProductId">
     <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
     <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
-    <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
+    <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/*" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
     <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
     <datalist id="adminProductCategories"></datalist>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
@@ -2056,7 +2056,7 @@ function setAdminProductImagePreview(url,statusText){
 }
 function previewAdminProductImage(input){
  const file=input?.files?.[0];if(!file)return;
- if(!['image/jpeg','image/png','image/webp'].includes(file.type)){input.value='';toast('Выберите изображение JPG, PNG или WEBP.');return;}
+ if(file.type&&!file.type.startsWith('image/')){input.value='';toast('Выберите файл изображения.');return;}
  if(adminProductPreviewObjectUrl)URL.revokeObjectURL(adminProductPreviewObjectUrl);
  adminProductPreviewObjectUrl=URL.createObjectURL(file);
  setAdminProductImagePreview(adminProductPreviewObjectUrl,file.name+' · выбрано');
