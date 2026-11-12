@@ -1171,16 +1171,34 @@ export default {
           if (!id || !file || typeof file.arrayBuffer !== "function") return json({error:"Выберите товар и файл изображения."},400,origin);
           if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
           if (file.size < 1 || file.size > 900*1024) return json({error:"Размер изображения после сжатия не должен превышать 900 КБ."},413,origin);
+          if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary ещё не подключён: добавьте CLOUDINARY_API_KEY и CLOUDINARY_API_SECRET в секреты Worker."},503,origin);
           const product = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
           if (!product) return json({error:"Сначала сохраните товар."},404,origin);
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          let binary = "";
-          for (let offset=0;offset<bytes.length;offset+=0x8000) binary += String.fromCharCode(...bytes.subarray(offset,Math.min(offset+0x8000,bytes.length)));
-          const encoded = btoa(binary);
-          const imageUrl = new URL("/api/product-image/"+encodeURIComponent(id),request.url).toString();
-          await env.DB.prepare("INSERT INTO product_images (product_id,mime_type,image_data,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id) DO UPDATE SET mime_type=excluded.mime_type,image_data=excluded.image_data,updated_at=CURRENT_TIMESTAMP").bind(id,file.type,encoded).run();
+          const cloudName = "dzdxfmsn";
+          const timestamp = Math.floor(Date.now()/1000);
+          const publicId = "product-" + id;
+          const signatureParams = {folder:"agentstvo-podarkov",overwrite:"true",public_id:publicId,timestamp:String(timestamp)};
+          const signatureText = Object.keys(signatureParams).sort().map(key => key+"="+signatureParams[key]).join("&") + env.CLOUDINARY_API_SECRET;
+          const signatureBytes = await crypto.subtle.digest("SHA-1",new TextEncoder().encode(signatureText));
+          const signature = Array.from(new Uint8Array(signatureBytes)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+          const uploadForm = new FormData();
+          uploadForm.append("file",new Blob([await file.arrayBuffer()],{type:file.type}),file.name || ("product-"+id));
+          uploadForm.append("api_key",env.CLOUDINARY_API_KEY);
+          uploadForm.append("timestamp",String(timestamp));
+          uploadForm.append("public_id",publicId);
+          uploadForm.append("folder","agentstvo-podarkov");
+          uploadForm.append("overwrite","true");
+          uploadForm.append("signature",signature);
+          const cloudResponse = await fetch("https://api.cloudinary.com/v1_1/"+cloudName+"/image/upload",{method:"POST",body:uploadForm});
+          const cloudResult = await cloudResponse.json().catch(()=>({}));
+          if (!cloudResponse.ok || !cloudResult.secure_url) {
+            const reason = String(cloudResult.error?.message || "Cloudinary не принял изображение.").slice(0,240);
+            return json({error:"Ошибка Cloudinary: "+reason},502,origin);
+          }
+          const imageUrl = String(cloudResult.secure_url).replace("/image/upload/","/image/upload/f_auto,q_auto/");
           await env.DB.prepare("UPDATE products SET image_url=? WHERE id=?").bind(imageUrl,id).run();
-          return json({ok:true,image_url:imageUrl,size_bytes:bytes.length},200,origin);
+          try { await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run(); } catch {}
+          return json({ok:true,image_url:imageUrl,size_bytes:Number(cloudResult.bytes||file.size),storage:"cloudinary"},200,origin);
         }
         if (path === "/api/admin/product-save" && method === "POST") {
           const body = await readJson(request);
