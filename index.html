@@ -1101,10 +1101,8 @@ function drawProducts() {
   const el = document.createElement('article');
   el.className = 'product';
   el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
-  el.querySelector('.art').addEventListener('click',()=>openProductDetail(p));
-  el.querySelector('h3').addEventListener('click',()=>openProductDetail(p));
-  el.querySelector('.art').style.cursor='pointer';
-  el.querySelector('h3').style.cursor='pointer';
+  el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
+  el.style.cursor='pointer';
 
   const buyButton=document.createElement('button');buyButton.type='button';buyButton.className='secondary buy-now';buyButton.textContent='⚡ Купить сразу';buyButton.dataset.productId=String(p[0]);buyButton.disabled=p[2]==null;buyButton.style.cssText='width:100%;margin-top:8px';buyButton.onclick=()=>buyProductNow(p[0]);el.querySelector('.productbody').appendChild(buyButton);
 
