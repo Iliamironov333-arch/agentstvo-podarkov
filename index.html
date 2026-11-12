@@ -136,6 +136,7 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 #adminProductEditor label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
 #adminProductEditor input,#adminProductEditor textarea,#adminProductEditor select{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font:inherit}
 #adminProductEditor textarea{resize:vertical;min-height:70px}
+.admin-product-image-preview{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.admin-product-image-preview img{width:88px;height:88px;object-fit:cover;border-radius:10px;background:var(--panel2)}.admin-product-image-preview button{margin-top:7px}
 .admin-product-row-actions button{min-width:76px}
 .admin-order-actions{display:grid;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .admin-order-actions h4{margin:0;color:var(--gold2)}
@@ -648,7 +649,7 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
     <input type="hidden" id="adminProductId">
     <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
     <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
-    <label>Ссылка на фотографию (HTTPS)<input id="adminProductImage" type="url" maxlength="1000" placeholder="https://…"></label>
+    <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
     <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
     <datalist id="adminProductCategories"></datalist>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
@@ -2046,13 +2047,39 @@ async function loadAdminProducts() {
   });
  }catch(error){status.textContent=error.message||'Не удалось загрузить каталог.';}
 }
+let adminProductPreviewObjectUrl=null;
+function setAdminProductImagePreview(url,statusText){
+ const box=document.getElementById('adminProductImagePreviewBox'),img=document.getElementById('adminProductImagePreview'),status=document.getElementById('adminProductImageStatus');
+ if(!box||!img)return;
+ if(url){img.src=url;box.classList.remove('hidden');if(status)status.textContent=statusText||'Текущая фотография';}
+ else{img.removeAttribute('src');box.classList.add('hidden');if(status)status.textContent=statusText||'Фотография не выбрана';}
+}
+function previewAdminProductImage(input){
+ const file=input?.files?.[0];if(!file)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)){input.value='';toast('Выберите изображение JPG, PNG или WEBP.');return;}
+ if(adminProductPreviewObjectUrl)URL.revokeObjectURL(adminProductPreviewObjectUrl);
+ adminProductPreviewObjectUrl=URL.createObjectURL(file);
+ setAdminProductImagePreview(adminProductPreviewObjectUrl,file.name+' · выбрано');
+}
+function clearAdminProductImage(){
+ const input=document.getElementById('adminProductImage');if(input)input.value='';
+ const url=document.getElementById('adminProductImageUrl');if(url)url.value='';
+ if(adminProductPreviewObjectUrl){URL.revokeObjectURL(adminProductPreviewObjectUrl);adminProductPreviewObjectUrl=null;}
+ setAdminProductImagePreview('','Фотография будет удалена при сохранении');
+}
+function resetAdminProductImage(url=''){
+ const input=document.getElementById('adminProductImage');if(input)input.value='';
+ const field=document.getElementById('adminProductImageUrl');if(field)field.value=url||'';
+ if(adminProductPreviewObjectUrl){URL.revokeObjectURL(adminProductPreviewObjectUrl);adminProductPreviewObjectUrl=null;}
+ setAdminProductImagePreview(url,url?'Текущая фотография':'Фотография не выбрана');
+}
 function newAdminProduct(){
  const editor=document.getElementById('adminProductEditor');if(!editor)return;
  document.getElementById('adminProductEditorTitle').textContent='Новый товар';
  document.getElementById('adminProductId').value='';
  document.getElementById('adminProductTitle').value='';
  document.getElementById('adminProductDescription').value='';
- document.getElementById('adminProductImage').value='';
+ resetAdminProductImage('');
  document.getElementById('adminProductCategory').value='';
  document.getElementById('adminProductPrice').value='';
  document.getElementById('adminProductActive').value='0';
@@ -2064,29 +2091,54 @@ function editAdminProduct(product){
  document.getElementById('adminProductId').value=String(product.id);
  document.getElementById('adminProductTitle').value=product.title||'';
  document.getElementById('adminProductDescription').value=product.description||'';
- document.getElementById('adminProductImage').value=product.image_url||'';
+ resetAdminProductImage(product.image_url||'');
  document.getElementById('adminProductCategory').value=product.category||'';
  document.getElementById('adminProductPrice').value=String(product.price_stars??0);
  document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
  editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function closeAdminProductEditor(){document.getElementById('adminProductEditor')?.classList.add('hidden');}
+async function prepareAdminProductImage(file){
+ if(!file)return null;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Поддерживаются JPG, PNG и WEBP.');
+ let bitmap;
+ try{bitmap=await createImageBitmap(file);}catch{throw new Error('Не удалось прочитать изображение. Попробуйте другой файл.');}
+ const maxSide=1400,scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+ const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ const ctx=canvas.getContext('2d');if(!ctx){bitmap.close?.();throw new Error('Не удалось подготовить изображение.');}
+ ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.82));
+ if(!blob)throw new Error('Не удалось сжать изображение.');
+ if(blob.size>900*1024)throw new Error('Фото после сжатия всё ещё больше 900 КБ. Выберите изображение поменьше.');
+ return new File([blob],'product-image.webp',{type:blob.type||'image/webp'});
+}
 async function saveAdminProduct(){
  const button=document.getElementById('adminProductSaveBtn');if(button)button.disabled=true;
+ const file=document.getElementById('adminProductImage')?.files?.[0]||null;
  const payload={
   id:document.getElementById('adminProductId').value.trim(),
   title:document.getElementById('adminProductTitle').value.trim(),
   description:document.getElementById('adminProductDescription').value.trim(),
-  image_url:document.getElementById('adminProductImage').value.trim(),
+  image_url:document.getElementById('adminProductImageUrl').value.trim(),
   category:document.getElementById('adminProductCategory').value.trim(),
   price_stars:Number(document.getElementById('adminProductPrice').value),
   is_active:document.getElementById('adminProductActive').value==='1'
  };
  try{
-  await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
+  const saved=await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
+  const productId=payload.id||String(saved.id||'');
+  if(!productId)throw new Error('Товар сохранён, но сервер не вернул его ID.');
+  document.getElementById('adminProductId').value=productId;
+  if(file){
+   const compressed=await prepareAdminProductImage(file);
+   const form=new FormData();form.append('product_id',productId);form.append('image',compressed,'product-image.webp');
+   const uploaded=await apiFetch('/api/admin/product-image-upload',{method:'POST',body:form});
+   document.getElementById('adminProductImageUrl').value=uploaded.image_url||'';
+   resetAdminProductImage(uploaded.image_url||'');
+  }
   toast(payload.is_active?'Товар опубликован':'Черновик сохранён');
   closeAdminProductEditor();await loadAdminProducts();
- }catch(error){toast(error.message||'Не удалось сохранить товар.');}
+ }catch(error){toast(error.message||'Не удалось сохранить товар.');await loadAdminProducts();}
  finally{if(button)button.disabled=false;}
 }
 async function deleteAdminProduct(product){
@@ -2227,7 +2279,7 @@ async function apiFetch(path,options={}) {
  const response = await fetch(API_BASE + path,{
   ...options,
   headers:{
-   'Content-Type':'application/json',
+   ...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),
    'X-Telegram-Init-Data':initData,
    ...(options.headers || {})
   }
