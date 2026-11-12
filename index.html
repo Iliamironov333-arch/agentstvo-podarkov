@@ -560,6 +560,22 @@ body.event-easter header .brand:after{content:"🐣 🥚";position:absolute;righ
 body.event-newyear:before,body.event-newyear:after,body.event-halloween:before,body.event-easter:before{mix-blend-mode:screen}
 @media(prefers-reduced-motion:reduce){body.event-newyear:before,body.event-halloween:before,body.event-easter:before{animation:none}}
 
+
+/* Небольшие мерцающие салюты и гирлянда в новогоднем оформлении. */
+body.event-newyear .hero{
+ background-image:
+  radial-gradient(circle at 16% 24%,#fff5b8 0 2px,transparent 3px),
+  radial-gradient(circle at 78% 18%,#9fffe0 0 2px,transparent 3px),
+  radial-gradient(circle at 88% 68%,#ffe8a3 0 2px,transparent 3px),
+  radial-gradient(circle at 42% 82%,#a5eaff 0 2px,transparent 3px),
+  linear-gradient(125deg,#123b50,#174d56 60%,#102c45);
+ background-size:100% 100%,100% 100%,100% 100%,100% 100%,200% 200%;
+ animation:newYearGlow 7s ease-in-out infinite alternate;
+}
+@keyframes newYearGlow{0%{background-position:0 0,0 0,0 0,0 0,0% 40%}100%{background-position:0 0,0 0,0 0,0 0,100% 60%}}
+body.event-newyear .brand:before{content:"✦  ·  ✧  ·  ✦";position:absolute;left:14px;top:3px;color:#c8fff0;font-size:10px;letter-spacing:8px;pointer-events:none;opacity:.8}
+body.event-newyear .brand{position:relative}
+
 </style>
 </head>
 <body>
@@ -1131,7 +1147,7 @@ function money(n) {
  return n == null ? 'Цена уточняется' : `${Number(n).toLocaleString('ru-RU')} ⭐`;
 }
 
-function updateThemeMeta(){const m=document.querySelector('meta[name="theme-color"]');if(!m)return;const dark=document.body.classList.contains('dark-theme');const season=['winter','spring','summer'].find(x=>document.body.classList.contains('season-'+x))||'autumn';const colors={autumn:dark?'#211810':'#fff8ed',winter:dark?'#101f2b':'#edf7ff',spring:dark?'#172319':'#f4f8ee',summer:dark?'#2b2111':'#fff9e9'};m.content=colors[season]}
+function updateThemeMeta(){const m=document.querySelector('meta[name="theme-color"]');if(!m)return;if(document.body.classList.contains('event-newyear')){m.content='#071b2b';return}const dark=document.body.classList.contains('dark-theme');const season=['winter','spring','summer'].find(x=>document.body.classList.contains('season-'+x))||'autumn';const colors={autumn:dark?'#211810':'#fff8ed',winter:dark?'#101f2b':'#edf7ff',spring:dark?'#172319':'#f4f8ee',summer:dark?'#2b2111':'#fff9e9'};m.content=colors[season]}
 const SEASON_EVENTS={autumn:{id:'halloween',label:'Хэллоуин',icon:'🎃',description:'Тыквы, фонарики, осенние огоньки и летучие мыши.'},winter:{id:'newyear',label:'Новый год',icon:'🎄',description:'Ночная зимняя тема, снег, звёзды, салюты, мишура и ёлочные шары.'},spring:{id:'easter',label:'Пасха',icon:'🐣',description:'Пастельные краски, весенние цветы и праздничные яйца.'},summer:null};
 function getSeasonEvent(){try{return localStorage.getItem('gift-season-event')||''}catch(e){return ''}}
 function eventSeason(eventId){return Object.keys(SEASON_EVENTS).find(k=>SEASON_EVENTS[k]?.id===eventId)||''}
@@ -1181,6 +1197,7 @@ function applySeasonTheme(season){
  document.body.classList.add('season-'+season);if(season!=='autumn')document.body.classList.add(season+'-season');
  try{localStorage.setItem('gift-season-theme',season)}catch(e){}
  if(previous&&previousSeason!==season)applySeasonEvent('',false);
+ else if(previous&&previousSeason===season)document.body.classList.add('event-'+previous);
  document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});
  const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};
  const status=document.getElementById('adminSeasonThemeStatus');if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
