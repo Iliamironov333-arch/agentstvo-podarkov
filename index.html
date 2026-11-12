@@ -576,6 +576,74 @@ body.event-newyear .hero{
 body.event-newyear .brand:before{content:"✦  ·  ✧  ·  ✦";position:absolute;left:14px;top:3px;color:#c8fff0;font-size:10px;letter-spacing:8px;pointer-events:none;opacity:.8}
 body.event-newyear .brand{position:relative}
 
+
+/* FESTIVAL VISUAL SYSTEM v2 — high-contrast palettes, layered decor and motion */
+#seasonDecorations{position:fixed;inset:0;z-index:6;overflow:hidden;pointer-events:none;contain:strict}
+#seasonDecorations span{position:absolute;top:-12vh;display:block;line-height:1;will-change:transform,opacity;filter:drop-shadow(0 2px 4px #0005)}
+#seasonDecorations .festive-fall{color:#e6f8ff;text-shadow:0 0 12px #b8f4ff;animation:festiveFall 17s linear infinite}
+#seasonDecorations .festive-twinkle{top:8vh;color:#fff3ae;text-shadow:0 0 8px #ffeaa1,0 0 22px #80f4e2;animation:festiveTwinkle 2.8s ease-in-out infinite}
+#seasonDecorations .festive-firework{top:auto;bottom:18%;color:#ffe6a1;text-shadow:0 0 7px #fff,0 0 18px #ffb84c;animation:festiveBurst 3.8s ease-out infinite}
+#seasonDecorations .festive-bat{color:#2a1a38;animation:festiveBat 16s ease-in-out infinite}
+#seasonDecorations .festive-egg{top:auto;bottom:12%;filter:drop-shadow(0 5px 6px #6545)}
+@keyframes festiveFall{0%{transform:translate3d(0,-10vh,0) rotate(0);opacity:0}10%{opacity:.95}90%{opacity:.85}100%{transform:translate3d(45px,115vh,0) rotate(420deg);opacity:0}}
+@keyframes festiveTwinkle{0%,100%{opacity:.2;transform:scale(.65) rotate(0)}50%{opacity:1;transform:scale(1.3) rotate(35deg)}}
+@keyframes festiveBurst{0%{opacity:0;transform:scale(.2)}18%{opacity:1;transform:scale(1.4)}55%{opacity:.7;transform:scale(1.9)}100%{opacity:0;transform:scale(2.6)}}
+@keyframes festiveBat{0%{transform:translate3d(-20vw,0,0) rotate(-8deg)}50%{transform:translate3d(55vw,18vh,0) rotate(8deg)}100%{transform:translate3d(120vw,-3vh,0) rotate(-8deg)}}
+@keyframes festiveEggFloat{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-15px) rotate(8deg)}}
+body.event-newyear,body.dark-theme.event-newyear{--bg:#061624;--panel:#102b3d;--panel2:#173d50;--gold:#f4c96b;--gold2:#ffe6a4;--text:#f3fbff;--muted:#bad2df;--line:#286174;background:radial-gradient(ellipse at 50% -12%,#1b6671 0,#10394b 28%,#071e30 64%,#04111e 100%) fixed!important;color:#f3fbff!important;color-scheme:dark}
+body.event-newyear header,body.dark-theme.event-newyear header{background:linear-gradient(180deg,#0a2838f7,#071b2bf5)!important;border-bottom:2px solid #d7b65d!important;box-shadow:0 8px 30px #0008,0 2px 0 #62c7a8}
+body.event-newyear header:before,body.dark-theme.event-newyear header:before{content:"";position:absolute;left:0;right:0;top:0;height:22px;pointer-events:none;background:radial-gradient(ellipse at 10% 0,#f4c96b 0 3px,transparent 4px),radial-gradient(ellipse at 24% 0,#66d6b1 0 3px,transparent 4px),radial-gradient(ellipse at 38% 0,#e97c72 0 3px,transparent 4px),radial-gradient(ellipse at 52% 0,#f4c96b 0 3px,transparent 4px),radial-gradient(ellipse at 66% 0,#66d6b1 0 3px,transparent 4px),radial-gradient(ellipse at 80% 0,#e97c72 0 3px,transparent 4px),radial-gradient(ellipse at 94% 0,#f4c96b 0 3px,transparent 4px);background-size:100% 22px;filter:drop-shadow(0 2px 6px #ffe28a)}
+body.event-newyear header:after,body.dark-theme.event-newyear header:after{content:"✦  🎄  ✧  🔴  🟢  ✨  🎄  ✦";display:block;text-align:center;letter-spacing:5px;font-size:17px;padding:8px 0 0;color:#f6d98b;text-shadow:0 0 12px #f3d477}
+body.event-newyear .brand h1,body.dark-theme.event-newyear .brand h1{color:#f8e7b4;text-shadow:0 2px 14px #67d7c0}
+body.event-newyear .brand p,body.dark-theme.event-newyear .brand p{color:#a9e6db}
+body.event-newyear .logo,body.dark-theme.event-newyear .logo{background:linear-gradient(145deg,#f6d87d,#ba7c30);box-shadow:0 0 0 3px #397c76,0 0 25px #e8c46b88}
+body.event-newyear .promo-line,body.dark-theme.event-newyear .promo-line{background:linear-gradient(90deg,#0b534d,#124b64,#0b534d)!important;color:#fff1b7!important;border:1px solid #4da58b;border-radius:12px;margin-top:12px;padding:9px;text-align:center;box-shadow:0 4px 18px #0004}
+body.event-newyear .hero,body.dark-theme.event-newyear .hero{background:radial-gradient(circle at 85% 25%,#236b68 0 3%,transparent 4%),radial-gradient(circle at 74% 70%,#e8c36b 0 2px,transparent 3px),linear-gradient(125deg,#0e4053,#12605b 58%,#102b4a)!important;border:1px solid #67c8aa!important;box-shadow:inset 0 0 36px #5de0c322,0 12px 32px #0007;color:#fff!important}
+body.event-newyear .hero:after,body.dark-theme.event-newyear .hero:after{content:"🎄";font-size:100px;opacity:.9;right:8px;bottom:-15px;filter:drop-shadow(0 0 18px #d8bd68)}
+body.event-newyear .hero small,body.dark-theme.event-newyear .hero small{color:#ffe49a}
+body.event-newyear .hero p,body.dark-theme.event-newyear .hero p{color:#d7f4ed}
+body.event-newyear .product,body.event-newyear .panel,body.event-newyear .menu-card,body.dark-theme.event-newyear .product,body.dark-theme.event-newyear .panel,body.dark-theme.event-newyear .menu-card{background:linear-gradient(150deg,#15394b,#102b3c 72%,#143c43)!important;border:1px solid #367b78!important;color:#f4fbff!important;box-shadow:0 8px 22px #0005,inset 0 1px #a3e6d222}
+body.event-newyear .product:nth-child(odd),body.dark-theme.event-newyear .product:nth-child(odd){background:linear-gradient(150deg,#194355,#102b3c 75%,#174b4a)!important}
+body.event-newyear .product .price,body.event-newyear .product .product-price,body.dark-theme.event-newyear .product .price,body.dark-theme.event-newyear .product .product-price{color:#ffdf85!important}
+body.event-newyear nav button,body.dark-theme.event-newyear nav button{background:#12364a!important;border:1px solid #397c83!important;color:#d5f5ef!important}
+body.event-newyear nav button.active,body.dark-theme.event-newyear nav button.active{background:linear-gradient(90deg,#c4a354,#68bba2)!important;color:#092332!important;border-color:#ffe5a0!important}
+body.event-newyear .bottom,body.dark-theme.event-newyear .bottom{background:#061b2bf5!important;border-top:1px solid #4c8f89!important;color:#e5f8f4!important;box-shadow:0 -8px 26px #0007}
+body.event-newyear .season-event-dialog,body.dark-theme.event-newyear .season-event-dialog{background:#102b3d;color:#f4fbff;border-color:#367b78}
+body.event-newyear .season-event-option,body.dark-theme.event-newyear .season-event-option,body.event-newyear .season-event-note,body.dark-theme.event-newyear .season-event-note{background:#173d50;border-color:#367b78;color:#e8f6f4}
+body.event-halloween,body.dark-theme.event-halloween{--bg:#160d20;--panel:#28172d;--panel2:#39213a;--gold:#ff9c38;--gold2:#ffd08a;--text:#fff3df;--muted:#d2b4ca;--line:#78436a;background:radial-gradient(ellipse at 50% -10%,#65315b,#28152e 42%,#100b1a 100%) fixed!important;color:#fff3df!important;color-scheme:dark}
+body.event-halloween header,body.dark-theme.event-halloween header{background:linear-gradient(180deg,#29152f,#170e21)!important;border-bottom:2px solid #e47a2d!important;box-shadow:0 8px 26px #0008}
+body.event-halloween header:after,body.dark-theme.event-halloween header:after{content:"🎃  🕸️  🦇  ✦  🕷️  🦇  🕸️  🎃";display:block;text-align:center;letter-spacing:4px;font-size:17px;padding:8px 0 0;color:#ffad55}
+body.event-halloween .hero,body.dark-theme.event-halloween .hero{background:radial-gradient(circle at 82% 32%,#f49a32 0 4%,transparent 5%),linear-gradient(130deg,#4b244b,#30172e 55%,#1c1528)!important;border:1px solid #e17b36!important;box-shadow:0 12px 32px #0007;color:#fff2dc!important}
+body.event-halloween .hero:after,body.dark-theme.event-halloween .hero:after{content:"🎃";font-size:100px;opacity:.9;filter:drop-shadow(0 0 15px #ff8b28)}
+body.event-halloween .hero small,body.dark-theme.event-halloween .hero small{color:#ffc071}
+body.event-halloween .hero p,body.dark-theme.event-halloween .hero p{color:#f2d5e8}
+body.event-halloween .product,body.event-halloween .panel,body.event-halloween .menu-card,body.dark-theme.event-halloween .product,body.dark-theme.event-halloween .panel,body.dark-theme.event-halloween .menu-card{background:linear-gradient(145deg,#39213c,#25182f 70%,#40251f)!important;border:1px solid #985236!important;color:#fff2e5!important;box-shadow:0 8px 22px #0006}
+body.event-halloween .bottom,body.dark-theme.event-halloween .bottom{background:#170e21f5!important;border-top:1px solid #985236!important;color:#fff2e5!important}
+body.event-halloween .promo-line,body.dark-theme.event-halloween .promo-line{background:linear-gradient(90deg,#6c351e,#4b234b)!important;color:#ffe1ae!important;border:1px solid #bd7138;border-radius:12px;padding:9px;text-align:center}
+body.event-easter,body.dark-theme.event-easter{--bg:#f8f4e9;--panel:#fffdf6;--panel2:#f0f4e8;--gold:#86a96c;--gold2:#527c55;--text:#314c39;--muted:#71856e;--line:#d5e3c9;background:radial-gradient(ellipse at 50% -10%,#f9e4ee,#f6f4df 38%,#e5f1df 75%,#fffaf0 100%) fixed!important;color:#314c39!important;color-scheme:light}
+body.event-easter header,body.dark-theme.event-easter header{background:linear-gradient(180deg,#fff6e8,#eaf3df)!important;border-bottom:2px solid #c5d9a8!important;box-shadow:0 8px 25px #708b5830}
+body.event-easter header:after,body.dark-theme.event-easter header:after{content:"🌷  🐣  🥚  ✿  🥚  🐣  🌷";display:block;text-align:center;letter-spacing:5px;font-size:17px;padding:8px 0 0}
+body.event-easter .brand h1,body.dark-theme.event-easter .brand h1{color:#38583d}
+body.event-easter .brand p,body.dark-theme.event-easter .brand p{color:#718b69}
+body.event-easter .hero,body.dark-theme.event-easter .hero{background:linear-gradient(120deg,#dcebc9,#fff0dc 52%,#f3dce8)!important;border:1px solid #b8d3a2!important;box-shadow:0 12px 28px #8ca87933;color:#36533a!important}
+body.event-easter .hero:after,body.dark-theme.event-easter .hero:after{content:"🐣";font-size:100px;opacity:.9}
+body.event-easter .hero small,body.dark-theme.event-easter .hero small{color:#65864e}
+body.event-easter .hero p,body.dark-theme.event-easter .hero p{color:#566e50}
+body.event-easter .product,body.event-easter .panel,body.event-easter .menu-card,body.dark-theme.event-easter .product,body.dark-theme.event-easter .panel,body.dark-theme.event-easter .menu-card{background:linear-gradient(145deg,#fffef7,#edf5e6 65%,#f9e8ef)!important;border:1px solid #c8dcb5!important;color:#36533a!important;box-shadow:0 8px 22px #a2b89438}
+body.event-easter .bottom,body.dark-theme.event-easter .bottom{background:#fff8eaf5!important;border-top:1px solid #c8dcb5!important;color:#38583d!important}
+body.event-easter .promo-line,body.dark-theme.event-easter .promo-line{background:linear-gradient(90deg,#d8e9c5,#f8e4ed,#fff0d8)!important;color:#456344!important;border:1px solid #c5d9a8;border-radius:12px;padding:9px;text-align:center}
+body.event-easter .season-event-dialog,body.dark-theme.event-easter .season-event-dialog{background:#fffdf6;color:#314c39;border-color:#d5e3c9}
+body.event-easter .season-event-option,body.dark-theme.event-easter .season-event-option,body.event-easter .season-event-note,body.dark-theme.event-easter .season-event-note{background:#f0f4e8;border-color:#d5e3c9;color:#526b50}
+body.event-halloween .season-event-dialog,body.dark-theme.event-halloween .season-event-dialog{background:#28172d;color:#fff3df;border-color:#78436a}
+body.event-halloween .season-event-option,body.dark-theme.event-halloween .season-event-option,body.event-halloween .season-event-note,body.dark-theme.event-halloween .season-event-note{background:#39213a;border-color:#78436a;color:#f8e4ee}
+body.event-newyear .season-theme-card[data-season=winter],body.dark-theme.event-newyear .season-theme-card[data-season=winter]{background:linear-gradient(135deg,#0a3045,#176b68 55%,#d3ae59)!important;color:#fff!important}
+body.event-halloween .season-theme-card[data-season=autumn],body.dark-theme.event-halloween .season-theme-card[data-season=autumn]{background:linear-gradient(135deg,#32152e,#8c3e2b 60%,#ed9a36)!important;color:#fff!important}
+body.event-easter .season-theme-card[data-season=spring],body.dark-theme.event-easter .season-theme-card[data-season=spring]{background:linear-gradient(135deg,#f6dce8,#d9edc9 55%,#fff0cb)!important;color:#35513a!important}
+body.event-newyear .season-theme-card,body.event-halloween .season-theme-card,body.event-easter .season-theme-card{box-shadow:0 5px 18px #0003}
+body.event-newyear .season-theme-card.active,body.event-halloween .season-theme-card.active,body.event-easter .season-theme-card.active{outline:3px solid var(--gold);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){#seasonDecorations span{animation:none!important}}
+@media(max-width:420px){body.event-newyear header:after,body.event-halloween header:after,body.event-easter header:after{font-size:14px;letter-spacing:2px}}
+
 </style>
 </head>
 <body>
@@ -1151,6 +1219,16 @@ function updateThemeMeta(){const m=document.querySelector('meta[name="theme-colo
 const SEASON_EVENTS={autumn:{id:'halloween',label:'Хэллоуин',icon:'🎃',description:'Тыквы, фонарики, осенние огоньки и летучие мыши.'},winter:{id:'newyear',label:'Новый год',icon:'🎄',description:'Ночная зимняя тема, снег, звёзды, салюты, мишура и ёлочные шары.'},spring:{id:'easter',label:'Пасха',icon:'🐣',description:'Пастельные краски, весенние цветы и праздничные яйца.'},summer:null};
 function getSeasonEvent(){try{return localStorage.getItem('gift-season-event')||''}catch(e){return ''}}
 function eventSeason(eventId){return Object.keys(SEASON_EVENTS).find(k=>SEASON_EVENTS[k]?.id===eventId)||''}
+function renderSeasonDecorations(eventId){
+ let root=document.getElementById('seasonDecorations');
+ if(!eventId){root?.remove();return;}
+ if(!root){root=document.createElement('div');root.id='seasonDecorations';root.setAttribute('aria-hidden','true');document.body.appendChild(root);}
+ root.replaceChildren();
+ const make=(cls,char,count)=>{for(let i=0;i<count;i++){const el=document.createElement('span');el.className=cls;el.textContent=char;el.style.left=(Math.random()*100).toFixed(2)+'%';el.style.animationDelay=(-Math.random()*22).toFixed(2)+'s';el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';root.appendChild(el)}};
+ if(eventId==='newyear'){make('festive-fall','❄',34);make('festive-twinkle','✦',18);make('festive-bauble',['🔴','🟢','🟡'][0],1);make('festive-firework','✺',5);}
+ if(eventId==='halloween'){make('festive-fall','🍂',20);make('festive-twinkle','✦',12);make('festive-bat','🦇',5);}
+ if(eventId==='easter'){make('festive-fall','🌸',18);make('festive-twinkle','✿',18);make('festive-egg','🥚',6);}
+}
 function applySeasonEvent(eventId,notify=false){
  const season=eventId?eventSeason(eventId):'';
  if(eventId&&!season)return;
@@ -1158,6 +1236,7 @@ function applySeasonEvent(eventId,notify=false){
  if(eventId&&season!==currentSeason){if(notify)toast('Это событие доступно только в теме «'+({autumn:'Осень',winter:'Зима',spring:'Весна'}[season])+'».');return;}
  document.body.classList.remove('event-newyear','event-easter','event-halloween');
  if(eventId)document.body.classList.add('event-'+eventId);
+ renderSeasonDecorations(eventId);
  try{if(eventId)localStorage.setItem('gift-season-event',eventId);else localStorage.removeItem('gift-season-event')}catch(e){}
  updateThemeMeta();
  if(notify)toast(eventId?'Праздничное оформление включено!':'Праздничное оформление выключено.');
