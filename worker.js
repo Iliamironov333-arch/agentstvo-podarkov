@@ -1167,14 +1167,16 @@ export default {
         if (path === "/api/admin/product-images" && method === "GET") {
           if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary не настроен."},503,origin);
           const auth = btoa(env.CLOUDINARY_API_KEY + ":" + env.CLOUDINARY_API_SECRET);
-          const cloudResponse = await fetch("https://api.cloudinary.com/v1_1/dzdxfmsn/resources/image/upload?prefix=agentstvo-podarkov%2Fproduct-&max_results=500", {headers:{Authorization:"Basic "+auth}});
+          const cursor = new URL(request.url).searchParams.get("cursor");
+          const cloudPath = "https://api.cloudinary.com/v1_1/dzdxfmsn/resources/image/upload?prefix=agentstvo-podarkov%2Fproduct-&max_results=500" + (cursor ? "&next_cursor=" + encodeURIComponent(cursor) : "");
+          const cloudResponse = await fetch(cloudPath, {headers:{Authorization:"Basic "+auth}});
           const cloudData = await cloudResponse.json().catch(()=>({}));
           if (!cloudResponse.ok) return json({error:"Не удалось прочитать Cloudinary: "+String(cloudData.error?.message||"ошибка API").slice(0,200)},502,origin);
           const products = await env.DB.prepare("SELECT id,image_url FROM products").all();
           const orphans = (cloudData.resources||[]).filter(asset=>!(products.results||[]).some(p=>p.image_url && String(p.image_url).includes("/"+String(asset.public_id||"")))).map(asset=>({
             public_id:String(asset.public_id||""),secure_url:String(asset.secure_url||""),bytes:Number(asset.bytes||0),created_at:asset.created_at||null
           })).filter(asset=>asset.public_id.startsWith("agentstvo-podarkov/product-") && asset.secure_url);
-          return json({ok:true,orphans,checked_assets:(cloudData.resources||[]).length,has_more:!!cloudData.next_cursor},200,origin);
+          return json({ok:true,orphans,checked_assets:(cloudData.resources||[]).length,next_cursor:cloudData.next_cursor||null},200,origin);
         }
         if (path === "/api/admin/product-image-delete" && method === "POST") {
           if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary не настроен."},503,origin);
