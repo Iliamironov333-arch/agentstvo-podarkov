@@ -1164,6 +1164,33 @@ export default {
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
         }
+        if (path === "/api/admin/product-images" && method === "GET") {
+          if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary не настроен."},503,origin);
+          const auth = btoa(env.CLOUDINARY_API_KEY + ":" + env.CLOUDINARY_API_SECRET);
+          const cloudResponse = await fetch("https://api.cloudinary.com/v1_1/dzdxfmsn/resources/image/upload?prefix=agentstvo-podarkov%2Fproduct-&max_results=500", {headers:{Authorization:"Basic "+auth}});
+          const cloudData = await cloudResponse.json().catch(()=>({}));
+          if (!cloudResponse.ok) return json({error:"Не удалось прочитать Cloudinary: "+String(cloudData.error?.message||"ошибка API").slice(0,200)},502,origin);
+          const products = await env.DB.prepare("SELECT id,image_url FROM products").all();
+          const orphans = (cloudData.resources||[]).filter(asset=>!(products.results||[]).some(p=>p.image_url && String(p.image_url).includes("/"+String(asset.public_id||"")))).map(asset=>({
+            public_id:String(asset.public_id||""),secure_url:String(asset.secure_url||""),bytes:Number(asset.bytes||0),created_at:asset.created_at||null
+          })).filter(asset=>asset.public_id.startsWith("agentstvo-podarkov/product-") && asset.secure_url);
+          return json({ok:true,orphans,checked_assets:(cloudData.resources||[]).length,has_more:!!cloudData.next_cursor},200,origin);
+        }
+        if (path === "/api/admin/product-image-delete" && method === "POST") {
+          if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary не настроен."},503,origin);
+          const body = await readJson(request);
+          const publicId = typeof body.public_id === "string" ? body.public_id.trim() : "";
+          if (!/^agentstvo-podarkov\/product-[A-Za-z0-9_-]+$/.test(publicId)) return json({error:"Недопустимый идентификатор изображения."},400,origin);
+          const products = await env.DB.prepare("SELECT id,image_url FROM products").all();
+          if ((products.results||[]).some(p=>p.image_url && String(p.image_url).includes("/"+publicId))) return json({error:"Это изображение ещё используется товаром. Удаление отменено."},409,origin);
+          const auth = btoa(env.CLOUDINARY_API_KEY + ":" + env.CLOUDINARY_API_SECRET);
+          const cloudResponse = await fetch("https://api.cloudinary.com/v1_1/dzdxfmsn/resources/image/upload", {
+            method:"DELETE",headers:{"Authorization":"Basic "+auth,"Content-Type":"application/json"},body:JSON.stringify({public_ids:[publicId],invalidate:true})
+          });
+          const cloudData = await cloudResponse.json().catch(()=>({}));
+          if (!cloudResponse.ok || !cloudData.deleted || cloudData.deleted[publicId]!=="deleted") return json({error:"Cloudinary не подтвердил удаление: "+String(cloudData.error?.message||"файл не удалён").slice(0,200)},502,origin);
+          return json({ok:true,public_id:publicId},200,origin);
+        }
         if (path === "/api/admin/product-image-upload" && method === "POST") {
           const form = await request.formData();
           const id = typeof form.get("product_id") === "string" ? String(form.get("product_id")).trim().slice(0,100) : "";
