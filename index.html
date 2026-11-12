@@ -1276,7 +1276,7 @@ function applySeasonTheme(season){
  document.body.classList.add('season-'+season);if(season!=='autumn')document.body.classList.add(season+'-season');
  try{localStorage.setItem('gift-season-theme',season)}catch(e){}
  if(previous&&previousSeason!==season)applySeasonEvent('',false);
- else if(previous&&previousSeason===season)document.body.classList.add('event-'+previous);
+ else if(previous&&previousSeason===season){document.body.classList.add('event-'+previous);renderSeasonDecorations(previous);}
  document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});
  const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};
  const status=document.getElementById('adminSeasonThemeStatus');if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
