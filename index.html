@@ -138,6 +138,14 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 #adminProductEditor textarea{resize:vertical;min-height:70px}
 .admin-product-image-preview{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.admin-product-image-preview img{width:88px;height:88px;object-fit:cover;border-radius:10px;background:var(--panel2)}.admin-product-image-preview button{margin-top:7px}
 .admin-product-row-actions button{min-width:76px}
+#adminPhotoStudioPanel{margin-top:14px}
+.admin-photo-batch-row,.admin-orphan-row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.admin-photo-batch-row img,.admin-orphan-row img{width:72px;height:72px;object-fit:cover;border-radius:10px;background:var(--panel2)}
+.admin-photo-batch-row strong,.admin-orphan-row strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.admin-photo-batch-row small,.admin-orphan-row small{display:block;color:var(--muted);font-size:11px;margin:4px 0}
+.admin-photo-batch-row select{margin-top:5px}
+.admin-orphan-row button{margin-top:6px}
+
 .admin-order-actions{display:grid;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .admin-order-actions h4{margin:0;color:var(--gold2)}
 .admin-order-actions label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
@@ -644,12 +652,23 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
    <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
    <p id="adminProductsStatus" class="notice" aria-live="polite">Каталог загружается…</p>
    <div id="adminProductsList"></div>
+   <div class="panel" id="adminPhotoStudioPanel">
+    <div class="sectionhead"><h3>📸 Фотостудия Cloudinary</h3><span>Медиатека товаров</span></div>
+    <p class="muted">Выбери несколько фотографий, назначь каждой товар и загрузи их одной операцией. Ссылки сохраняются автоматически.</p>
+    <label>Фотографии для массовой загрузки<input id="adminPhotoBatchInput" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="selectAdminPhotoBatch(this)"></label>
+    <div id="adminPhotoBatchList"></div>
+    <button class="primary" type="button" id="adminPhotoBatchUpload" onclick="uploadAdminPhotoBatch()" disabled>Загрузить выбранные фотографии</button>
+    <div class="sectionhead" style="margin-top:22px"><h3>🧹 Неиспользуемые фотографии</h3><button class="secondary" type="button" onclick="loadAdminOrphanImages()">Проверить</button></div>
+    <p class="muted">Показываем только файлы из папки товаров Cloudinary, на которые не ссылается ни одна карточка каталога. Удаление каждого файла требует отдельного подтверждения.</p>
+    <p id="adminOrphanImagesStatus" class="notice" aria-live="polite">Нажми «Проверить», чтобы найти неиспользуемые изображения.</p>
+    <div id="adminOrphanImagesList"></div>
+   </div>
    <div id="adminProductEditor" class="admin-user-detail hidden">
     <h4 id="adminProductEditorTitle">Новый товар</h4>
     <input type="hidden" id="adminProductId">
     <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
     <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
-    <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/*" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
+    <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/*" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой. Новое фото заменит текущее.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
     <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
     <datalist id="adminProductCategories"></datalist>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
@@ -2022,6 +2041,7 @@ async function loadAdminOrders() {
  }catch(e){status.textContent=e.message||'Не удалось загрузить заказы.';}
 }
 
+let adminProductsCache=[];
 async function loadAdminProducts() {
  const status=document.getElementById('adminProductsStatus');
  const root=document.getElementById('adminProductsList');
@@ -2030,6 +2050,7 @@ async function loadAdminProducts() {
  try{
   const data=await apiFetch('/api/admin/products');
   const products=Array.isArray(data.products)?data.products:[];
+  adminProductsCache=products;
   const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
   (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
   status.textContent='Товаров в каталоге: '+products.length;
@@ -2047,6 +2068,91 @@ async function loadAdminProducts() {
   });
  }catch(error){status.textContent=error.message||'Не удалось загрузить каталог.';}
 }
+
+let adminPhotoBatch=[];
+function selectAdminPhotoBatch(input){
+ adminPhotoBatch.forEach(item=>{if(item.previewUrl)URL.revokeObjectURL(item.previewUrl);});
+ adminPhotoBatch=[];
+ const files=Array.from(input?.files||[]);
+ const list=document.getElementById('adminPhotoBatchList');
+ const button=document.getElementById('adminPhotoBatchUpload');
+ if(!list)return;
+ list.replaceChildren();
+ if(!files.length){if(button)button.disabled=true;return;}
+ files.forEach((file,index)=>{
+  const item={file,previewUrl:URL.createObjectURL(file),productId:''};
+  adminPhotoBatch.push(item);
+  const row=document.createElement('div');row.className='admin-photo-batch-row';
+  const img=document.createElement('img');img.src=item.previewUrl;img.alt='Предпросмотр '+file.name;
+  const info=document.createElement('div');
+  const name=document.createElement('strong');name.textContent=file.name;
+  const meta=document.createElement('small');meta.textContent=(file.size/1024).toFixed(0)+' КБ · '+file.type;
+  const select=document.createElement('select');select.setAttribute('aria-label','Товар для '+file.name);
+  const empty=document.createElement('option');empty.value='';empty.textContent='— Выбери товар —';select.append(empty);
+  adminProductsCache.forEach(product=>{
+   const option=document.createElement('option');option.value=String(product.id);option.textContent=(product.title||'Без названия')+' · ID '+product.id;select.append(option);
+  });
+  select.addEventListener('change',()=>{item.productId=select.value;});
+  info.append(name,meta,select);row.append(img,info);list.append(row);
+ });
+ if(button)button.disabled=!files.length||!adminProductsCache.length;
+ if(!adminProductsCache.length)toast('Сначала загрузи каталог товаров.');
+}
+async function uploadAdminPhotoBatch(){
+ const button=document.getElementById('adminPhotoBatchUpload');
+ const ready=adminPhotoBatch.filter(item=>item.productId);
+ if(!ready.length){toast('Назначь фотографии товарам.');return;}
+ const missing=adminPhotoBatch.length-ready.length;
+ if(missing&&!confirm('У '+missing+' фотографий не выбран товар. Загрузить только назначенные?'))return;
+ if(button){button.disabled=true;button.textContent='Загрузка…';}
+ let uploaded=0,failed=0;
+ try{
+  for(const item of ready){
+   try{
+    const compressed=await prepareAdminProductImage(item.file);
+    const form=new FormData();form.append('product_id',item.productId);form.append('image',compressed,'product-image.webp');
+    await apiFetch('/api/admin/product-image-upload',{method:'POST',body:form});
+    uploaded++;
+   }catch(error){failed++;console.error('Photo Studio upload failed:',error);}
+  }
+  toast('Загружено: '+uploaded+'. Ошибок: '+failed+'.');
+  if(uploaded){
+   adminPhotoBatch.forEach(item=>{if(item.previewUrl)URL.revokeObjectURL(item.previewUrl);});
+   adminPhotoBatch=[];
+   const input=document.getElementById('adminPhotoBatchInput');if(input)input.value='';
+   document.getElementById('adminPhotoBatchList')?.replaceChildren();
+   await loadAdminProducts();
+  }
+ }finally{
+  if(button){button.disabled=!adminPhotoBatch.length;button.textContent='Загрузить выбранные фотографии';}
+ }
+}
+async function loadAdminOrphanImages(){
+ const status=document.getElementById('adminOrphanImagesStatus'),root=document.getElementById('adminOrphanImagesList');
+ if(!status||!root)return;
+ status.textContent='Проверяем Cloudinary и сверяем с каталогом…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/product-images');
+  const items=Array.isArray(data.orphans)?data.orphans:[];
+  status.textContent=items.length?'Найдено неиспользуемых фотографий: '+items.length:'Неиспользуемых фотографий не найдено.';
+  items.forEach(asset=>{
+   const row=document.createElement('div');row.className='admin-orphan-row';
+   const img=document.createElement('img');img.src=asset.secure_url;img.alt='Неиспользуемая фотография';
+   const info=document.createElement('div');
+   const name=document.createElement('strong');name.textContent=asset.public_id;
+   const meta=document.createElement('small');meta.textContent=(Number(asset.bytes||0)/1024).toFixed(0)+' КБ · '+(asset.created_at||'');
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить из Cloudinary';
+   remove.addEventListener('click',async()=>{
+    if(!confirm('Удалить изображение '+asset.public_id+' из Cloudinary? Это действие нельзя отменить.'))return;
+    remove.disabled=true;
+    try{await apiFetch('/api/admin/product-image-delete',{method:'POST',body:JSON.stringify({public_id:asset.public_id})});toast('Изображение удалено');await loadAdminOrphanImages();}
+    catch(error){toast(error.message||'Не удалось удалить изображение.');remove.disabled=false;}
+   });
+   info.append(name,meta,remove);row.append(img,info);root.append(row);
+  });
+ }catch(error){status.textContent=error.message||'Не удалось проверить хранилище.';}
+}
+
 let adminProductPreviewObjectUrl=null;
 function setAdminProductImagePreview(url,statusText){
  const box=document.getElementById('adminProductImagePreviewBox'),img=document.getElementById('adminProductImagePreview'),status=document.getElementById('adminProductImageStatus');
