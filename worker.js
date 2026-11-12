@@ -846,7 +846,7 @@ export default {
       if (!path.startsWith("/api/")) return json({ error: "Not found" }, 404, origin);
       if (!env.DB || !env.BOT_TOKEN) return json({ error: "Server is not configured" }, 500, origin);
 
-      const productImageMatch = path.match(/^\\/api\\/product-image\\/([^/]+)$/);
+      const productImageMatch = path.match(/^\/api\/product-image\/([^/]+)$/);
       if (productImageMatch && method === "GET") {
         const image = await env.DB.prepare("SELECT mime_type,image_data FROM product_images WHERE product_id=?").bind(decodeURIComponent(productImageMatch[1])).first();
         if (!image) return json({ error: "Изображение не найдено." }, 404, origin);
