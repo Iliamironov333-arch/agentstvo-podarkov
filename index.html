@@ -749,6 +749,41 @@ header,main,.bottom{position:relative;z-index:4}
 .bottom{position:fixed;z-index:5}
 @media(max-width:420px){body.event-newyear .hero:after,body.event-halloween .hero:after,body.event-easter .hero:after{font-size:66px;opacity:.18}}
 
+
+/* FINAL MOTION & CLEANUP — remove stray header emojis and put spring drops in front */
+body.event-newyear .brand:after,
+body.event-halloween .brand:after,
+body.event-easter .brand:after{content:none!important;display:none!important}
+body.event-newyear:before{content:none!important;display:none!important}
+body.event-newyear #seasonDecorations .festive-fall{
+ top:-14vh!important;
+ animation:festiveFall 13s linear infinite!important;
+}
+body.event-newyear #seasonDecorations .festive-twinkle{
+ top:-14vh!important;
+ animation:festiveFall 15s linear infinite!important;
+}
+body.event-newyear #seasonDecorations .festive-firework{
+ animation:festiveBurst 3.8s ease-out infinite!important;
+}
+body.season-spring .season-particles,
+body.dark-theme.season-spring .season-particles{
+ z-index:8!important;
+}
+body.season-spring .season-particles span,
+body.dark-theme.season-spring .season-particles span{
+ opacity:.82!important;
+ filter:drop-shadow(0 2px 4px #18351b55);
+}
+body.season-spring header,
+body.season-spring main,
+body.season-spring nav,
+body.dark-theme.season-spring header,
+body.dark-theme.season-spring main,
+body.dark-theme.season-spring nav{position:relative;z-index:4}
+body.season-spring .bottom,
+body.dark-theme.season-spring .bottom{z-index:30!important}
+
 </style>
 </head>
 <body>
@@ -761,7 +796,7 @@ header,main,.bottom{position:relative;z-index:4}
    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Переключить тему">🌙</button>
   </div>
  </div>
- <div class="promo-line">🍂 Скидка 10% на всё — сервер применяет её при создании счёта</div>
+ <div class="promo-line">Скидка 10% на всё — сервер применяет её при создании счёта</div>
 </header>
 <nav id="filters">
  <button class="active" data-filter="all">Все работы</button>
@@ -1330,7 +1365,7 @@ function renderSeasonDecorations(eventId){
  if(!root){root=document.createElement('div');root.id='seasonDecorations';root.setAttribute('aria-hidden','true');document.body.appendChild(root);}
  root.replaceChildren();
  const make=(cls,char,count)=>{for(let i=0;i<count;i++){const el=document.createElement('span');el.className=cls;el.textContent=char;el.style.left=(Math.random()*100).toFixed(2)+'%';el.style.animationDelay=(-Math.random()*22).toFixed(2)+'s';el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';root.appendChild(el)}};
- if(eventId==='newyear'){make('festive-fall','❄',34);make('festive-twinkle','✦',18);make('festive-bauble',['🔴','🟢','🟡'][0],1);make('festive-firework','✺',5);}
+ if(eventId==='newyear'){make('festive-fall','❄',30);make('festive-fall','✦',18);make('festive-bauble',['🔴','🟢','🟡'][0],1);make('festive-firework','✺',5);}
  if(eventId==='halloween'){make('festive-fall','🍂',20);make('festive-twinkle','✦',12);make('festive-bat','🦇',5);}
  if(eventId==='easter'){make('festive-fall','🌸',18);make('festive-twinkle','✿',18);make('festive-egg','🥚',6);}
 }
