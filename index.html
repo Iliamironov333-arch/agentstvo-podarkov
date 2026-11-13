@@ -1062,6 +1062,78 @@ html body > #seasonDecorations .festive-firework{
  animation-name:festiveBurst!important;
 }
 
+
+
+/* TARGETED FESTIVE LAYER REPAIR — foreground particles + seasonal button garlands */
+html body > .leaf-layer,
+html body > .season-particles,
+html body > #seasonDecorations{
+ position:fixed!important;
+ inset:0!important;
+ z-index:2147483646!important;
+ display:block!important;
+ overflow:hidden!important;
+ pointer-events:none!important;
+ isolation:isolate!important;
+}
+html body > .leaf-layer *,
+html body > .season-particles *,
+html body > #seasonDecorations *{pointer-events:none!important}
+html body > .leaf-layer .leaf,
+html body > .season-particles span,
+html body > #seasonDecorations span{z-index:2147483646!important}
+/* The layer is above the interface visually, but never intercepts taps. */
+body.event-newyear .primary,
+body.event-newyear .add,
+body.event-newyear .secondary,
+body.event-newyear .season-event-toggle,
+body.event-halloween .primary,
+body.event-halloween .add,
+body.event-halloween .secondary,
+body.event-halloween .season-event-toggle,
+body.event-easter .primary,
+body.event-easter .add,
+body.event-easter .secondary,
+body.event-easter .season-event-toggle{
+ position:relative!important;
+ overflow:visible!important;
+ box-shadow:0 0 0 1px #f6d98a66,inset 0 2px 0 #fff7c866,0 4px 14px #0002!important;
+}
+body.event-newyear .primary:after,
+body.event-newyear .add:after,
+body.event-newyear .secondary:after,
+body.event-newyear .season-event-toggle:after,
+body.event-halloween .primary:after,
+body.event-halloween .add:after,
+body.event-halloween .secondary:after,
+body.event-halloween .season-event-toggle:after,
+body.event-easter .primary:after,
+body.event-easter .add:after,
+body.event-easter .secondary:after,
+body.event-easter .season-event-toggle:after{
+ content:""!important;
+ position:absolute!important;
+ left:9px!important;right:9px!important;top:2px!important;
+ height:5px!important;
+ border-top:2px dotted #fff1b8!important;
+ border-radius:50%!important;
+ opacity:.9!important;
+ pointer-events:none!important;
+}
+body.event-newyear .primary,body.event-newyear .add,body.event-newyear .secondary{border-color:#d7b65d!important}
+body.event-halloween .primary,body.event-halloween .add,body.event-halloween .secondary{border-color:#d9823d!important}
+body.event-easter .primary,body.event-easter .add,body.event-easter .secondary{border-color:#b6cf9d!important}
+#seasonDecorations .festive-pumpkin{
+ top:auto!important;bottom:8vh!important;
+ animation:festiveEggFloat 4.8s ease-in-out infinite!important;
+ filter:drop-shadow(0 4px 8px #0006)!important;
+}
+#seasonDecorations .festive-pumpkin:nth-of-type(2n){animation-delay:-2.4s!important}
+#seasonDecorations .festive-bauble{animation:festiveEggFloat 5s ease-in-out infinite!important}
+#seasonDecorations .festive-egg{animation:festiveEggFloat 4.5s ease-in-out infinite!important}
+#seasonDecorations .festive-firework{z-index:2147483646!important}
+/* New Year is deliberately a dark-theme-only event. */
+body:not(.dark-theme).event-newyear{--bg:#fff8ed}
 </style>
 </head>
 <body>
@@ -1643,15 +1715,16 @@ function renderSeasonDecorations(eventId){
  if(!root){root=document.createElement('div');root.id='seasonDecorations';root.setAttribute('aria-hidden','true');document.body.appendChild(root);}
  root.replaceChildren();
  const make=(cls,char,count)=>{for(let i=0;i<count;i++){const el=document.createElement('span');el.className=cls;el.textContent=char;el.style.left=(Math.random()*100).toFixed(2)+'%';el.style.animationDelay=(-Math.random()*22).toFixed(2)+'s';el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';root.appendChild(el)}};
- if(eventId==='newyear'){make('festive-fall','❄',30);make('festive-fall','✦',18);make('festive-bauble',['🔴','🟢','🟡'][0],1);make('festive-firework','✺',5);}
- if(eventId==='halloween'){make('festive-fall','🍂',20);make('festive-twinkle','✦',12);make('festive-bat','🦇',5);}
- if(eventId==='easter'){make('festive-fall','🌸',18);make('festive-twinkle','✿',18);make('festive-egg','🥚',6);}
+ if(eventId==='newyear'){make('festive-fall','❄',30);make('festive-fall','✦',18);make('festive-bauble','🔴',4);make('festive-bauble','🟢',4);make('festive-bauble','🟡',4);make('festive-firework','✺',7);}
+ if(eventId==='halloween'){make('festive-fall','🍂',20);make('festive-twinkle','✦',12);make('festive-bat','🦇',5);make('festive-pumpkin','🎃',7);}
+ if(eventId==='easter'){make('festive-fall','🌸',18);make('festive-twinkle','✿',18);make('festive-egg','🥚',9);}
 }
 function applySeasonEvent(eventId,notify=false){
  const season=eventId?eventSeason(eventId):'';
  if(eventId&&!season)return;
  const currentSeason=(()=>{try{return localStorage.getItem('gift-season-theme')||'autumn'}catch(e){return 'autumn'}})();
  if(eventId&&season!==currentSeason){if(notify)toast('Это событие доступно только в теме «'+({autumn:'Осень',winter:'Зима',spring:'Весна'}[season])+'».');return;}
+ if(eventId==='newyear'&&!document.body.classList.contains('dark-theme')){if(notify)toast('Новый год доступен только в тёмной теме.');return;}
  document.body.classList.remove('event-newyear','event-easter','event-halloween');
  if(eventId)document.body.classList.add('event-'+eventId);
  renderSeasonDecorations(eventId);
@@ -1702,7 +1775,7 @@ function applySeasonTheme(season){
 }
 function setSeasonTheme(season){applySeasonTheme(season);toast('Сезонная тема изменена.')}
 
-function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';updateThemeMeta()}
+function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';if(!dark&&getSeasonEvent()==='newyear')applySeasonEvent('',false);updateThemeMeta()}
 (function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonTheme(season)})();
 
 function toast(s) {
