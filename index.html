@@ -1027,6 +1027,41 @@ body #seasonDecorations .festive-firework{
 /* Keep the settings dialog above decorative particles. */
 .season-event-overlay{z-index:10050!important}
 
+
+/* VERIFIED LAYER OVERRIDE — decorations must be above every interactive surface */
+/* Remove fixed emoji ornaments attached to the hero/header corners. */
+body.event-newyear .hero:after,body.dark-theme.event-newyear .hero:after,
+body.event-halloween .hero:after,body.dark-theme.event-halloween .hero:after,
+body.event-easter .hero:after,body.dark-theme.event-easter .hero:after,
+body.event-newyear .hero:before,body.event-halloween .hero:before,body.event-easter .hero:before{
+ content:none!important;display:none!important;
+}
+/* Particle layers are direct children of body: keep them above all app surfaces. */
+html body > .season-particles,
+html body > .leaf-layer,
+html body > #seasonDecorations{
+ position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:0!important;
+ z-index:2147483647!important;isolation:isolate!important;
+ overflow:hidden!important;pointer-events:none!important;contain:none!important;
+}
+html body > .season-particles *,html body > .leaf-layer *,html body > #seasonDecorations *{
+ pointer-events:none!important;
+}
+/* Stars, flowers, baubles and seasonal ornaments all fall from above the viewport. */
+html body > #seasonDecorations .festive-fall,
+html body > #seasonDecorations .festive-twinkle,
+html body > #seasonDecorations .festive-bauble,
+html body > #seasonDecorations .festive-bat,
+html body > #seasonDecorations .festive-egg{
+ position:absolute!important;top:-16vh!important;bottom:auto!important;
+ animation-name:festiveFall!important;animation-timing-function:linear!important;
+ animation-iteration-count:infinite!important;
+}
+html body > #seasonDecorations .festive-firework{
+ position:absolute!important;top:auto!important;bottom:18%!important;
+ animation-name:festiveBurst!important;
+}
+
 </style>
 </head>
 <body>
