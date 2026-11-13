@@ -784,6 +784,53 @@ body.dark-theme.season-spring nav{position:relative;z-index:4}
 body.season-spring .bottom,
 body.dark-theme.season-spring .bottom{z-index:30!important}
 
+
+/* ACTUAL FIX: remove legacy pseudo decorations, animate all NY particles, raise spring drops */
+body.event-newyear header .brand:after,
+body.event-halloween header .brand:after,
+body.event-easter header .brand:after,
+body.event-newyear:after,
+body.event-newyear:before,
+body.event-halloween header .brand:after,
+body.event-easter header .brand:after{
+ content:none!important;
+ display:none!important;
+}
+body.event-newyear .promo-line:before,
+body.event-newyear .promo-line:after,
+body.event-halloween .promo-line:before,
+body.event-halloween .promo-line:after,
+body.event-easter .promo-line:before,
+body.event-easter .promo-line:after{content:none!important;display:none!important}
+body.event-newyear #seasonDecorations .festive-fall{
+ top:-16vh!important;
+ animation-name:festiveFall!important;
+ animation-duration:11s!important;
+ animation-timing-function:linear!important;
+ animation-iteration-count:infinite!important;
+}
+body.event-newyear #seasonDecorations .festive-fall:nth-child(2n){
+ animation-duration:15s!important;
+}
+body.event-newyear #seasonDecorations .festive-firework{
+ animation-name:festiveBurst!important;
+}
+body.season-spring .season-particles,
+body.dark-theme.season-spring .season-particles{
+ z-index:999!important;
+}
+body.season-spring .season-particles span,
+body.dark-theme.season-spring .season-particles span{
+ position:absolute!important;
+ z-index:999!important;
+}
+body.season-spring header,
+body.season-spring main,
+body.season-spring nav,
+body.dark-theme.season-spring header,
+body.dark-theme.season-spring main,
+body.dark-theme.season-spring nav{z-index:2!important}
+
 </style>
 </head>
 <body>
