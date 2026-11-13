@@ -2166,7 +2166,11 @@ export default {
         if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
         const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
         const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
-        return json({ok:true,order:product||custom,order_type:product?"product":"custom",messages:rows.results||[],changes:changes.results||[]},200,origin);
+        const chatCreatedAt=String((product||custom).created_at||"").trim().replace(" ","T");
+        const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
+        const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
+        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000;
+        return json({ok:true,order:product||custom,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
       }
       if (path === "/api/order-chat" && method === "POST") {
         const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
