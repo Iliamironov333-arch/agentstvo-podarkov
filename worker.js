@@ -1567,6 +1567,42 @@ export default {
           }
           return json({ ok: true, order_id: orderId, order_type: orderType, status: hasStatus ? status : previous.admin_status, comment_saved: !!comment, notification }, 200, origin);
         }
+        if (path === "/api/admin/order-chat" && method === "GET") {
+          const orderId=String(url.searchParams.get("order_id")||"").trim().slice(0,100);
+          if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+          const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? ORDER BY id LIMIT 200").bind(orderId).all();
+          const changes=await env.DB.prepare("SELECT id,telegram_id,proposed_json,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 50").bind(orderId).all();
+          return json({ok:true,messages:rows.results||[],changes:changes.results||[]},200,origin);
+        }
+        if (path === "/api/admin/order-chat" && method === "POST") {
+          const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),action=String(body.action||"reply");
+          if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+          const product=await env.DB.prepare("SELECT telegram_id FROM orders WHERE id=?").bind(orderId).first();
+          const custom=await env.DB.prepare("SELECT telegram_id FROM custom_orders WHERE id=?").bind(orderId).first();
+          const target=product||custom;
+          if(!target)return json({error:"Заказ не найден."},404,origin);
+          if(action==="reply"){
+            const message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
+            if(!message)return json({error:"Введите сообщение покупателю."},400,origin);
+            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'owner',?)").bind(orderId,String(target.telegram_id),message).run();
+            let notification={sent:false};
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"💬 Сообщение владельца по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
+            catch(error){notification.error=String(error.message||error).slice(0,240);}
+            return json({ok:true,notification},200,origin);
+          }
+          if(action==="reject_change"){
+            const changeId=String(body.change_id||"").trim().slice(0,100);
+            if(!changeId)return json({error:"Не указан запрос на изменение."},400,origin);
+            const result=await env.DB.prepare("UPDATE order_change_requests SET status='rejected',resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=? AND status='pending'")
+              .bind(telegramId,String(body.note||"Изменение отклонено владельцем").slice(0,500),changeId,orderId).run();
+            if(!result.meta?.changes)return json({error:"Запрос уже обработан или не найден."},409,origin);
+            const note=String(body.note||"Владелец не подтвердил это изменение. Вы можете обсудить детали в чате.").slice(0,1000);
+            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),"Владелец рассмотрел предложение: "+note).run();
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"📦 По вашему заказу № "+orderId+" есть ответ владельца:\n"+note});}catch(error){console.error("Order change decision notification failed:",String(error).slice(0,240));}
+            return json({ok:true,status:"rejected"},200,origin);
+          }
+          return json({error:"Неизвестное действие чата заказа."},400,origin);
+        }
         if (path === "/api/admin/order" && method === "GET") {
           const url = new URL(request.url);
           const orderId = (url.searchParams.get("order_id") || "").trim().slice(0,100);
