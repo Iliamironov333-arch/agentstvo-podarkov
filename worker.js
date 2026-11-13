@@ -2181,7 +2181,7 @@ export default {
         let answer;
         try{answer=await createOrderChatAnswer(env,history,{order_type:product?"product":"custom",order_id:orderId,title:product?.product_title||custom?.subject,total_stars:order.total_stars,payment_status:product?.payment_status||null,fulfillment_status:product?.fulfillment_status||null,custom_answers:custom?.answers_json||null});}
         catch(error){
-          try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+"\\n\\nИИ временно не смог ответить.");}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
+          try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\nЗаказ: "+orderId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\n\nИИ временно не смог ответить.");}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
           return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);
         }
         if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
