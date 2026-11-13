@@ -1132,6 +1132,8 @@ body.event-easter .primary,body.event-easter .add,body.event-easter .secondary{b
 #seasonDecorations .festive-bauble{animation:festiveEggFloat 5s ease-in-out infinite!important}
 #seasonDecorations .festive-egg{animation:festiveEggFloat 4.5s ease-in-out infinite!important}
 #seasonDecorations .festive-firework{z-index:2147483646!important}
+/* Keep the event settings dialog above the foreground decorations. */
+.season-event-overlay{z-index:2147483647!important}
 /* New Year is deliberately a dark-theme-only event. */
 body:not(.dark-theme).event-newyear{--bg:#fff8ed}
 </style>
