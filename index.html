@@ -2721,6 +2721,7 @@ async function openAdminOrder(orderId,orderType) {
     addLine('Наполнитель',bundle.filler?'Да':'Нет');
     addLine('Сезонные дополнения',(bundle.seasonal_extras||[]).join(', ')||'Нет');
     addLine('Порядок расположения',Array.isArray(bundle.layout)?bundle.layout.join(' → '):'—');
+    if(bundle.owner_approved_change?.summary)addLine('Согласованное изменение',bundle.owner_approved_change.summary);
    }
    (data.revisions||[]).forEach((revision,index)=>addLine('Подтверждённое изменение '+(index+1),revision.change_summary+' · предыдущая версия № '+revision.previous_order_id));
   }else{
