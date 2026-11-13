@@ -644,6 +644,111 @@ body.event-newyear .season-theme-card.active,body.event-halloween .season-theme-
 @media(prefers-reduced-motion:reduce){#seasonDecorations span{animation:none!important}}
 @media(max-width:420px){body.event-newyear header:after,body.event-halloween header:after,body.event-easter header:after{font-size:14px;letter-spacing:2px}}
 
+
+/* PREMIUM FESTIVE ART DIRECTION — overrides the original seasonal CSS */
+body.event-newyear,body.dark-theme.event-newyear{
+ --bg:#061725;--panel:#102c40;--panel2:#173c50;--gold:#e8c477;--gold2:#ffe6a6;
+ --text:#f5f7f4;--muted:#c0d0d6;--line:#477b83;
+ background:radial-gradient(ellipse at 50% -15%,#27616b 0,#12394b 34%,#071d2d 70%,#04111d 100%) fixed!important;
+ color:#f5f7f4!important;color-scheme:dark
+}
+body.event-halloween,body.dark-theme.event-halloween{
+ --bg:#170e20;--panel:#2b1a30;--panel2:#3a2440;--gold:#ef9b48;--gold2:#ffd08b;
+ --text:#fff5e9;--muted:#ddc7d8;--line:#895c69;
+ background:radial-gradient(ellipse at 50% -12%,#62334e 0,#351e3b 38%,#1a1025 76%,#100a18 100%) fixed!important;
+ color:#fff5e9!important;color-scheme:dark
+}
+body.event-easter,body.dark-theme.event-easter{
+ --bg:#f7f3e9;--panel:#fffdf7;--panel2:#edf2e5;--gold:#789c68;--gold2:#4f754b;
+ --text:#344a39;--muted:#667d68;--line:#c7d8bf;
+ background:radial-gradient(ellipse at 50% -15%,#f5dfe9 0,#f7efd9 40%,#e6efdf 78%,#fffaf0 100%) fixed!important;
+ color:#344a39!important;color-scheme:light
+}
+/* Make every surface legible and visually related */
+body.event-newyear .balancebar,body.event-newyear .panel,body.event-newyear .product,body.event-newyear .menu-card,
+body.event-newyear .secondary,body.dark-theme.event-newyear .balancebar,body.dark-theme.event-newyear .panel,
+body.dark-theme.event-newyear .product,body.dark-theme.event-newyear .menu-card,body.dark-theme.event-newyear .secondary{
+ background:linear-gradient(145deg,#163d50,#102b3e 68%,#123b40)!important;color:#f5f7f4!important;
+ border:1px solid #548e8a!important;box-shadow:0 9px 25px #020d1880,inset 0 1px #d5fff01c!important
+}
+body.event-halloween .balancebar,body.event-halloween .panel,body.event-halloween .product,body.event-halloween .menu-card,
+body.event-halloween .secondary,body.dark-theme.event-halloween .balancebar,body.dark-theme.event-halloween .panel,
+body.dark-theme.event-halloween .product,body.dark-theme.event-halloween .menu-card,body.dark-theme.event-halloween .secondary{
+ background:linear-gradient(145deg,#422744,#291a32 68%,#3a2428)!important;color:#fff5e9!important;
+ border:1px solid #a86b4d!important;box-shadow:0 9px 25px #10071888,inset 0 1px #ffe2c31c!important
+}
+body.event-easter .balancebar,body.event-easter .panel,body.event-easter .product,body.event-easter .menu-card,
+body.event-easter .secondary,body.dark-theme.event-easter .balancebar,body.dark-theme.event-easter .panel,
+body.dark-theme.event-easter .product,body.dark-theme.event-easter .menu-card,body.dark-theme.event-easter .secondary{
+ background:linear-gradient(145deg,#fffef8,#edf4e7 70%,#f8e9ef)!important;color:#344a39!important;
+ border:1px solid #c2d8b8!important;box-shadow:0 8px 22px #728e6030,inset 0 1px #fff!important
+}
+/* Product imagery and typography must not disappear into the card */
+body.event-newyear .art,body.dark-theme.event-newyear .art{background:radial-gradient(circle at 50% 35%,#286273,#102d42 76%)!important;border-bottom:1px solid #548e8a}
+body.event-halloween .art,body.dark-theme.event-halloween .art{background:radial-gradient(circle at 50% 35%,#754333,#321e37 76%)!important;border-bottom:1px solid #a86b4d}
+body.event-easter .art,body.dark-theme.event-easter .art{background:radial-gradient(circle at 50% 35%,#fff0d9,#e6efdf 76%)!important;border-bottom:1px solid #c2d8b8}
+body.event-newyear .product h3,body.event-newyear .panel h3,body.event-newyear .menu-card strong,body.dark-theme.event-newyear .product h3,body.dark-theme.event-newyear .panel h3,body.dark-theme.event-newyear .menu-card strong{color:#fff8e8!important}
+body.event-newyear .price,body.dark-theme.event-newyear .price{color:#ffdf91!important}
+body.event-newyear .muted,body.event-newyear .product small,body.dark-theme.event-newyear .muted,body.dark-theme.event-newyear .product small{color:#c5dce0!important}
+body.event-halloween .product h3,body.event-halloween .panel h3,body.event-halloween .menu-card strong,body.dark-theme.event-halloween .product h3,body.dark-theme.event-halloween .panel h3,body.dark-theme.event-halloween .menu-card strong{color:#fff4e8!important}
+body.event-halloween .price,body.dark-theme.event-halloween .price{color:#ffc078!important}
+body.event-halloween .muted,body.event-halloween .product small,body.dark-theme.event-halloween .muted,body.dark-theme.event-halloween .product small{color:#e4cbdc!important}
+body.event-easter .product h3,body.event-easter .panel h3,body.event-easter .menu-card strong,body.dark-theme.event-easter .product h3,body.dark-theme.event-easter .panel h3,body.dark-theme.event-easter .menu-card strong{color:#344a39!important}
+body.event-easter .price,body.dark-theme.event-easter .price{color:#527c4b!important}
+body.event-easter .muted,body.event-easter .product small,body.dark-theme.event-easter .muted,body.dark-theme.event-easter .product small{color:#637b65!important}
+/* Decorative framed buttons, not flat recolored pills */
+body.event-newyear .add,body.event-newyear .primary,body.dark-theme.event-newyear .add,body.dark-theme.event-newyear .primary{
+ background:linear-gradient(115deg,#f8e3a7,#d6ad5d 48%,#f6d98b)!important;color:#17313a!important;
+ border:1px solid #fff0bb!important;outline:1px solid #a77d3c;outline-offset:-4px;border-radius:13px!important;
+ box-shadow:0 4px 0 #76572d,0 7px 16px #0005,inset 0 1px #fff9!important;text-shadow:0 1px #fff7
+}
+body.event-newyear .secondary,body.dark-theme.event-newyear .secondary{border:1px solid #82c5b2!important;outline:1px solid #275b62;outline-offset:-4px;border-radius:13px!important}
+body.event-halloween .add,body.event-halloween .primary,body.dark-theme.event-halloween .add,body.dark-theme.event-halloween .primary{
+ background:linear-gradient(115deg,#ffd08a,#e87935 52%,#a84639)!important;color:#2b1728!important;
+ border:1px solid #ffe0ad!important;outline:1px solid #8e493b;outline-offset:-4px;border-radius:13px!important;
+ box-shadow:0 4px 0 #71342f,0 7px 16px #0005,inset 0 1px #fff9!important
+}
+body.event-halloween .secondary,body.dark-theme.event-halloween .secondary{border:1px solid #d28b62!important;outline:1px solid #67364a;outline-offset:-4px;border-radius:13px!important}
+body.event-easter .add,body.event-easter .primary,body.dark-theme.event-easter .add,body.dark-theme.event-easter .primary{
+ background:linear-gradient(115deg,#fff0c9,#dce9c9 52%,#edcfdf)!important;color:#354c38!important;
+ border:1px solid #fff!important;outline:1px solid #a8c49a;outline-offset:-4px;border-radius:13px!important;
+ box-shadow:0 4px 0 #b7cba9,0 7px 16px #718e6030,inset 0 1px #fff!important
+}
+body.event-easter .secondary,body.dark-theme.event-easter .secondary{border:1px solid #c3d8b7!important;outline:1px solid #e5d1df;outline-offset:-4px;border-radius:13px!important}
+body.event-newyear .add:active,body.event-newyear .primary:active,body.event-halloween .add:active,body.event-halloween .primary:active,body.event-easter .add:active,body.event-easter .primary:active{transform:translateY(2px);box-shadow:0 2px 0 #76572d,0 3px 8px #0004!important}
+/* Header, banner and category navigation become one coherent composition */
+body.event-newyear header,body.dark-theme.event-newyear header{background:linear-gradient(180deg,#092a3b,#071a2a)!important;border-bottom:2px solid #c8a65e!important;box-shadow:0 8px 26px #0007}
+body.event-halloween header,body.dark-theme.event-halloween header{background:linear-gradient(180deg,#351c3b,#1b1026)!important;border-bottom:2px solid #d67a3d!important;box-shadow:0 8px 26px #0007}
+body.event-easter header,body.dark-theme.event-easter header{background:linear-gradient(180deg,#fff9ed,#e9f1e2)!important;border-bottom:2px solid #c4d8ae!important;box-shadow:0 8px 26px #819c7040}
+body.event-newyear .hero,body.dark-theme.event-newyear .hero{background:linear-gradient(120deg,#0e5260,#153b59 56%,#1c5c50)!important;border:2px solid #d3b36d!important;outline:1px solid #4c8d85;outline-offset:3px;box-shadow:0 12px 30px #0006,inset 0 0 30px #a8ffe51c!important;color:#fff!important}
+body.event-halloween .hero,body.dark-theme.event-halloween .hero{background:linear-gradient(120deg,#6a3441,#3a2345 58%,#7b432a)!important;border:2px solid #ed9b50!important;outline:1px solid #7e4d68;outline-offset:3px;box-shadow:0 12px 30px #0006!important;color:#fff8ee!important}
+body.event-easter .hero,body.dark-theme.event-easter .hero{background:linear-gradient(120deg,#e3efcf,#fff0d9 56%,#f0dce9)!important;border:2px solid #c1d9a9!important;outline:1px solid #f8fff0;outline-offset:3px;box-shadow:0 12px 30px #91a98130!important;color:#344a39!important}
+body.event-newyear .hero p,body.dark-theme.event-newyear .hero p{color:#e0f4f0!important}
+body.event-halloween .hero p,body.dark-theme.event-halloween .hero p{color:#f9e2dc!important}
+body.event-easter .hero p,body.dark-theme.event-easter .hero p{color:#5c725c!important}
+body.event-newyear nav button,body.dark-theme.event-newyear nav button{background:#12384b!important;border:1px solid #5c9890!important;color:#e2f4ed!important}
+body.event-halloween nav button,body.dark-theme.event-halloween nav button{background:#38213e!important;border:1px solid #9b625c!important;color:#fae9df!important}
+body.event-easter nav button,body.dark-theme.event-easter nav button{background:#fff9ed!important;border:1px solid #c4d8b7!important;color:#4e694e!important}
+body.event-newyear nav button.active,body.dark-theme.event-newyear nav button.active{background:linear-gradient(110deg,#f5d98d,#78c7ad)!important;color:#17343b!important;border-color:#fff0ba!important}
+body.event-halloween nav button.active,body.dark-theme.event-halloween nav button.active{background:linear-gradient(110deg,#f8b15f,#bd6b56)!important;color:#30192d!important;border-color:#ffe0ae!important}
+body.event-easter nav button.active,body.dark-theme.event-easter nav button.active{background:linear-gradient(110deg,#d8e9c6,#f2dce8)!important;color:#354d38!important;border-color:#fff!important}
+body.event-newyear .bottom,body.dark-theme.event-newyear .bottom{background:#071b2bf5!important;border-top:2px solid #548e8a!important;color:#e8f5ef!important}
+body.event-halloween .bottom,body.dark-theme.event-halloween .bottom{background:#1b1026f5!important;border-top:2px solid #a86b4d!important;color:#fff0e5!important}
+body.event-easter .bottom,body.dark-theme.event-easter .bottom{background:#fff9eef5!important;border-top:2px solid #c7d8bf!important;color:#455e46!important}
+/* Card frames and spacing create a deliberate premium rhythm */
+body.event-newyear .product,body.event-newyear .menu-card,body.dark-theme.event-newyear .product,body.dark-theme.event-newyear .menu-card{border-radius:18px!important;outline:1px solid #d5b86a55;outline-offset:-5px}
+body.event-halloween .product,body.event-halloween .menu-card,body.dark-theme.event-halloween .product,body.dark-theme.event-halloween .menu-card{border-radius:18px!important;outline:1px solid #e49b5c55;outline-offset:-5px}
+body.event-easter .product,body.event-easter .menu-card,body.dark-theme.event-easter .product,body.dark-theme.event-easter .menu-card{border-radius:18px!important;outline:1px solid #b7cfaa;outline-offset:-5px}
+body.event-newyear .season-event-dialog{background:#102c40;color:#f5f7f4;border-color:#477b83}
+body.event-halloween .season-event-dialog{background:#2b1a30;color:#fff5e9;border-color:#895c69}
+body.event-easter .season-event-dialog{background:#fffdf7;color:#344a39;border-color:#c7d8bf}
+/* Keep floating ornaments behind readable controls; they must never cover labels */
+#seasonDecorations{z-index:3!important}
+#seasonDecorations span{opacity:.48;filter:drop-shadow(0 2px 5px #0004)}
+header,main,.bottom{position:relative;z-index:4}
+.bottom{position:fixed;z-index:5}
+@media(max-width:420px){body.event-newyear .hero:after,body.event-halloween .hero:after,body.event-easter .hero:after{font-size:66px;opacity:.18}}
+
 </style>
 </head>
 <body>
