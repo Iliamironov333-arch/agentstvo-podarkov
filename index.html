@@ -1451,6 +1451,7 @@ html body > div.bottom button{
   <p class="notice" id="promoStatus" aria-live="polite">Скидка по каталогу уже учтена. Промокод — дополнительная акция.</p>
   <div class="lineitem"><span>Стоимость товаров</span><b id="subtotal">0 ⭐</b></div>
   <div class="lineitem"><span>Скидка</span><b id="discount">Уже учтена в каталоге</b></div>
+  <div class="lineitem hidden" id="giftBuilderCartExtrasRow"><span>Дополнения к подарку</span><b id="giftBuilderCartExtras">0 ⭐</b></div>
   <div class="lineitem"><span>Доставка</span><b id="deliveryCost">По адресу</b></div>
   <div class="lineitem"><span>К оплате</span><b id="total">0 ⭐</b></div>
   <button class="primary" id="checkoutBtn" onclick="checkout()">Оформить заказ 🎁</button>
@@ -1587,7 +1588,7 @@ let giftBuilderSelection={};
 let giftBuilderLayoutOrder=[];
 let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
-try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;}catch{window.pendingGiftBundleId=null;}
+try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;}
 
 const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
@@ -1931,10 +1932,11 @@ async function addGiftBuilderToCart(){
  for(const item of items){const combined=Number(cart[item.id]||0)+item.qty;if(combined>10)return toast('В корзине максимум 10 штук одного товара.');}
  const add=document.getElementById('giftBuilderAdd');if(add)add.disabled=true;
  try{
-  await saveGiftBuilderDraft();
+  const savedDraft=await saveGiftBuilderDraft();
   items.forEach(item=>{cart[item.id]=Number(cart[item.id]||0)+item.qty;});
   window.pendingGiftBundleId=giftBuilderDraftId;
-  try{localStorage.setItem('gift-pending-bundle-id',giftBuilderDraftId);}catch{}
+  window.pendingGiftBundleExtraStars=Math.max(0,Number(savedDraft.extras_total||0));
+  try{localStorage.setItem('gift-pending-bundle-id',giftBuilderDraftId);localStorage.setItem('gift-pending-bundle-extras',String(window.pendingGiftBundleExtraStars));}catch{}
   persistCart();drawProducts();drawCart();showView('cartView');toast('Подарочный набор добавлен в корзину. Оформление сохранено!');
  }catch(e){toast(e.message||'Не удалось сохранить набор.');}
  finally{if(add)add.disabled=false;}
@@ -1988,7 +1990,11 @@ function drawCart() {
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
  const discountAmount = activePromo ? Number(activePromo.discount_stars||0) : 0;
- const total = Math.max(0,subtotal-discountAmount);
+ const builderExtras = window.pendingGiftBundleId ? Math.max(0,Number(window.pendingGiftBundleExtraStars||0)) : 0;
+ const total = Math.max(0,subtotal-discountAmount)+builderExtras;
+ const extrasRow=document.getElementById('giftBuilderCartExtrasRow'),extrasValue=document.getElementById('giftBuilderCartExtras');
+ if(extrasRow)extrasRow.classList.toggle('hidden',!builderExtras);
+ if(extrasValue)extrasValue.textContent=money(builderExtras);
 
  document.getElementById('subtotal').textContent = money(subtotal);
  document.getElementById('discount').textContent = discountAmount ? '-'+money(discountAmount)+' ('+activePromo.code+')' : 'Уже учтена в каталоге';
@@ -3478,7 +3484,12 @@ async function checkout() {
    delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
    priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked
   })});
-  if(window.pendingGiftBundleId){window.pendingGiftBundleId=null;try{localStorage.removeItem('gift-pending-bundle-id');}catch{}}
+  const wasGiftBundle=!!window.pendingGiftBundleId;
+  if(wasGiftBundle){
+   window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;
+   try{localStorage.removeItem('gift-pending-bundle-id');localStorage.removeItem('gift-pending-bundle-extras');}catch{}
+   cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
+  }
   const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
   if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
