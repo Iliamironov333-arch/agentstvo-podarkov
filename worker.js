@@ -1583,10 +1583,11 @@ export default {
           if(!target)return json({error:"Заказ не найден."},404,origin);
           if(action==="reply"){
             const message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
+            const senderType=body.sender_type==="ai"?"ai":"owner";
             if(!message)return json({error:"Введите сообщение покупателю."},400,origin);
-            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'owner',?)").bind(orderId,String(target.telegram_id),message).run();
+            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,?,?)").bind(orderId,String(target.telegram_id),senderType,message).run();
             let notification={sent:false};
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"💬 Сообщение владельца по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-консультант":"💬 Владелец")+" по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
             catch(error){notification.error=String(error.message||error).slice(0,240);}
             return json({ok:true,notification},200,origin);
           }
