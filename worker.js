@@ -332,6 +332,9 @@ async function cancelPendingOrderAndRefund(env, orderId, telegramId) {
     statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId));
   }
   const results = await env.DB.batch(statements);
+  if(results[0]?.meta?.changes&&await tableExists(env,"gift_bundles")){
+    await env.DB.prepare("UPDATE gift_bundles SET status='draft',order_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='ordered'").bind(orderId).run();
+  }
   return !!results[0]?.meta?.changes;
 }
 
@@ -1610,7 +1613,9 @@ export default {
             const newOrderId=makeId(),summary=String(change.ai_summary||"Изменение по просьбе покупателя").slice(0,700),note=ownerNote||"Изменение подтверждено владельцем.";
             let changeData={};try{changeData=JSON.parse(change.proposed_json||"{}");}catch{changeData={customer_request:String(change.proposed_json||"")};}
             const revisionDetails={summary,owner_note:note,proposed_changes:changeData,approved_by:telegramId};
+            let sourceBundle=null;
             if(productOrder){
+              sourceBundle=await env.DB.prepare("SELECT title,bundle_json FROM gift_bundles WHERE order_id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first().catch(()=>null);
               await env.DB.batch([
                 env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars) SELECT ?,telegram_id,product_id,product_title || ' · обновлённая версия',quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars FROM orders WHERE id=?").bind(newOrderId,orderId),
                 env.DB.prepare("INSERT INTO order_items(order_id,product_id,product_title,quantity,image_url,delivery_status) SELECT ?,product_id,product_title,quantity,image_url,delivery_status FROM order_items WHERE order_id=?").bind(newOrderId,orderId),
@@ -1619,6 +1624,12 @@ export default {
                 env.DB.prepare("UPDATE payment_intents SET reference_id=? WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(newOrderId,orderId,String(target.telegram_id)),
                 env.DB.prepare("UPDATE payments SET order_id=? WHERE order_id=?").bind(newOrderId,orderId)
               ]);
+            }
+            if(productOrder&&sourceBundle){
+              let revisedBundle={};try{revisedBundle=JSON.parse(sourceBundle.bundle_json||"{}");}catch{revisedBundle={};}
+              revisedBundle.owner_approved_change=revisionDetails;
+              await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,order_id,title,bundle_json,status) VALUES(?,?,?,?,?,'ordered')")
+                .bind(makeId(),String(target.telegram_id),newOrderId,sourceBundle.title||"Подарочный набор",JSON.stringify(revisedBundle)).run();
             }
             if(customOrder){
               const answers=(()=>{try{return JSON.parse(customOrder.answers_json||"{}");}catch{return {original_answers:customOrder.answers_json||""};}})();
