@@ -1858,6 +1858,7 @@ function drawProducts() {
  });
 }
 
+document.addEventListener('change',event=>{if(event.target?.closest?.('#giftBuilderView'))renderGiftBuilder();});
 function openGiftBuilder(){
  giftBuilderSelection={};
  Object.entries(cart||{}).forEach(([id,qty])=>{if(Number(qty)>0)giftBuilderSelection[String(id)]=Math.min(10,Number(qty));});
@@ -2786,7 +2787,7 @@ async function openAdminOrder(orderId,orderType) {
   box.append(section);
   const orderChatPanel=document.createElement('div');orderChatPanel.className='panel';orderChatPanel.style.marginTop='16px';
   const orderChatHeading=document.createElement('h4');orderChatHeading.textContent='💬 Чат сопровождения заказа';orderChatPanel.append(orderChatHeading);
-  box.append(orderChatPanel);loadAdminOrderChat(String(order.id),orderChatPanel);
+  box.append(orderChatPanel);loadAdminOrderChat(String(order.id),orderChatPanel,orderType);
   const historyTitle=document.createElement('h4');historyTitle.textContent='История изменений';box.append(historyTitle);
   const history=Array.isArray(data.history)?data.history:[];
   if(!history.length){
@@ -2807,7 +2808,7 @@ async function openAdminOrder(orderId,orderType) {
  }catch(e){box.textContent=e.message||'Не удалось загрузить заказ.';}
 }
 
-async function loadAdminOrderChat(orderId,root){
+async function loadAdminOrderChat(orderId,root,orderType='product'){
  root.replaceChildren();
  const title=document.createElement('h4');title.textContent='💬 Переписка с покупателем';root.append(title);
  const log=document.createElement('div');log.style.cssText='display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto;padding:6px 0';root.append(log);
@@ -2827,9 +2828,22 @@ async function loadAdminOrderChat(orderId,root){
    const card=document.createElement('div');card.className='admin-detail-line';
    const summary=document.createElement('p');summary.textContent=change.ai_summary;card.append(summary);
    const details=document.createElement('small');details.textContent=change.proposed_json||'';card.append(details);
+   const accept=document.createElement('button');accept.type='button';accept.className='primary';accept.textContent='✓ Подтвердить и создать новую версию';
+   accept.addEventListener('click',async()=>{const note=prompt('Комментарий к подтверждённому изменению (необязательно):','Изменение подтверждено владельцем.');if(note===null)return;if(!confirm('Подтвердить изменение? Старая версия заказа будет закрыта, а новая появится в списке заказов.'))return;accept.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'accept_change',order_id:orderId,change_id:change.id,note})});toast('Создана новая версия заказа № '+result.new_order_id);await openAdminOrder(result.new_order_id,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить изменение.');accept.disabled=false;}});
    const reject=document.createElement('button');reject.type='button';reject.className='secondary';reject.textContent='Отклонить изменение';
-   reject.addEventListener('click',async()=>{const note=prompt('Комментарий покупателю (необязательно):','Пока не можем внести это изменение. Давайте обсудим детали.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reject_change',order_id:orderId,change_id:change.id,note})});toast('Изменение отклонено, покупатель уведомлён.');await loadAdminOrderChat(orderId,root);}catch(e){toast(e.message||'Не удалось отклонить изменение.');reject.disabled=false;}});
-   card.append(reject);changes.append(card);
+   reject.addEventListener('click',async()=>{const note=prompt('Комментарий покупателю (необязательно):','Пока не можем внести это изменение. Давайте обсудим детали.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reject_change',order_id:orderId,change_id:change.id,note})});toast('Изменение отклонено, покупатель уведомлён.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось отклонить изменение.');reject.disabled=false;}});
+   card.append(accept,reject);changes.append(card);
+  });
+  const pendingCancels=(d.cancellations||[]).filter(x=>x.status==='requested');
+  if(pendingCancels.length){const h=document.createElement('h4');h.textContent='⚠️ Запросы на отмену';changes.append(h);}
+  pendingCancels.forEach(item=>{
+   const card=document.createElement('div');card.className='admin-detail-line';
+   const reason=document.createElement('p');reason.textContent='Причина: '+(item.reason||'Не указана')+' · '+formatDate(item.created_at);card.append(reason);
+   const approve=document.createElement('button');approve.type='button';approve.className='primary';approve.textContent='Подтвердить отмену';
+   approve.addEventListener('click',async()=>{if(orderType==='product'&&!confirm('Вы уже выполнили возврат Telegram Stars покупателю в платёжной системе? Подтверждать отмену можно только после возврата.'))return;const note=prompt('Комментарий покупателю (необязательно):','Запрос на отмену подтверждён.');if(note===null)return;approve.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'approve',order_id:orderId,request_id:item.id,refund_confirmed:orderType!=='product'||true,note})});toast('Отмена подтверждена.');await openAdminOrder(orderId,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить отмену.');approve.disabled=false;}});
+   const reject=document.createElement('button');reject.type='button';reject.className='secondary';reject.textContent='Отклонить запрос';
+   reject.addEventListener('click',async()=>{const note=prompt('Причина отказа:','Не можем отменить этот заказ.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'reject',order_id:orderId,request_id:item.id,note})});toast('Запрос на отмену отклонён.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось обработать запрос.');reject.disabled=false;}});
+   card.append(approve,reject);changes.append(card);
   });
   const mode=document.createElement('select');mode.style.marginTop='12px';
   [['owner','💬 От имени владельца'],['ai','🤖 От имени ИИ-консультанта']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;mode.append(option);});
@@ -3452,6 +3466,7 @@ async function checkout() {
    delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
    priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked
   })});
+  if(window.pendingGiftBundleId)window.pendingGiftBundleId=null;
   const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
   if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
