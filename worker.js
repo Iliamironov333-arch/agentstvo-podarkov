@@ -2180,14 +2180,17 @@ export default {
         const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
         let answer;
         try{answer=await createOrderChatAnswer(env,history,{order_type:product?"product":"custom",order_id:orderId,title:product?.product_title||custom?.subject,total_stars:order.total_stars,payment_status:product?.payment_status||null,fulfillment_status:product?.fulfillment_status||null,custom_answers:custom?.answers_json||null});}
-        catch(error){return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+        catch(error){
+          try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+"\\n\\nИИ временно не смог ответить.");}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
+          return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);
+        }
         if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
+        try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+(answer.change_summary?"\\n\\n📝 Запрошенное изменение: "+answer.change_summary:""));}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
         await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(orderId,telegramId,answer.reply).run();
         let changeId=null;
         if(answer.change_summary){
           changeId=makeId();
           await env.DB.prepare("INSERT INTO order_change_requests(id,order_id,telegram_id,proposed_json,ai_summary,status) VALUES(?,?,?,?,?,'pending')").bind(changeId,orderId,telegramId,JSON.stringify(answer.proposed_changes||{customer_request:message}),answer.change_summary).run();
-          await notifyOwner(env,"📝 ПОКУПАТЕЛЬ ХОЧЕТ ИЗМЕНИТЬ ЗАКАЗ\nЗаказ: "+orderId+"\nПокупатель: "+telegramId+"\nИзменение: "+answer.change_summary+"\n\nОткройте заказ в панели владельца и обсудите изменение в чате. ИИ не применял его автоматически.");
         }
         return json({ok:true,reply:answer.reply,change_request_id:changeId},200,origin);
       }
@@ -2217,7 +2220,9 @@ export default {
         const custom=await env.DB.prepare("SELECT id,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const createdAt=linked?.created_at||custom?.created_at;
         if(!createdAt)return json({error:"Заказ не найден."},404,origin);
-        const ageMs=Date.now()-Date.parse(String(createdAt).replace(" ","T")+"Z");
+        const createdAtText=String(createdAt).trim().replace(" ","T");
+        const createdAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(createdAtText)?createdAtText:createdAtText+"Z";
+        const ageMs=Date.now()-Date.parse(createdAtIso);
         if(!Number.isFinite(ageMs)||ageMs<0||ageMs>72*60*60*1000)return json({error:"Отменить заказ через Mini App можно только в течение первых 3 дней после оформления."},409,origin);
         if(!linked){
           if(!custom||["cancelled","canceled"].includes(String(custom.status)))return json({error:"Заказ уже отменён."},409,origin);
