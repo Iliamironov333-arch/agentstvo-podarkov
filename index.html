@@ -2714,6 +2714,15 @@ async function openAdminOrder(orderId,orderType) {
    const items=Array.isArray(data.items)?data.items:[];
    addLine('Позиций',items.length);
    items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
+   if(data.gift_bundle){
+    const bundle=data.gift_bundle;
+    addLine('Индивидуальная открытка',bundle.postcard?'Да · '+(bundle.postcard_text||'Текст не указан'):'Нет');
+    addLine('Сертификат',bundle.certificate?'Да':'Нет');
+    addLine('Наполнитель',bundle.filler?'Да':'Нет');
+    addLine('Сезонные дополнения',(bundle.seasonal_extras||[]).join(', ')||'Нет');
+    addLine('Порядок расположения',Array.isArray(bundle.layout)?bundle.layout.join(' → '):'—');
+   }
+   (data.revisions||[]).forEach((revision,index)=>addLine('Подтверждённое изменение '+(index+1),revision.change_summary+' · предыдущая версия № '+revision.previous_order_id));
   }else{
    addLine('Тема',order.subject);
    addLine('Статус заявки',order.status);
@@ -2840,7 +2849,7 @@ async function loadAdminOrderChat(orderId,root,orderType='product'){
    const card=document.createElement('div');card.className='admin-detail-line';
    const reason=document.createElement('p');reason.textContent='Причина: '+(item.reason||'Не указана')+' · '+formatDate(item.created_at);card.append(reason);
    const approve=document.createElement('button');approve.type='button';approve.className='primary';approve.textContent='Подтвердить отмену';
-   approve.addEventListener('click',async()=>{if(orderType==='product'&&!confirm('Вы уже выполнили возврат Telegram Stars покупателю в платёжной системе? Подтверждать отмену можно только после возврата.'))return;const note=prompt('Комментарий покупателю (необязательно):','Запрос на отмену подтверждён.');if(note===null)return;approve.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'approve',order_id:orderId,request_id:item.id,refund_confirmed:orderType!=='product'||true,note})});toast('Отмена подтверждена.');await openAdminOrder(orderId,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить отмену.');approve.disabled=false;}});
+   approve.addEventListener('click',async()=>{if(!confirm('Если заказ оплачен, сначала выполните возврат Telegram Stars в платёжной системе. Подтверждайте здесь только после фактического возврата. Продолжить?'))return;const note=prompt('Комментарий покупателю (необязательно):','Запрос на отмену подтверждён.');if(note===null)return;approve.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'approve',order_id:orderId,request_id:item.id,refund_confirmed:orderType!=='product'||true,note})});toast('Отмена подтверждена.');await openAdminOrder(orderId,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить отмену.');approve.disabled=false;}});
    const reject=document.createElement('button');reject.type='button';reject.className='secondary';reject.textContent='Отклонить запрос';
    reject.addEventListener('click',async()=>{const note=prompt('Причина отказа:','Не можем отменить этот заказ.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'reject',order_id:orderId,request_id:item.id,note})});toast('Запрос на отмену отклонён.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось обработать запрос.');reject.disabled=false;}});
    card.append(approve,reject);changes.append(card);
@@ -3513,6 +3522,7 @@ async function refreshOrderChat(){
  if(status)status.textContent='Загружаем переписку…';
  try{
   const d=await apiFetch('/api/order-chat?order_id='+encodeURIComponent(activeOrderChatId));
+  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;return refreshOrderChat();}
   if(log){log.replaceChildren();(d.messages||[]).forEach(m=>{
    const row=document.createElement('div');row.className='admin-detail-line';
    const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-консультант';
