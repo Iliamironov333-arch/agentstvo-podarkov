@@ -892,6 +892,89 @@ body.summer-season:before{
  bottom:18%!important;
  animation:festiveBurst 3.8s ease-out infinite!important;
 }
+
+/* GLOBAL PARTICLE LAYER FIX: all falling seasonal decor above content */
+/* Remove all static decorative strips and corner emoji overlays in every theme/event. */
+body.event-newyear header::before,
+body.event-newyear header::after,
+body.dark-theme.event-newyear header::before,
+body.dark-theme.event-newyear header::after,
+body.event-halloween header::before,
+body.event-halloween header::after,
+body.dark-theme.event-halloween header::before,
+body.dark-theme.event-halloween header::after,
+body.event-easter header::before,
+body.event-easter header::after,
+body.dark-theme.event-easter header::before,
+body.dark-theme.event-easter header::after,
+body.event-newyear .brand::before,
+body.event-newyear .brand::after,
+body.dark-theme.event-newyear .brand::before,
+body.dark-theme.event-newyear .brand::after,
+body.event-halloween .brand::before,
+body.event-halloween .brand::after,
+body.dark-theme.event-halloween .brand::before,
+body.dark-theme.event-halloween .brand::after,
+body.event-easter .brand::before,
+body.event-easter .brand::after,
+body.dark-theme.event-easter .brand::before,
+body.dark-theme.event-easter .brand::after,
+body.winter-season::before,
+body.winter-season::after,
+body.dark-theme.winter-season::before,
+body.dark-theme.winter-season::after,
+body.spring-season::before,
+body.spring-season::after,
+body.dark-theme.spring-season::before,
+body.dark-theme.spring-season::after,
+body.summer-season::before,
+body.summer-season::after,
+body.dark-theme.summer-season::before,
+body.dark-theme.summer-season::after,
+body.season-autumn::before,
+body.season-autumn::after,
+body.dark-theme.season-autumn::before,
+body.dark-theme.season-autumn::after{
+ content:none!important;
+ display:none!important;
+}
+/* Put every real falling-particle layer in front of cards, buttons and header. */
+.season-particles,
+body .season-particles,
+body.dark-theme .season-particles,
+.leaf-layer,
+body .leaf-layer,
+body.dark-theme .leaf-layer,
+#seasonDecorations{
+ position:fixed!important;
+ inset:0!important;
+ z-index:60!important;
+ display:block!important;
+ overflow:hidden!important;
+ pointer-events:none!important;
+ contain:layout paint!important;
+}
+.season-particles span,
+.leaf-layer .leaf,
+#seasonDecorations span{
+ position:absolute!important;
+ z-index:61!important;
+ pointer-events:none!important;
+}
+body .bottom,
+body.dark-theme .bottom{
+ position:relative!important;
+ z-index:70!important;
+}
+body .bottom button,
+body.dark-theme .bottom button{
+ position:relative!important;
+ z-index:71!important;
+ pointer-events:auto!important;
+}
+/* Keep non-active seasonal particle systems hidden. */
+body:not(.season-spring):not(.season-winter):not(.season-summer) .season-particles{display:none!important}
+body:not(.season-autumn) .leaf-layer{display:none!important}
 </style>
 </head>
 <body>
