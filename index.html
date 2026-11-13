@@ -3405,7 +3405,7 @@ async function refreshOrderChat(){
    row.append(who,body,date);log.append(row);
   });}
   const input=document.getElementById('orderChatInput'),send=document.getElementById('orderChatSend');
-  if(input){input.disabled===!d.chat_available;input.placeholder=d.chat_available?'Напишите ИИ-консультанту по этому заказу…':'Первые 3 дня для ИИ-консультанта по заказу завершились.';}
+  if(input){input.disabled=!d.chat_available;input.placeholder=d.chat_available?'Напишите ИИ-консультанту по этому заказу…':'Первые 3 дня для ИИ-консультанта по заказу завершились.';}
   if(send)send.disabled=!d.chat_available;
   if(status)status.textContent=!d.chat_available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'ИИ помогает обсудить изменения. Все изменения применяются только после проверки владельцем.';
  }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить чат заказа.';}
