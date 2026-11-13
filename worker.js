@@ -1643,8 +1643,16 @@ export default {
             if(!cancellation)return json({error:"Запрос на отмену уже обработан или не найден."},409,origin);
             if(decision==="approve"&&product){
               if(body.refund_confirmed!==true)return json({error:"Сначала выполните возврат Telegram Stars в платёжной системе и подтвердите его здесь."},409,origin);
-              await env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)).run();
-              await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+              const paidOrder=await env.DB.prepare("SELECT balance_applied_stars FROM orders WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)).first();
+              if(!paidOrder)return json({error:"Заказ уже не находится в оплаченном статусе."},409,origin);
+              const balanceRefund=Math.max(0,Number(paidOrder.balance_applied_stars||0));
+              const refundResults=await env.DB.batch([
+                env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)),
+                env.DB.prepare("INSERT OR IGNORE INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'order_refund',?,? WHERE changes()=1 AND ?>0").bind(String(target.telegram_id),balanceRefund,"Возврат внутреннего баланса за отменённый заказ "+orderId,"order-cancel-refund:"+orderId,balanceRefund),
+                env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS(SELECT 1 FROM balance_transactions WHERE idempotency_key=?)").bind(balanceRefund,String(target.telegram_id),"order-cancel-refund:"+orderId),
+                env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id))
+              ]);
+              if(refundResults[0]?.meta?.changes!==1)return json({error:"Не удалось подтвердить отмену. Обновите заказ."},409,origin);
             }else if(decision==="approve"&&custom){
               await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
             }
