@@ -1593,6 +1593,8 @@ export default {
             catch(error){notification.error=String(error.message||error).slice(0,240);}
             return json({ok:true,notification},200,origin);
           }
+          if(action==="accept_change"&&!rootOwner)return json({error:"Подтверждать изменения заказа может только основной владелец."},403,origin);
+          if(action==="resolve_cancellation"&&!rootOwner)return json({error:"Обрабатывать возвраты и отмены может только основной владелец."},403,origin);
           if(action==="accept_change"){
             const changeId=String(body.change_id||"").trim().slice(0,100),ownerNote=String(body.note||"").trim().slice(0,500);
             if(!changeId)return json({error:"Не указан запрос на изменение."},400,origin);
@@ -1683,15 +1685,18 @@ export default {
           const orderType = url.searchParams.get("order_type");
           if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
           if (orderType === "product") {
-            const [order, items, payment, delivery] = await Promise.all([
+            const [order, items, payment, delivery, bundle, revisions] = await Promise.all([
               env.DB.prepare("SELECT o.*,u.first_name,u.username FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE o.id=?").bind(orderId).first(),
               env.DB.prepare("SELECT product_title,quantity,image_url,delivery_status,delivered_at FROM order_items WHERE order_id=? ORDER BY id").bind(orderId).all(),
               env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first(),
-              env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(orderId).first()
+              env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT bundle_json FROM gift_bundles WHERE order_id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT previous_order_id,change_summary,change_json,created_at FROM order_revisions WHERE new_order_id=? ORDER BY created_at DESC").bind(orderId).all()
             ]);
             if (!order) return json({ error: "Заказ не найден." }, 404, origin);
             const meta = await getAdminOrderMeta(env, orderType, order);
-            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
+            let giftBundle=null;try{giftBundle=bundle?JSON.parse(bundle.bundle_json||"{}"):null;}catch{giftBundle=null;}
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, gift_bundle:giftBundle, revisions:revisions.results||[], admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
           }
           const order = await env.DB.prepare("SELECT c.*,o.payment_status,o.balance_applied_stars FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
           if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
@@ -2239,11 +2244,16 @@ export default {
         if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
         const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
         const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
-        const chatCreatedAt=String((product||custom).created_at||"").trim().replace(" ","T");
+        const current=product||custom;
+        if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
+          const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
+          return json({ok:true,superseded:true,new_order_id:revision?.new_order_id||null,order:current,chat_available:false,messages:[],changes:[]},200,origin);
+        }
+        const chatCreatedAt=String(current.created_at||"").trim().replace(" ","T");
         const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
         const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000;
-        return json({ok:true,order:product||custom,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
+        return json({ok:true,order:current,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
       }
       if (path === "/api/order-chat" && method === "POST") {
         const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
@@ -2252,6 +2262,10 @@ export default {
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const order=product||custom;
         if(!order)return json({error:"Заказ не найден."},404,origin);
+        if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
+          const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
+          return json({error:"Создана новая версия заказа.",superseded:true,new_order_id:revision?.new_order_id||null},409,origin);
+        }
         const chatCreatedAt=String(order.created_at||"").trim().replace(" ","T");
         const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
