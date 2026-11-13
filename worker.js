@@ -2103,19 +2103,37 @@ export default {
 
       if (path === "/api/orders/cancel" && method === "POST") {
         const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
+        const reason=typeof body.reason==="string"?body.reason.trim().slice(0,500):"";
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
-        const linked=await env.DB.prepare("SELECT id,payment_status FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const linked=await env.DB.prepare("SELECT id,telegram_id,payment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const createdAt=linked?.created_at||custom?.created_at;
+        if(!createdAt)return json({error:"Заказ не найден."},404,origin);
+        const ageMs=Date.now()-Date.parse(String(createdAt).replace(" ","T")+"Z");
+        if(!Number.isFinite(ageMs)||ageMs<0||ageMs>72*60*60*1000)return json({error:"Отменить заказ через Mini App можно только в течение первых 3 дней после оформления."},409,origin);
         if(!linked){
-          const custom=await env.DB.prepare("SELECT id,status FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
-          if(custom&&!["cancelled","canceled"].includes(String(custom.status))){
-            await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
-            return json({ok:true,refunded:false},200,origin);
-          }
+          if(!custom||["cancelled","canceled"].includes(String(custom.status)))return json({error:"Заказ уже отменён."},409,origin);
+          await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,telegramId,"Покупатель отменил индивидуальный заказ.").run();
+          await notifyOwner(env,"❌ Отмена индивидуального заказа\nID: "+orderId+"\nПокупатель: "+telegramId+"\nПричина: "+(reason||"Не указана"));
+          return json({ok:true,cancelled:true,refunded:false},200,origin);
         }
-        const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
-        if(!cancelled)return json({error:"Заказ уже оплачен, отменён или не найден."},409,origin);
-        await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
-        return json({ok:true,refunded:true},200,origin);
+        if(linked.payment_status==="pending"){
+          const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
+          if(!cancelled)return json({error:"Не удалось отменить заказ. Обновите список заказов."},409,origin);
+          await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
+          return json({ok:true,cancelled:true,refunded:true},200,origin);
+        }
+        if(linked.payment_status==="paid"){
+          const requestId=makeId();
+          await env.DB.prepare("INSERT INTO order_cancellation_requests(id,order_id,telegram_id,reason,status) VALUES(?,?,?,?,'requested') ON CONFLICT(id) DO NOTHING")
+            .bind(requestId,orderId,telegramId,reason).run();
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)")
+            .bind(orderId,telegramId,"Покупатель отправил запрос на отмену оплаченного заказа. Ожидается решение владельца.").run();
+          await notifyOwner(env,"⚠️ ЗАПРОС НА ОТМЕНУ ОПЛАЧЕННОГО ЗАКАЗА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nПричина: "+(reason||"Не указана")+"\nПроверьте оплату и подтвердите возврат вручную.");
+          return json({ok:true,requested:true,refunded:false,message:"Запрос на отмену передан владельцу. Оплаченный заказ будет отменён после проверки возврата."},200,origin);
+        }
+        return json({error:"Этот заказ уже отменён или имеет закрытый статус."},409,origin);
       }
       if (path === "/api/orders" && method === "GET") {
         const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
