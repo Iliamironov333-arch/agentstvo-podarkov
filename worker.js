@@ -1649,7 +1649,7 @@ export default {
               const refundResults=await env.DB.batch([
                 env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)),
                 env.DB.prepare("INSERT OR IGNORE INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'order_refund',?,? WHERE changes()=1 AND ?>0").bind(String(target.telegram_id),balanceRefund,"Возврат внутреннего баланса за отменённый заказ "+orderId,"order-cancel-refund:"+orderId,balanceRefund),
-                env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS(SELECT 1 FROM balance_transactions WHERE idempotency_key=?)").bind(balanceRefund,String(target.telegram_id),"order-cancel-refund:"+orderId),
+                env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1").bind(balanceRefund,String(target.telegram_id)),
                 env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id))
               ]);
               if(refundResults[0]?.meta?.changes!==1)return json({error:"Не удалось подтвердить отмену. Обновите заказ."},409,origin);
