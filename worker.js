@@ -352,6 +352,42 @@ async function releaseExpiredOrderReservations(env) {
   }
 }
 
+async function createOrderChatAnswer(env, history, orderContext) {
+  if (!env.OPENAI_API_KEY) throw new Error("ИИ-консультант временно недоступен.");
+  const instructions = [
+    await getGlobalAiToneInstruction(env),
+    "Ты — ИИ-консультант Агентства подарков в персональном чате конкретного заказа.",
+    "Помогай покупателю уточнять и предлагать изменения к уже оформленному заказу. Общайся доброжелательно, задавай по одному уточняющему вопросу, если запрос неоднозначен.",
+    "Ты НЕ имеешь права утверждать, что заказ уже изменён, отменён, оплачен или принят владельцем. Все изменения сначала передаются владельцу на проверку.",
+    "Не меняй цены, оплату, адрес доставки, статус заказа или состав товаров самостоятельно. Если покупатель просит изменить содержание работы, поздравление, пожелания, оформление или комплект, кратко сформулируй предложение для владельца.",
+    "Верни строго JSON: {\"reply\":\"ответ покупателю\",\"change_summary\":\"краткое описание запрошенного изменения или пустая строка\",\"proposed_changes\":{\"customer_request\":\"точная суть просьбы\"}}.",
+    "Если покупатель просто задаёт вопрос или ещё не определился, change_summary должна быть пустой строкой.",
+    "Контекст заказа: " + JSON.stringify(orderContext).slice(0,5000)
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
+      input: history.slice(-30).map(item => ({ role: item.role, content: item.content })), max_output_tokens: 650 })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("ИИ-консультант не смог ответить. Попробуйте позже.");
+  let output = typeof data.output_text === "string" ? data.output_text : "";
+  if (!output && Array.isArray(data.output)) output = data.output.flatMap(item => Array.isArray(item.content) ? item.content : [])
+    .filter(part => part.type === "output_text" && typeof part.text === "string").map(part => part.text).join("\n");
+  const match = output.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      return { reply: String(parsed.reply || "").slice(0,4000),
+        change_summary: String(parsed.change_summary || "").slice(0,700),
+        proposed_changes: parsed.proposed_changes && typeof parsed.proposed_changes === "object" ? parsed.proposed_changes : {} };
+    } catch {}
+  }
+  if (!output.trim()) throw new Error("ИИ-консультант не вернул ответ.");
+  return { reply: output.trim().slice(0,4000), change_summary: "", proposed_changes: {} };
+}
+
 async function createSupportAnswer(env, history, isVip) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\\?/g) || []).length : 0), 0);
@@ -781,6 +817,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/unblock-user") return "users_unban";
   if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
   if (path === "/api/admin/order-update" || path === "/api/admin/order-notify") return "orders_manage";
+  if (path === "/api/admin/order-chat") return method === "GET" ? "orders_view" : "orders_manage";
   if (path === "/api/admin/products") return "catalog_view";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
   if (path.startsWith("/api/admin/support/")) {
@@ -2082,6 +2119,40 @@ export default {
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
           orders: orders.results || [], vip: vip || null }, 200, origin);
+      }
+
+      if (path === "/api/order-chat" && method === "GET") {
+        const orderId=String(url.searchParams.get("order_id")||"").trim().slice(0,100);
+        if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
+        const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
+        const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
+        return json({ok:true,order:product||custom,order_type:product?"product":"custom",messages:rows.results||[],changes:changes.results||[]},200,origin);
+      }
+      if (path === "/api/order-chat" && method === "POST") {
+        const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
+        if(!orderId||!message)return json({error:"Укажите заказ и сообщение."},400,origin);
+        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const order=product||custom;
+        if(!order)return json({error:"Заказ не найден."},404,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
+        const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 30").bind(orderId,telegramId).all();
+        const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+        let answer;
+        try{answer=await createOrderChatAnswer(env,history,{order_type:product?"product":"custom",order_id:orderId,title:product?.product_title||custom?.subject,total_stars:order.total_stars,payment_status:product?.payment_status||null,fulfillment_status:product?.fulfillment_status||null,custom_answers:custom?.answers_json||null});}
+        catch(error){return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+        if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(orderId,telegramId,answer.reply).run();
+        let changeId=null;
+        if(answer.change_summary){
+          changeId=makeId();
+          await env.DB.prepare("INSERT INTO order_change_requests(id,order_id,telegram_id,proposed_json,ai_summary,status) VALUES(?,?,?,?,?,'pending')").bind(changeId,orderId,telegramId,JSON.stringify(answer.proposed_changes||{customer_request:message}),answer.change_summary).run();
+          await notifyOwner(env,"📝 ПОКУПАТЕЛЬ ХОЧЕТ ИЗМЕНИТЬ ЗАКАЗ\nЗаказ: "+orderId+"\nПокупатель: "+telegramId+"\nИзменение: "+answer.change_summary+"\n\nОткройте заказ в панели владельца и обсудите изменение в чате. ИИ не применял его автоматически.");
+        }
+        return json({ok:true,reply:answer.reply,change_request_id:changeId},200,origin);
       }
 
       if (path === "/api/orders/pay" && method === "POST") {
