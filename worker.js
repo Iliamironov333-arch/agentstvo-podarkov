@@ -1573,7 +1573,8 @@ export default {
           if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
           const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? ORDER BY id LIMIT 200").bind(orderId).all();
           const changes=await env.DB.prepare("SELECT id,telegram_id,proposed_json,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 50").bind(orderId).all();
-          return json({ok:true,messages:rows.results||[],changes:changes.results||[]},200,origin);
+          const cancellations=await env.DB.prepare("SELECT id,reason,status,created_at FROM order_cancellation_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId).all();
+          return json({ok:true,messages:rows.results||[],changes:changes.results||[],cancellations:cancellations.results||[]},200,origin);
         }
         if (path === "/api/admin/order-chat" && method === "POST") {
           const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),action=String(body.action||"reply");
@@ -1591,6 +1592,69 @@ export default {
             try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-консультант":"💬 Владелец")+" по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
             catch(error){notification.error=String(error.message||error).slice(0,240);}
             return json({ok:true,notification},200,origin);
+          }
+          if(action==="accept_change"){
+            const changeId=String(body.change_id||"").trim().slice(0,100),ownerNote=String(body.note||"").trim().slice(0,500);
+            if(!changeId)return json({error:"Не указан запрос на изменение."},400,origin);
+            const change=await env.DB.prepare("SELECT id,order_id,telegram_id,proposed_json,ai_summary,status FROM order_change_requests WHERE id=? AND order_id=? AND status='pending'").bind(changeId,orderId).first();
+            if(!change)return json({error:"Предложение уже обработано или не найдено."},409,origin);
+            const productOrder=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first();
+            const customOrder=await env.DB.prepare("SELECT * FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first();
+            const createdAt=String(productOrder?.created_at||customOrder?.created_at||"").trim().replace(" ","T");
+            const createdIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(createdAt)?createdAt:createdAt+"Z";
+            const age=Date.now()-Date.parse(createdIso);
+            if(!Number.isFinite(age)||age<0||age>72*60*60*1000)return json({error:"Изменения по заказу можно подтвердить только в течение первых 3 дней."},409,origin);
+            if(productOrder&&["cancelled","superseded"].includes(String(productOrder.payment_status))||productOrder&&["cancelled","superseded","delivered"].includes(String(productOrder.fulfillment_status)))return json({error:"Этот заказ уже закрыт и не может быть изменён."},409,origin);
+            const newOrderId=makeId(),summary=String(change.ai_summary||"Изменение по просьбе покупателя").slice(0,700),note=ownerNote||"Изменение подтверждено владельцем.";
+            let changeData={};try{changeData=JSON.parse(change.proposed_json||"{}");}catch{changeData={customer_request:String(change.proposed_json||"")};}
+            const revisionDetails={summary,owner_note:note,proposed_changes:changeData,approved_by:telegramId};
+            if(productOrder){
+              await env.DB.batch([
+                env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars) SELECT ?,telegram_id,product_id,product_title || ' · обновлённая версия',quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars FROM orders WHERE id=?").bind(newOrderId,orderId),
+                env.DB.prepare("INSERT INTO order_items(order_id,product_id,product_title,quantity,image_url,delivery_status) SELECT ?,product_id,product_title,quantity,image_url,delivery_status FROM order_items WHERE order_id=?").bind(newOrderId,orderId),
+                env.DB.prepare("INSERT INTO order_delivery(order_id,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars) SELECT ?,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(newOrderId,orderId),
+                env.DB.prepare("UPDATE orders SET payment_status='superseded',fulfillment_status='superseded',balance_applied_stars=0 WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)),
+                env.DB.prepare("UPDATE payment_intents SET reference_id=? WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(newOrderId,orderId,String(target.telegram_id)),
+                env.DB.prepare("UPDATE payments SET order_id=? WHERE order_id=?").bind(newOrderId,orderId)
+              ]);
+            }
+            if(customOrder){
+              const answers=(()=>{try{return JSON.parse(customOrder.answers_json||"{}");}catch{return {original_answers:customOrder.answers_json||""};}})();
+              answers.owner_approved_change=revisionDetails;
+              await env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) VALUES(?,?,?,?,?,?,?,?)")
+                .bind(newOrderId,String(target.telegram_id),customOrder.username,customOrder.first_name,customOrder.subject,JSON.stringify(answers),customOrder.total_stars,customOrder.status).run();
+              await env.DB.prepare("UPDATE custom_orders SET status='superseded' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+            }
+            if(!productOrder&&!customOrder)return json({error:"Заказ не найден."},404,origin);
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO order_revisions(id,previous_order_id,new_order_id,change_request_id,telegram_id,change_summary,change_json) VALUES(?,?,?,?,?,?,?)").bind(makeId(),orderId,newOrderId,changeId,String(target.telegram_id),summary,JSON.stringify(revisionDetails)),
+              env.DB.prepare("UPDATE order_change_requests SET status='accepted',resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'").bind(telegramId,note,changeId),
+              env.DB.prepare("UPDATE order_chat_messages SET order_id=? WHERE order_id=? AND telegram_id=?").bind(newOrderId,orderId,String(target.telegram_id)),
+              env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(newOrderId,String(target.telegram_id),"Владелец подтвердил изменение. Создана новая версия заказа № "+newOrderId+". "+summary+" "+note)
+            ]);
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"✅ Владелец подтвердил изменение вашего заказа.\n\nСтарая версия № "+orderId+" закрыта. Новая версия заказа: № "+newOrderId+".\n\n"+summary+"\n"+note});}catch(error){console.error("Order revision notification failed:",String(error).slice(0,240));}
+            await notifyOwner(env,"✅ ИЗМЕНЕНИЕ ЗАКАЗА ПОДТВЕРЖДЕНО\nСтарая версия: "+orderId+"\nНовая версия: "+newOrderId+"\nПокупатель: "+target.telegram_id+"\n"+summary);
+            return json({ok:true,status:"accepted",new_order_id:newOrderId,previous_order_id:orderId},200,origin);
+          }
+          if(action==="resolve_cancellation"){
+            const requestId=String(body.request_id||"").trim().slice(0,100),decision=body.decision==="approve"?"approve":"reject",note=String(body.note||"").trim().slice(0,500);
+            if(!requestId)return json({error:"Не указан запрос на отмену."},400,origin);
+            const cancellation=await env.DB.prepare("SELECT id,status FROM order_cancellation_requests WHERE id=? AND order_id=? AND telegram_id=? AND status='requested'").bind(requestId,orderId,String(target.telegram_id)).first();
+            if(!cancellation)return json({error:"Запрос на отмену уже обработан или не найден."},409,origin);
+            if(decision==="approve"&&product){
+              if(body.refund_confirmed!==true)return json({error:"Сначала выполните возврат Telegram Stars в платёжной системе и подтвердите его здесь."},409,origin);
+              await env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)).run();
+              await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+            }else if(decision==="approve"&&custom){
+              await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+            }
+            const status=decision==="approve"?"approved":"rejected";
+            await env.DB.batch([
+              env.DB.prepare("UPDATE order_cancellation_requests SET status=?,resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='requested'").bind(status,telegramId,note,requestId),
+              env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),decision==="approve"?"Владелец подтвердил отмену заказа. "+note:"Владелец отклонил запрос на отмену. "+note)
+            ]);
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(decision==="approve"?"❌ Заказ № "+orderId+" отменён.":"ℹ️ Запрос на отмену заказа № "+orderId+" отклонён.")+"\n"+note});}catch(error){console.error("Order cancellation notification failed:",String(error).slice(0,240));}
+            return json({ok:true,status},200,origin);
           }
           if(action==="reject_change"){
             const changeId=String(body.change_id||"").trim().slice(0,100);
@@ -2259,7 +2323,7 @@ export default {
         return json({error:"Этот заказ уже отменён или имеет закрытый статус."},409,origin);
       }
       if (path === "/api/orders" && method === "GET") {
-        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
+        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? AND fulfillment_status<>'superseded' UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? AND c.status<>'superseded' ORDER BY created_at DESC LIMIT 50")
           .bind(telegramId, telegramId).all();
         return json({ orders: result.results || [] }, 200, origin);
       }
