@@ -2175,6 +2175,10 @@ export default {
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const order=product||custom;
         if(!order)return json({error:"Заказ не найден."},404,origin);
+        const chatCreatedAt=String(order.created_at||"").trim().replace(" ","T");
+        const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
+        const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
+        if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
         await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
         const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 30").bind(orderId,telegramId).all();
         const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
@@ -2239,8 +2243,9 @@ export default {
         }
         if(linked.payment_status==="paid"){
           const requestId=makeId();
-          await env.DB.prepare("INSERT INTO order_cancellation_requests(id,order_id,telegram_id,reason,status) VALUES(?,?,?,?,'requested') ON CONFLICT(id) DO NOTHING")
+          const cancellationInsert=await env.DB.prepare("INSERT INTO order_cancellation_requests(id,order_id,telegram_id,reason,status) VALUES(?,?,?,?,'requested') ON CONFLICT DO NOTHING")
             .bind(requestId,orderId,telegramId,reason).run();
+          if(!cancellationInsert.meta?.changes)return json({ok:true,requested:true,already_requested:true,refunded:false,message:"Запрос на отмену уже передан владельцу. Дождитесь решения."},200,origin);
           await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)")
             .bind(orderId,telegramId,"Покупатель отправил запрос на отмену оплаченного заказа. Ожидается решение владельца.").run();
           await notifyOwner(env,"⚠️ ЗАПРОС НА ОТМЕНУ ОПЛАЧЕННОГО ЗАКАЗА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nПричина: "+(reason||"Не указана")+"\nПроверьте оплату и подтвердите возврат вручную.");
