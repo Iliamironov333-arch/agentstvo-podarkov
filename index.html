@@ -3346,7 +3346,7 @@ async function checkout() {
 }
 
 async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
-async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
+async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 async function loadMe() {
  if(!initData)return;
  try{
@@ -3373,7 +3373,10 @@ async function loadMe() {
    const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
    const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
    const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
-   const actions=payable?'<div class="order-actions"><button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':waitingPrice?'<div class="order-actions"><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':'';
+   const ageMs=Date.now()-new Date(String(o.created_at||'').replace(' ','T')+'Z').getTime();
+   const canCancel=Number.isFinite(ageMs)&&ageMs>=0&&ageMs<=72*60*60*1000&&!['cancelled','canceled','completed','fulfilled','delivered'].includes(status);
+   const cancelButton=canCancel?'<button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button>':'';
+   const actions='<div class="order-actions">'+(payable?'<button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button>':'')+cancelButton+'</div>';
    return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
   }).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){
