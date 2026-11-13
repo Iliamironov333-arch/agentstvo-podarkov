@@ -1609,7 +1609,7 @@ export default {
             const createdIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(createdAt)?createdAt:createdAt+"Z";
             const age=Date.now()-Date.parse(createdIso);
             if(!Number.isFinite(age)||age<0||age>72*60*60*1000)return json({error:"Изменения по заказу можно подтвердить только в течение первых 3 дней."},409,origin);
-            if(productOrder&&["cancelled","superseded"].includes(String(productOrder.payment_status))||productOrder&&["cancelled","superseded","delivered"].includes(String(productOrder.fulfillment_status)))return json({error:"Этот заказ уже закрыт и не может быть изменён."},409,origin);
+            if((productOrder&&(["cancelled","superseded"].includes(String(productOrder.payment_status))||["cancelled","superseded","delivered"].includes(String(productOrder.fulfillment_status))))||(customOrder&&["cancelled","canceled","superseded","completed","done"].includes(String(customOrder.status))))return json({error:"Этот заказ уже закрыт и не может быть изменён."},409,origin);
             const newOrderId=makeId(),summary=String(change.ai_summary||"Изменение по просьбе покупателя").slice(0,700),note=ownerNote||"Изменение подтверждено владельцем.";
             let changeData={};try{changeData=JSON.parse(change.proposed_json||"{}");}catch{changeData={customer_request:String(change.proposed_json||"")};}
             const revisionDetails={summary,owner_note:note,proposed_changes:changeData,approved_by:telegramId};
@@ -1728,10 +1728,10 @@ export default {
           const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all(),
             type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE admin_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all()
           ]);
           const rows = [...(products.results || []), ...(custom.results || [])]
