@@ -838,6 +838,60 @@ body.dark-theme.season-spring .leaf-layer{
   z-index:8!important;
   pointer-events:none!important;
 }
+
+/* UNIFIED FALLING DECOR: no pinned corner ornaments across seasonal/event themes */
+/* Remove decorative emoji rows/pinned ornaments from the top/header corners. */
+body.event-newyear header:after,
+body.event-newyear header:before,
+body.event-halloween header:after,
+body.event-halloween header:before,
+body.event-easter header:after,
+body.event-easter header:before,
+body.event-newyear .brand:before,
+body.event-newyear .brand:after,
+body.event-halloween .brand:before,
+body.event-halloween .brand:after,
+body.event-easter .brand:before,
+body.event-easter .brand:after,
+body.event-newyear:before,
+body.event-newyear:after,
+body.event-halloween:before,
+body.event-halloween:after,
+body.event-easter:before,
+body.event-easter:after,
+body.winter-season:before,
+body.spring-season:before,
+body.summer-season:before{
+ content:none!important;
+ display:none!important;
+}
+/* Every decorative festive object falls through the viewport; fireworks keep their burst. */
+#seasonDecorations{
+ position:fixed!important;
+ inset:0!important;
+ z-index:8!important;
+ overflow:hidden!important;
+ pointer-events:none!important;
+}
+#seasonDecorations,
+#seasonDecorations *{pointer-events:none!important}
+#seasonDecorations .festive-fall,
+#seasonDecorations .festive-twinkle,
+#seasonDecorations .festive-bauble,
+#seasonDecorations .festive-bat,
+#seasonDecorations .festive-egg{
+ top:-14vh!important;
+ bottom:auto!important;
+ animation:festiveFall 16s linear infinite!important;
+}
+#seasonDecorations .festive-twinkle{color:#fff3ae!important}
+#seasonDecorations .festive-bat{color:inherit!important}
+#seasonDecorations .festive-egg{filter:drop-shadow(0 3px 5px #0005)!important}
+#seasonDecorations .festive-firework{
+ top:auto!important;
+ bottom:18%!important;
+ animation:festiveBurst 3.8s ease-out infinite!important;
+}
 </style>
 </head>
 <body>
