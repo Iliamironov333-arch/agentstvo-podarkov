@@ -243,4 +243,6 @@ CREATE TABLE IF NOT EXISTS order_cancellation_requests (
   resolved_by TEXT, resolution_note TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_order_cancellations_order ON order_cancellation_requests(order_id,created_at DESC);
-INSERT OR IGNORE INTO schema_migrations(version) VALUES('0019_order_chat_gift_builder');
+INSERT OR IGNORE INTO schema_migrations(version) VALUES('0020_order_chat_gift_builder');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_order_cancellations_pending_unique ON order_cancellation_requests(order_id) WHERE status='requested';
