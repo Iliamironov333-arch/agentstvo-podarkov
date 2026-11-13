@@ -568,7 +568,7 @@ async function handleWebhook(request, env) {
         chat_id: incomingMessage.chat.id,
         text: "🎁 Добро пожаловать в «Агентство подарков»!\\n\\nЗдесь можно посмотреть каталог, выбрать подарок и оформить заказ. Нажмите кнопку ниже, чтобы открыть мини-приложение.",
         reply_markup: {
-          inline_keyboard: [[{ text: "🎁 Открыть Агентство подарков", web_app: { url: SITE_ORIGIN + "/agentstvo-podarkov/?v=20261112-photo-studio" } }]]
+          inline_keyboard: [[{ text: "🎁 Открыть Агентство подарков", web_app: { url: SITE_ORIGIN + "/agentstvo-podarkov/?v=20261113-gift-builder-order-chat" } }]]
         }
       });
       return json({ ok: true });
