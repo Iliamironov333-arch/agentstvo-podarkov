@@ -332,6 +332,9 @@ async function cancelPendingOrderAndRefund(env, orderId, telegramId) {
     statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId));
   }
   const results = await env.DB.batch(statements);
+  if(results[0]?.meta?.changes&&await tableExists(env,"gift_bundles")){
+    await env.DB.prepare("UPDATE gift_bundles SET status='draft',order_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='ordered'").bind(orderId).run();
+  }
   return !!results[0]?.meta?.changes;
 }
 
@@ -350,6 +353,43 @@ async function releaseExpiredOrderReservations(env) {
     console.error("Expired order cleanup failed:",String(error).slice(0,300));
     return {released:0,error:true};
   }
+}
+
+async function createOrderChatAnswer(env, history, orderContext) {
+  if (!env.OPENAI_API_KEY) throw new Error("ИИ-консультант временно недоступен.");
+  const instructions = [
+    await getGlobalAiToneInstruction(env),
+    "Ты — ИИ-консультант Агентства подарков в персональном чате конкретного заказа.",
+    "Помогай покупателю уточнять и предлагать изменения к уже оформленному заказу. Общайся доброжелательно, задавай по одному уточняющему вопросу, если запрос неоднозначен.",
+    "Ты НЕ имеешь права утверждать, что заказ уже изменён, отменён, оплачен или принят владельцем. Все изменения сначала передаются владельцу на проверку.",
+    "Не меняй цены, оплату, адрес доставки, статус заказа или состав товаров самостоятельно. Если покупатель просит изменить содержание работы, поздравление, пожелания, оформление или комплект, кратко сформулируй предложение для владельца.",
+    "Верни строго JSON: {\"reply\":\"ответ покупателю\",\"change_summary\":\"краткое описание запрошенного изменения или пустая строка\",\"proposed_changes\":{\"customer_request\":\"точная суть просьбы\"}}.",
+    "Если покупатель просто задаёт вопрос или ещё не определился, change_summary должна быть пустой строкой.",
+    orderContext?.order_type==="gift_builder_draft_not_yet_ordered" ? "Это ещё не оформленный черновик подарка. Не называй его заказом, не утверждай, что что-либо уже куплено или отправлено владельцу. Помоги подобрать дополнения и улучшить идею. Если клиент просит изменить параметры черновика, подскажи ему, что можно вернуться к настройкам конструктора." : "",
+    "Контекст заказа: " + JSON.stringify(orderContext).slice(0,5000)
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
+      input: history.slice(-30).map(item => ({ role: item.role, content: item.content })), max_output_tokens: 650 })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("ИИ-консультант не смог ответить. Попробуйте позже.");
+  let output = typeof data.output_text === "string" ? data.output_text : "";
+  if (!output && Array.isArray(data.output)) output = data.output.flatMap(item => Array.isArray(item.content) ? item.content : [])
+    .filter(part => part.type === "output_text" && typeof part.text === "string").map(part => part.text).join("\n");
+  const match = output.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      return { reply: String(parsed.reply || "").slice(0,4000),
+        change_summary: String(parsed.change_summary || "").slice(0,700),
+        proposed_changes: parsed.proposed_changes && typeof parsed.proposed_changes === "object" ? parsed.proposed_changes : {} };
+    } catch {}
+  }
+  if (!output.trim()) throw new Error("ИИ-консультант не вернул ответ.");
+  return { reply: output.trim().slice(0,4000), change_summary: "", proposed_changes: {} };
 }
 
 async function createSupportAnswer(env, history, isVip) {
@@ -781,6 +821,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/unblock-user") return "users_unban";
   if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
   if (path === "/api/admin/order-update" || path === "/api/admin/order-notify") return "orders_manage";
+  if (path === "/api/admin/order-chat") return method === "GET" ? "orders_view" : "orders_manage";
   if (path === "/api/admin/products") return "catalog_view";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
   if (path.startsWith("/api/admin/support/")) {
@@ -1530,21 +1571,152 @@ export default {
           }
           return json({ ok: true, order_id: orderId, order_type: orderType, status: hasStatus ? status : previous.admin_status, comment_saved: !!comment, notification }, 200, origin);
         }
+        if (path === "/api/admin/order-chat" && method === "GET") {
+          const orderId=String(url.searchParams.get("order_id")||"").trim().slice(0,100);
+          if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+          const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? ORDER BY id LIMIT 200").bind(orderId).all();
+          const changes=await env.DB.prepare("SELECT id,telegram_id,proposed_json,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 50").bind(orderId).all();
+          const cancellations=await env.DB.prepare("SELECT id,reason,status,created_at FROM order_cancellation_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId).all();
+          return json({ok:true,messages:rows.results||[],changes:changes.results||[],cancellations:cancellations.results||[]},200,origin);
+        }
+        if (path === "/api/admin/order-chat" && method === "POST") {
+          const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),action=String(body.action||"reply");
+          if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+          const product=await env.DB.prepare("SELECT telegram_id FROM orders WHERE id=?").bind(orderId).first();
+          const custom=await env.DB.prepare("SELECT telegram_id FROM custom_orders WHERE id=?").bind(orderId).first();
+          const target=product||custom;
+          if(!target)return json({error:"Заказ не найден."},404,origin);
+          if(action==="reply"){
+            const message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
+            const senderType=body.sender_type==="ai"?"ai":"owner";
+            if(!message)return json({error:"Введите сообщение покупателю."},400,origin);
+            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,?,?)").bind(orderId,String(target.telegram_id),senderType,message).run();
+            let notification={sent:false};
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-консультант":"💬 Владелец")+" по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
+            catch(error){notification.error=String(error.message||error).slice(0,240);}
+            return json({ok:true,notification},200,origin);
+          }
+          if(action==="accept_change"&&!rootOwner)return json({error:"Подтверждать изменения заказа может только основной владелец."},403,origin);
+          if(action==="resolve_cancellation"&&!rootOwner)return json({error:"Обрабатывать возвраты и отмены может только основной владелец."},403,origin);
+          if(action==="accept_change"){
+            const changeId=String(body.change_id||"").trim().slice(0,100),ownerNote=String(body.note||"").trim().slice(0,500);
+            if(!changeId)return json({error:"Не указан запрос на изменение."},400,origin);
+            const change=await env.DB.prepare("SELECT id,order_id,telegram_id,proposed_json,ai_summary,status FROM order_change_requests WHERE id=? AND order_id=? AND status='pending'").bind(changeId,orderId).first();
+            if(!change)return json({error:"Предложение уже обработано или не найдено."},409,origin);
+            const productOrder=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first();
+            const customOrder=await env.DB.prepare("SELECT * FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first();
+            const createdAt=String(productOrder?.created_at||customOrder?.created_at||"").trim().replace(" ","T");
+            const createdIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(createdAt)?createdAt:createdAt+"Z";
+            const age=Date.now()-Date.parse(createdIso);
+            if(!Number.isFinite(age)||age<0||age>72*60*60*1000)return json({error:"Изменения по заказу можно подтвердить только в течение первых 3 дней."},409,origin);
+            if((productOrder&&(["cancelled","superseded"].includes(String(productOrder.payment_status))||["cancelled","superseded","delivered"].includes(String(productOrder.fulfillment_status))))||(customOrder&&["cancelled","canceled","superseded","completed","done"].includes(String(customOrder.status))))return json({error:"Этот заказ уже закрыт и не может быть изменён."},409,origin);
+            const newOrderId=makeId(),summary=String(change.ai_summary||"Изменение по просьбе покупателя").slice(0,700),note=ownerNote||"Изменение подтверждено владельцем.";
+            let changeData={};try{changeData=JSON.parse(change.proposed_json||"{}");}catch{changeData={customer_request:String(change.proposed_json||"")};}
+            const revisionDetails={summary,owner_note:note,proposed_changes:changeData,approved_by:telegramId};
+            let sourceBundle=null;
+            if(productOrder){
+              sourceBundle=await env.DB.prepare("SELECT title,bundle_json FROM gift_bundles WHERE order_id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).first().catch(()=>null);
+              await env.DB.batch([
+                env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars) SELECT ?,telegram_id,product_id,product_title || ' · обновлённая версия',quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,promo_code,discount_stars,balance_applied_stars FROM orders WHERE id=?").bind(newOrderId,orderId),
+                env.DB.prepare("INSERT INTO order_items(order_id,product_id,product_title,quantity,image_url,delivery_status) SELECT ?,product_id,product_title,quantity,image_url,delivery_status FROM order_items WHERE order_id=?").bind(newOrderId,orderId),
+                env.DB.prepare("INSERT INTO order_delivery(order_id,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars) SELECT ?,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(newOrderId,orderId),
+                env.DB.prepare("UPDATE orders SET payment_status='superseded',fulfillment_status='superseded',balance_applied_stars=0 WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)),
+                env.DB.prepare("UPDATE payment_intents SET reference_id=? WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(newOrderId,orderId,String(target.telegram_id)),
+                env.DB.prepare("UPDATE payments SET order_id=? WHERE order_id=?").bind(newOrderId,orderId)
+              ]);
+            }
+            if(productOrder&&sourceBundle){
+              let revisedBundle={};try{revisedBundle=JSON.parse(sourceBundle.bundle_json||"{}");}catch{revisedBundle={};}
+              revisedBundle.owner_approved_change=revisionDetails;
+              await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,order_id,title,bundle_json,status) VALUES(?,?,?,?,?,'ordered')")
+                .bind(makeId(),String(target.telegram_id),newOrderId,sourceBundle.title||"Подарочный набор",JSON.stringify(revisedBundle)).run();
+            }
+            if(customOrder){
+              const answers=(()=>{try{return JSON.parse(customOrder.answers_json||"{}");}catch{return {original_answers:customOrder.answers_json||""};}})();
+              answers.owner_approved_change=revisionDetails;
+              await env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) VALUES(?,?,?,?,?,?,?,?)")
+                .bind(newOrderId,String(target.telegram_id),customOrder.username,customOrder.first_name,customOrder.subject,JSON.stringify(answers),customOrder.total_stars,customOrder.status).run();
+              await env.DB.prepare("UPDATE custom_orders SET status='superseded' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+            }
+            if(!productOrder&&!customOrder)return json({error:"Заказ не найден."},404,origin);
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO order_revisions(id,previous_order_id,new_order_id,change_request_id,telegram_id,change_summary,change_json) VALUES(?,?,?,?,?,?,?)").bind(makeId(),orderId,newOrderId,changeId,String(target.telegram_id),summary,JSON.stringify(revisionDetails)),
+              env.DB.prepare("UPDATE order_change_requests SET status='accepted',resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'").bind(telegramId,note,changeId),
+              env.DB.prepare("UPDATE order_chat_messages SET order_id=? WHERE order_id=? AND telegram_id=?").bind(newOrderId,orderId,String(target.telegram_id)),
+              env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(newOrderId,String(target.telegram_id),"Владелец подтвердил изменение. Создана новая версия заказа № "+newOrderId+". "+summary+" "+note)
+            ]);
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"✅ Владелец подтвердил изменение вашего заказа.\n\nСтарая версия № "+orderId+" закрыта. Новая версия заказа: № "+newOrderId+".\n\n"+summary+"\n"+note});}catch(error){console.error("Order revision notification failed:",String(error).slice(0,240));}
+            await notifyOwner(env,"✅ ИЗМЕНЕНИЕ ЗАКАЗА ПОДТВЕРЖДЕНО\nСтарая версия: "+orderId+"\nНовая версия: "+newOrderId+"\nПокупатель: "+target.telegram_id+"\n"+summary);
+            return json({ok:true,status:"accepted",new_order_id:newOrderId,previous_order_id:orderId},200,origin);
+          }
+          if(action==="resolve_cancellation"){
+            const requestId=String(body.request_id||"").trim().slice(0,100),decision=body.decision==="approve"?"approve":"reject",note=String(body.note||"").trim().slice(0,500);
+            if(!requestId)return json({error:"Не указан запрос на отмену."},400,origin);
+            const cancellation=await env.DB.prepare("SELECT id,status FROM order_cancellation_requests WHERE id=? AND order_id=? AND telegram_id=? AND status='requested'").bind(requestId,orderId,String(target.telegram_id)).first();
+            if(!cancellation)return json({error:"Запрос на отмену уже обработан или не найден."},409,origin);
+            if(decision==="approve"&&product){
+              const paidOrder=await env.DB.prepare("SELECT balance_applied_stars FROM orders WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)).first();
+              if(!paidOrder)return json({error:"Заказ уже не находится в оплаченном статусе."},409,origin);
+              const payment=await env.DB.prepare("SELECT telegram_payment_charge_id,status FROM payments WHERE order_id=? ORDER BY id DESC LIMIT 1").bind(orderId).first();
+              if(payment&&payment.status!=="refunded"){
+                if(payment.telegram_payment_charge_id){
+                  try{await telegram(env,"refundStarPayment",{user_id:Number(target.telegram_id),telegram_payment_charge_id:payment.telegram_payment_charge_id});}
+                  catch(error){return json({error:"Telegram не подтвердил возврат Stars: "+String(error.message||error).slice(0,180)},502,origin);}
+                  await env.DB.prepare("UPDATE payments SET status='refunded' WHERE order_id=? AND telegram_payment_charge_id=?").bind(orderId,payment.telegram_payment_charge_id).run();
+                }else if(body.refund_confirmed!==true){
+                  return json({error:"У платежа нет Telegram charge ID. Выполните возврат вручную и подтвердите его здесь."},409,origin);
+                }
+              }
+              const balanceRefund=Math.max(0,Number(paidOrder.balance_applied_stars||0));
+              const refundResults=await env.DB.batch([
+                env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)),
+                env.DB.prepare("INSERT OR IGNORE INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'order_refund',?,? WHERE changes()=1 AND ?>0").bind(String(target.telegram_id),balanceRefund,"Возврат внутреннего баланса за отменённый заказ "+orderId,"order-cancel-refund:"+orderId,balanceRefund),
+                env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1").bind(balanceRefund,String(target.telegram_id)),
+                env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id))
+              ]);
+              if(refundResults[0]?.meta?.changes!==1)return json({error:"Не удалось подтвердить отмену. Обновите заказ."},409,origin);
+            }else if(decision==="approve"&&custom){
+              await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,String(target.telegram_id)).run();
+            }
+            const status=decision==="approve"?"approved":"rejected";
+            await env.DB.batch([
+              env.DB.prepare("UPDATE order_cancellation_requests SET status=?,resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='requested'").bind(status,telegramId,note,requestId),
+              env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),decision==="approve"?"Владелец подтвердил отмену заказа. "+note:"Владелец отклонил запрос на отмену. "+note)
+            ]);
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(decision==="approve"?"❌ Заказ № "+orderId+" отменён.":"ℹ️ Запрос на отмену заказа № "+orderId+" отклонён.")+"\n"+note});}catch(error){console.error("Order cancellation notification failed:",String(error).slice(0,240));}
+            return json({ok:true,status},200,origin);
+          }
+          if(action==="reject_change"){
+            const changeId=String(body.change_id||"").trim().slice(0,100);
+            if(!changeId)return json({error:"Не указан запрос на изменение."},400,origin);
+            const result=await env.DB.prepare("UPDATE order_change_requests SET status='rejected',resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=? AND status='pending'")
+              .bind(telegramId,String(body.note||"Изменение отклонено владельцем").slice(0,500),changeId,orderId).run();
+            if(!result.meta?.changes)return json({error:"Запрос уже обработан или не найден."},409,origin);
+            const note=String(body.note||"Владелец не подтвердил это изменение. Вы можете обсудить детали в чате.").slice(0,1000);
+            await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),"Владелец рассмотрел предложение: "+note).run();
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"📦 По вашему заказу № "+orderId+" есть ответ владельца:\n"+note});}catch(error){console.error("Order change decision notification failed:",String(error).slice(0,240));}
+            return json({ok:true,status:"rejected"},200,origin);
+          }
+          return json({error:"Неизвестное действие чата заказа."},400,origin);
+        }
         if (path === "/api/admin/order" && method === "GET") {
           const url = new URL(request.url);
           const orderId = (url.searchParams.get("order_id") || "").trim().slice(0,100);
           const orderType = url.searchParams.get("order_type");
           if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
           if (orderType === "product") {
-            const [order, items, payment, delivery] = await Promise.all([
+            const [order, items, payment, delivery, bundle, revisions] = await Promise.all([
               env.DB.prepare("SELECT o.*,u.first_name,u.username FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE o.id=?").bind(orderId).first(),
               env.DB.prepare("SELECT product_title,quantity,image_url,delivery_status,delivered_at FROM order_items WHERE order_id=? ORDER BY id").bind(orderId).all(),
               env.DB.prepare("SELECT amount_stars,currency,status,created_at,confirmed_at FROM payments WHERE order_id=?").bind(orderId).first(),
-              env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(orderId).first()
+              env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT bundle_json FROM gift_bundles WHERE order_id=?").bind(orderId).first(),
+              env.DB.prepare("SELECT previous_order_id,change_summary,change_json,created_at FROM order_revisions WHERE new_order_id=? ORDER BY created_at DESC").bind(orderId).all()
             ]);
             if (!order) return json({ error: "Заказ не найден." }, 404, origin);
             const meta = await getAdminOrderMeta(env, orderType, order);
-            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
+            let giftBundle=null;try{giftBundle=bundle?JSON.parse(bundle.bundle_json||"{}"):null;}catch{giftBundle=null;}
+            return json({ ok: true, order_type: orderType, order, items: items.results || [], payment: payment || null, delivery: delivery || null, gift_bundle:giftBundle, revisions:revisions.results||[], admin_status: meta.admin_status, history: meta.history, migrations_pending: meta.migrations_pending }, 200, origin);
           }
           const order = await env.DB.prepare("SELECT c.*,o.payment_status,o.balance_applied_stars FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
           if (!order) return json({ error: "Индивидуальный заказ не найден." }, 404, origin);
@@ -1562,13 +1734,13 @@ export default {
           const productOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=o.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=o.id AND json_extract(a.details,'$.order_type')='product' ORDER BY a.id DESC LIMIT 1)" : "NULL";
           const customOverride = hasOrderAudit ? "(SELECT json_extract(a.details,'$.status') FROM admin_action_log a WHERE a.action_type='order_status_changed' AND a.target_telegram_id=c.telegram_id AND json_valid(a.details) AND json_extract(a.details,'$.order_id')=c.id AND json_extract(a.details,'$.order_type')='custom' ORDER BY a.id DESC LIMIT 1)" : "NULL";
           const productStatus = "COALESCE(" + productOverride + ",CASE WHEN o.payment_status='pending' THEN 'unpaid' WHEN o.payment_status='cancelled' OR o.fulfillment_status='cancelled' THEN 'cancelled' WHEN o.fulfillment_status='delivered' THEN 'ready' WHEN o.payment_status='paid' AND o.fulfillment_status='awaiting_delivery' THEN 'new' ELSE 'unpaid' END)";
-          const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
+          const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status='superseded' THEN 'superseded' WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all(),
             type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE admin_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all()
           ]);
           const rows = [...(products.results || []), ...(custom.results || [])]
@@ -2084,6 +2256,60 @@ export default {
           orders: orders.results || [], vip: vip || null }, 200, origin);
       }
 
+      if (path === "/api/order-chat" && method === "GET") {
+        const orderId=String(url.searchParams.get("order_id")||"").trim().slice(0,100);
+        if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
+        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
+        const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
+        const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
+        const current=product||custom;
+        if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
+          const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
+          return json({ok:true,superseded:true,new_order_id:revision?.new_order_id||null,order:current,chat_available:false,messages:[],changes:[]},200,origin);
+        }
+        const chatCreatedAt=String(current.created_at||"").trim().replace(" ","T");
+        const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
+        const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
+        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000;
+        return json({ok:true,order:current,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
+      }
+      if (path === "/api/order-chat" && method === "POST") {
+        const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
+        if(!orderId||!message)return json({error:"Укажите заказ и сообщение."},400,origin);
+        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const order=product||custom;
+        if(!order)return json({error:"Заказ не найден."},404,origin);
+        if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
+          const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
+          return json({error:"Создана новая версия заказа.",superseded:true,new_order_id:revision?.new_order_id||null},409,origin);
+        }
+        const chatCreatedAt=String(order.created_at||"").trim().replace(" ","T");
+        const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
+        const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
+        if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
+        const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 30").bind(orderId,telegramId).all();
+        const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+        let answer;
+        try{answer=await createOrderChatAnswer(env,history,{order_type:product?"product":"custom",order_id:orderId,title:product?.product_title||custom?.subject,total_stars:order.total_stars,payment_status:product?.payment_status||null,fulfillment_status:product?.fulfillment_status||null,custom_answers:custom?.answers_json||null});}
+        catch(error){
+          try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\nЗаказ: "+orderId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\n\nИИ временно не смог ответить.");}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
+          return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);
+        }
+        if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
+        try{await notifyOwner(env,"💬 СООБЩЕНИЕ В ЧАТЕ ЗАКАЗА\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+(answer.change_summary?"\\n\\n📝 Запрошенное изменение: "+answer.change_summary:""));}catch(notificationError){console.error("Order chat owner notification failed:",String(notificationError).slice(0,200));}
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(orderId,telegramId,answer.reply).run();
+        let changeId=null;
+        if(answer.change_summary){
+          changeId=makeId();
+          await env.DB.prepare("INSERT INTO order_change_requests(id,order_id,telegram_id,proposed_json,ai_summary,status) VALUES(?,?,?,?,?,'pending')").bind(changeId,orderId,telegramId,JSON.stringify(answer.proposed_changes||{customer_request:message}),answer.change_summary).run();
+        }
+        return json({ok:true,reply:answer.reply,change_request_id:changeId},200,origin);
+      }
+
       if (path === "/api/orders/pay" && method === "POST") {
         const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
@@ -2103,22 +2329,43 @@ export default {
 
       if (path === "/api/orders/cancel" && method === "POST") {
         const body=await readJson(request),orderId=typeof body.order_id==="string"?body.order_id.trim().slice(0,100):"";
+        const reason=typeof body.reason==="string"?body.reason.trim().slice(0,500):"";
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
-        const linked=await env.DB.prepare("SELECT id,payment_status FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const linked=await env.DB.prepare("SELECT id,telegram_id,payment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const custom=await env.DB.prepare("SELECT id,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const createdAt=linked?.created_at||custom?.created_at;
+        if(!createdAt)return json({error:"Заказ не найден."},404,origin);
+        const createdAtText=String(createdAt).trim().replace(" ","T");
+        const createdAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(createdAtText)?createdAtText:createdAtText+"Z";
+        const ageMs=Date.now()-Date.parse(createdAtIso);
+        if(!Number.isFinite(ageMs)||ageMs<0||ageMs>72*60*60*1000)return json({error:"Отменить заказ через Mini App можно только в течение первых 3 дней после оформления."},409,origin);
         if(!linked){
-          const custom=await env.DB.prepare("SELECT id,status FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
-          if(custom&&!["cancelled","canceled"].includes(String(custom.status))){
-            await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
-            return json({ok:true,refunded:false},200,origin);
-          }
+          if(!custom||["cancelled","canceled"].includes(String(custom.status)))return json({error:"Заказ уже отменён."},409,origin);
+          await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,telegramId,"Покупатель отменил индивидуальный заказ.").run();
+          await notifyOwner(env,"❌ Отмена индивидуального заказа\nID: "+orderId+"\nПокупатель: "+telegramId+"\nПричина: "+(reason||"Не указана"));
+          return json({ok:true,cancelled:true,refunded:false},200,origin);
         }
-        const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
-        if(!cancelled)return json({error:"Заказ уже оплачен, отменён или не найден."},409,origin);
-        await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
-        return json({ok:true,refunded:true},200,origin);
+        if(linked.payment_status==="pending"){
+          const cancelled=await cancelPendingOrderAndRefund(env,orderId,telegramId);
+          if(!cancelled)return json({error:"Не удалось отменить заказ. Обновите список заказов."},409,origin);
+          await env.DB.prepare("UPDATE custom_orders SET status='cancelled' WHERE id=? AND telegram_id=?").bind(orderId,telegramId).run();
+          return json({ok:true,cancelled:true,refunded:true},200,origin);
+        }
+        if(linked.payment_status==="paid"){
+          const requestId=makeId();
+          const cancellationInsert=await env.DB.prepare("INSERT INTO order_cancellation_requests(id,order_id,telegram_id,reason,status) VALUES(?,?,?,?,'requested') ON CONFLICT DO NOTHING")
+            .bind(requestId,orderId,telegramId,reason).run();
+          if(!cancellationInsert.meta?.changes)return json({ok:true,requested:true,already_requested:true,refunded:false,message:"Запрос на отмену уже передан владельцу. Дождитесь решения."},200,origin);
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)")
+            .bind(orderId,telegramId,"Покупатель отправил запрос на отмену оплаченного заказа. Ожидается решение владельца.").run();
+          await notifyOwner(env,"⚠️ ЗАПРОС НА ОТМЕНУ ОПЛАЧЕННОГО ЗАКАЗА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nПричина: "+(reason||"Не указана")+"\nПроверьте оплату и подтвердите возврат вручную.");
+          return json({ok:true,requested:true,refunded:false,message:"Запрос на отмену передан владельцу. Оплаченный заказ будет отменён после проверки возврата."},200,origin);
+        }
+        return json({error:"Этот заказ уже отменён или имеет закрытый статус."},409,origin);
       }
       if (path === "/api/orders" && method === "GET") {
-        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? ORDER BY created_at DESC LIMIT 50")
+        const result = await env.DB.prepare("SELECT id AS order_id,'product' AS order_type,product_title AS title,total_stars AS amount,payment_status AS status,fulfillment_status,created_at FROM orders WHERE telegram_id=? AND fulfillment_status<>'superseded' UNION ALL SELECT c.id AS order_id,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,c.total_stars AS amount,CASE WHEN o.payment_status='paid' THEN c.status WHEN o.payment_status IS NOT NULL THEN o.payment_status ELSE 'awaiting_price' END AS status,o.fulfillment_status,c.created_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.telegram_id=? AND c.status<>'superseded' ORDER BY created_at DESC LIMIT 50")
           .bind(telegramId, telegramId).all();
         return json({ orders: result.results || [] }, 200, origin);
       }
@@ -2160,6 +2407,56 @@ export default {
           const discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*Number(promo.discount_percent)/100));
           return json({ok:true,code:promo.code,discount_percent:Number(promo.discount_percent),subtotal,eligible_subtotal:eligibleSubtotal,discount_stars:discount,total_stars:subtotal-discount},200,origin);
         }
+      if (path === "/api/gift-builder/draft" && method === "POST") {
+        if (!(await tableExists(env,"gift_bundles"))) return json({error:"Конструктор ещё не установлен. Обновите приложение позже."},503,origin);
+        const body=await readJson(request);
+        const catalog=await getProducts(env);
+        const selected=Array.isArray(body.items)?body.items:[];
+        if(!selected.length||selected.length>20)return json({error:"Выберите от 1 до 20 товаров для набора."},400,origin);
+        const quantities=new Map();
+        for(const item of selected){
+          const id=String(item.id||"");
+          const qty=Number(item.qty);
+          if(!catalog.some(p=>String(p.id)===id)||!Number.isInteger(qty)||qty<1||qty>10)return json({error:"В наборе есть неизвестный товар или некорректное количество."},400,origin);
+          quantities.set(id,(quantities.get(id)||0)+qty);
+          if(quantities.get(id)>10)return json({error:"Максимум 10 штук одного товара."},400,origin);
+        }
+        const items=[...quantities].map(([id,qty])=>({id,qty}));
+        const seasonal=Array.isArray(body.seasonal_extras)?[...new Set(body.seasonal_extras.filter(x=>["sticker","drawing"].includes(x)))]:[];
+        const postcard=body.postcard===true;
+        const certificate=body.certificate===true;
+        const filler=body.filler===true;
+        const postcardText=typeof body.postcard_text==="string"?body.postcard_text.trim().slice(0,700):"";
+        if(postcard&&postcardText.length<2)return json({error:"Напишите текст для открытки или отключите открытку."},400,origin);
+        const layout=Array.isArray(body.layout)?body.layout.map(String).filter(id=>quantities.has(id)).slice(0,20):items.map(x=>x.id);
+        const bundle={items,postcard,postcard_text:postcardText,certificate,filler,seasonal_extras:seasonal,layout,updated_at:new Date().toISOString()};
+        const id=String(body.draft_id||"").trim().slice(0,80)||makeId();
+        const existing=await env.DB.prepare("SELECT id,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(id,telegramId).first();
+        if(existing&&existing.status!=="draft")return json({error:"Этот набор уже оформлен и больше не редактируется."},409,origin);
+        if(existing)await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(JSON.stringify(bundle),id,telegramId).run();
+        else await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,bundle_json,status) VALUES(?,?,?,'draft')").bind(id,telegramId,JSON.stringify(bundle)).run();
+        const productTotal=items.reduce((sum,item)=>sum+Number(catalog.find(p=>String(p.id)===item.id)?.price_stars||0)*item.qty,0);
+        const extras={postcard:postcard?35:0,certificate:certificate?25:0,filler:filler?40:0,sticker:seasonal.includes("sticker")?20:0,drawing:seasonal.includes("drawing")?70:0};
+        return json({ok:true,draft_id:id,bundle,product_total:productTotal,extras_total:Object.values(extras).reduce((a,b)=>a+b,0),extras},200,origin);
+      }
+
+      if (path === "/api/gift-builder/consult" && method === "POST") {
+        const body=await readJson(request),draftId=String(body.draft_id||"").trim().slice(0,80),message=typeof body.message==="string"?body.message.trim().slice(0,1800):"";
+        if(!draftId||!message)return json({error:"Напишите вопрос ИИ-консультанту."},400,origin);
+        const draft=await env.DB.prepare("SELECT bundle_json,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(draftId,telegramId).first();
+        if(!draft||draft.status!=="draft")return json({error:"Черновик подарка не найден или уже оформлен."},404,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(draftId,telegramId,message).run();
+        const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(draftId,telegramId).all();
+        const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+        let answer;
+        try{answer=await createOrderChatAnswer(env,history,{order_type:"gift_builder_draft_not_yet_ordered",status:"draft",bundle_json:draft.bundle_json});}
+        catch(error){try{await notifyOwner(env,"💬 Вопрос по собираемому подарку\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n"+message);}catch{}return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+        if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(draftId,telegramId,answer.reply).run();
+        try{await notifyOwner(env,"🎁 Вопрос в конструкторе подарка\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message);}catch(error){console.error("Gift builder notification failed:",String(error).slice(0,200));}
+        return json({ok:true,reply:answer.reply},200,origin);
+      }
+
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
         if (!Array.isArray(body.items) || !body.items.length || body.items.length > 43) return json({ error: "Корзина пуста или некорректна" }, 400, origin);
@@ -2182,6 +2479,29 @@ export default {
           const product = catalog.find(p => String(p.id) === id);
           return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
+        let giftBundle=null,builderExtraTotal=0,builderExtraLines=[];
+        const giftBundleId=typeof body.gift_bundle_id==="string"?body.gift_bundle_id.trim().slice(0,80):"";
+        if(giftBundleId){
+          const draft=await env.DB.prepare("SELECT bundle_json,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(giftBundleId,telegramId).first();
+          if(!draft||draft.status!=="draft")return json({error:"Черновик подарка не найден или уже оформлен. Откройте конструктор и сохраните набор ещё раз."},409,origin);
+          try{giftBundle=JSON.parse(draft.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать сохранённый набор."},409,origin);}
+          const selected=Array.isArray(giftBundle.items)?giftBundle.items:[];
+          for(const selectedItem of selected){
+            const matching=items.find(item=>item.id===String(selectedItem.id));
+            if(!matching||matching.qty<Number(selectedItem.qty))return json({error:"Состав корзины не совпадает с сохранённым набором. Вернитесь в конструктор и добавьте набор заново."},409,origin);
+          }
+          const seasonal=Array.isArray(giftBundle.seasonal_extras)?giftBundle.seasonal_extras:[];
+          const extras=[
+            ["Индивидуальная открытка",giftBundle.postcard?35:0],
+            ["Подарочный сертификат",giftBundle.certificate?25:0],
+            ["Наполнитель",giftBundle.filler?40:0],
+            ["Сезонные стикеры",seasonal.includes("sticker")?20:0],
+            ["Маленький сезонный рисунок",seasonal.includes("drawing")?70:0]
+          ];
+          builderExtraLines=extras.filter(x=>x[1]>0);
+          builderExtraTotal=builderExtraLines.reduce((sum,x)=>sum+x[1],0);
+          if(giftBundle.postcard&&String(giftBundle.postcard_text||"").trim().length<2)return json({error:"В открытке отсутствует поздравление."},400,origin);
+        }
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         let discount = 0, promoCode = null, discountPercent = 0;
@@ -2222,14 +2542,14 @@ export default {
           }
         }
         const goodsTotal = subtotal-discount;
-        const total = goodsTotal+delivery.total_delivery_stars;
+        const total = goodsTotal+builderExtraTotal+delivery.total_delivery_stars;
         if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
-        const title = items.map(item => item.title + " × " + item.qty).join("; ");
+        const title = items.map(item => item.title + " × " + item.qty).join("; ")+(builderExtraLines.length?" · Дополнения: "+builderExtraLines.map(x=>x[0]).join(", "):"");
         const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?)")
-          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
+          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
         const orderStatements = [
           orderInsert,
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
@@ -2237,6 +2557,7 @@ export default {
           env.DB.prepare("INSERT INTO order_delivery (order_id,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars) VALUES (?,?,?,?,?,?,?,?,?)")
             .bind(orderId,telegramId,delivery.address,deliveryDetails,deliveryNote,delivery.distance_km,delivery.delivery_stars,priorityDelivery?1:0,delivery.priority_stars)
         ];
+        if(giftBundleId)orderStatements.push(env.DB.prepare("UPDATE gift_bundles SET order_id=?,status='ordered',updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(orderId,giftBundleId,telegramId));
         if(promoCode){
           const reservation=await env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode).run();
           if(!reservation.meta||reservation.meta.changes!==1)return json({error:"Промокод только что исчерпал лимит. Попробуйте другой."},409,origin);
@@ -2244,6 +2565,7 @@ export default {
         }
         try {
           await env.DB.batch(orderStatements);
+          if(giftBundleId)await env.DB.prepare("UPDATE order_chat_messages SET order_id=? WHERE order_id=? AND telegram_id=?").bind(orderId,giftBundleId,telegramId).run();
         } catch(orderError) {
           if(promoCode)await env.DB.batch([
             env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
@@ -2279,12 +2601,12 @@ export default {
           ]);
           await notifyOwner(env,"🎁 НОВЫЙ ОПЛАЧЕННЫЙ ЗАКАЗ С БАЛАНСА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nТовары: "+title+"\nАдрес: "+delivery.address+"\nДистанция: "+delivery.distance_km+" км\nДоставка: "+delivery.delivery_stars+" ⭐"+(priorityDelivery?"\nПриоритет: +100 ⭐":"")+"\nИтого: "+total+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐");
           try{await deliverOrderImages(env,orderId,telegramId);}catch(deliveryError){console.error("Balance-paid order delivery failed:",String(deliveryError).slice(0,300));}
-          return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+          return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,builder_extra_stars:builderExtraTotal,distance_km:delivery.distance_km},200,origin);
         }
         const invoiceAmount=total-balanceUsed;
         try{
           const invoiceUrl=await createPaymentIntent(env,{payload:orderId,telegram_id:telegramId,kind:"order",reference_id:orderId,amount_stars:invoiceAmount,title:"Заказ "+orderId.slice(0,8),description:title+". Доставка "+delivery.total_delivery_stars+" ⭐; списание с баланса "+balanceUsed+" ⭐."});
-          return json({ok:true,invoice_url:invoiceUrl,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,invoice_amount_stars:invoiceAmount,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+          return json({ok:true,invoice_url:invoiceUrl,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,invoice_amount_stars:invoiceAmount,delivery_stars:delivery.total_delivery_stars,builder_extra_stars:builderExtraTotal,distance_km:delivery.distance_km},200,origin);
         }catch(error){
           await cancelPendingOrderAndRefund(env,orderId,telegramId);
           throw error;

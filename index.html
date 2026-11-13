@@ -1396,7 +1396,25 @@ html body > div.bottom button{
 <section id="catalogView" class="hidden">
  <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
  <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
+ <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выбери товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
  <div class="grid" id="products"></div>
+</section>
+<section id="giftBuilderView" class="hidden">
+ <div class="sectionhead"><h2>🎁 Собери подарок</h2><span>конструктор набора</span></div>
+ <div class="panel"><h3>1. Выбери товары из каталога</h3><p class="notice">Можно выбрать несколько разных работ и указать количество каждой.</p><div id="giftBuilderProducts" class="grid"></div></div>
+ <div class="panel"><h3>2. Добавь оформление</h3>
+  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderPostcard" type="checkbox" style="width:auto"> <span>💌 Индивидуальная открытка <b>+35 ⭐</b></span></label>
+  <label>Текст поздравления<textarea id="giftBuilderPostcardText" rows="3" maxlength="700" placeholder="Напиши, кому и что пожелать…"></textarea></label>
+  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderCertificate" type="checkbox" style="width:auto"> <span>🏷️ Подарочный сертификат <b>+25 ⭐</b></span></label>
+  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderFiller" type="checkbox" style="width:auto"> <span>🎀 Наполнитель для набора <b>+40 ⭐</b></span></label>
+ </div>
+ <div class="panel"><h3>3. Расположи предметы</h3><p class="notice">Перетаскивай карточки, чтобы задать порядок расположения. На iPad можно также использовать стрелки.</p><div id="giftBuilderLayout" style="display:grid;gap:8px"></div></div>
+ <div class="panel"><h3>4. Сезонные дополнения</h3>
+  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderSticker" type="checkbox" style="width:auto"> <span>✨ Набор сезонных стикеров <b>+20 ⭐</b></span></label>
+  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderDrawing" type="checkbox" style="width:auto"> <span>🖍️ Маленький сезонный рисунок <b>+70 ⭐</b></span></label>
+ </div>
+ <div class="panel"><h3>5. ИИ-консультант</h3><p class="notice">Обсуди собранный набор с ИИ до оформления заказа.</p><div id="giftBuilderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto"></div><textarea id="giftBuilderChatInput" rows="2" maxlength="1800" placeholder="Например: что ещё подойдёт к этому подарку?"></textarea><button class="secondary" id="giftBuilderAsk" type="button" onclick="askGiftBuilderAi()">Спросить ИИ-консультанта</button></div>
+ <div class="panel"><div class="lineitem"><span>Товары</span><b id="giftBuilderProductsTotal">0 ⭐</b></div><div class="lineitem"><span>Дополнения</span><b id="giftBuilderExtrasTotal">0 ⭐</b></div><div class="lineitem"><span>Итого без доставки</span><b id="giftBuilderTotal">0 ⭐</b></div><p class="notice">Доплаты за оформление показаны заранее. Доставка рассчитывается отдельно при оформлении.</p><div class="row-actions"><button class="secondary" type="button" onclick="showView('catalogView')">← Назад в каталог</button><button class="primary" type="button" id="giftBuilderAdd" onclick="addGiftBuilderToCart()">Добавить набор в корзину 🎁</button></div></div>
 </section>
 <section id="cartView" class="hidden">
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
@@ -1443,6 +1461,7 @@ html body > div.bottom button{
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
  <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
+ <div class="panel hidden" id="orderChatPanel"><div class="sectionhead"><h3 id="orderChatTitle">💬 Чат заказа</h3><button class="secondary" type="button" onclick="refreshOrderChat()">↻ Обновить</button></div><div id="orderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:45vh;overflow:auto;padding:4px 0 12px"></div><textarea id="orderChatInput" rows="3" maxlength="2000" placeholder="Напишите ИИ-консультанту по этому заказу…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="orderChatSend" type="button" onclick="sendOrderChatMessage()">Отправить</button><p class="notice" id="orderChatStatus">ИИ помогает обсудить изменения. Любое изменение заказа сначала проверяет владелец.</p></div>
 </section>
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 <section id="profileView" class="hidden">
@@ -1564,8 +1583,12 @@ let activePromo = null;
 let vipActive = false;
 let activeFilter = 'all';
 let quickBuyMode=false;
+let giftBuilderSelection={};
+let giftBuilderLayoutOrder=[];
+let giftBuilderDraftId=null;
+let giftBuilderChatMessages=[];
 
-const allViews = ['menuView','adminPanelView','catalogView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
+const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
 // Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
 document.addEventListener('click', event => {
@@ -1835,6 +1858,85 @@ function drawProducts() {
  });
 }
 
+document.addEventListener('change',event=>{if(event.target?.closest?.('#giftBuilderView'))renderGiftBuilder();});
+function openGiftBuilder(){
+ giftBuilderSelection={};
+ Object.entries(cart||{}).forEach(([id,qty])=>{if(Number(qty)>0)giftBuilderSelection[String(id)]=Math.min(10,Number(qty));});
+ giftBuilderLayoutOrder=Object.keys(giftBuilderSelection);
+ giftBuilderDraftId=null;giftBuilderChatMessages=[];
+ ['giftBuilderPostcard','giftBuilderCertificate','giftBuilderFiller','giftBuilderSticker','giftBuilderDrawing'].forEach(id=>{const el=document.getElementById(id);if(el)el.checked=false;});
+ const text=document.getElementById('giftBuilderPostcardText');if(text)text.value='';
+ const log=document.getElementById('giftBuilderChatLog');if(log)log.replaceChildren();
+ renderGiftBuilder();showView('giftBuilderView');
+}
+function giftBuilderSelectedItems(){return Object.entries(giftBuilderSelection).filter(([,qty])=>Number(qty)>0).map(([id,qty])=>({id,qty:Number(qty)}));}
+function giftBuilderExtras(){
+ return {postcard:document.getElementById('giftBuilderPostcard')?.checked===true,postcard_text:document.getElementById('giftBuilderPostcardText')?.value.trim()||'',certificate:document.getElementById('giftBuilderCertificate')?.checked===true,filler:document.getElementById('giftBuilderFiller')?.checked===true,seasonal_extras:[...(document.getElementById('giftBuilderSticker')?.checked?['sticker']:[]),...(document.getElementById('giftBuilderDrawing')?.checked?['drawing']:[])],layout:giftBuilderLayoutOrder.slice()};
+}
+function renderGiftBuilder(){
+ const root=document.getElementById('giftBuilderProducts');if(!root)return;root.replaceChildren();
+ (products||[]).forEach(p=>{
+  const id=String(p[0]),qty=Number(giftBuilderSelection[id]||0),card=document.createElement('div');card.className='product';card.style.padding='10px';
+  const image=document.createElement('div');image.className='art';if(p[5]){const img=document.createElement('img');img.src=p[5];img.alt=p[1];img.loading='lazy';image.append(img);}else image.textContent=p[3]||'🎁';
+  const title=document.createElement('b');title.textContent=p[1];
+  const price=document.createElement('div');price.className='price';price.textContent=money(p[2]);
+  const label=document.createElement('label');label.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px';
+  const check=document.createElement('input');check.type='checkbox';check.checked=qty>0;check.disabled=p[2]==null;check.style.width='auto';check.addEventListener('change',()=>{if(check.checked)giftBuilderSelection[id]=1;else delete giftBuilderSelection[id];giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(x=>x!==id);if(check.checked)giftBuilderLayoutOrder.push(id);renderGiftBuilder();});
+  const labelText=document.createElement('span');labelText.textContent='Добавить';label.append(check,labelText);
+  const count=document.createElement('input');count.type='number';count.min='1';count.max='10';count.value=String(qty||1);count.disabled=!qty;count.setAttribute('aria-label','Количество: '+p[1]);count.style.cssText='width:75px;margin-top:8px';count.addEventListener('change',()=>{const n=Math.max(1,Math.min(10,Math.floor(Number(count.value)||1)));giftBuilderSelection[id]=n;renderGiftBuilder();});
+  card.append(image,title,price,label,count);root.append(card);
+ });
+ const layout=document.getElementById('giftBuilderLayout');if(layout){layout.replaceChildren();giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(id=>!!giftBuilderSelection[id]);Object.keys(giftBuilderSelection).forEach(id=>{if(!giftBuilderLayoutOrder.includes(id))giftBuilderLayoutOrder.push(id);});
+  giftBuilderLayoutOrder.forEach((id,index)=>{
+   const p=products.find(x=>String(x[0])===id);if(!p)return;
+   const row=document.createElement('div');row.className='admin-detail-line';row.draggable=true;row.dataset.productId=id;row.style.cssText='display:flex;align-items:center;gap:10px;cursor:grab';
+   const label=document.createElement('span');label.textContent=(index+1)+'. '+p[1]+' × '+giftBuilderSelection[id];label.style.flex='1';
+   const up=document.createElement('button');up.type='button';up.className='secondary';up.textContent='↑';up.disabled=index===0;up.onclick=()=>moveGiftBuilderItem(id,-1);
+   const down=document.createElement('button');down.type='button';down.className='secondary';down.textContent='↓';down.disabled=index===giftBuilderLayoutOrder.length-1;down.onclick=()=>moveGiftBuilderItem(id,1);
+   row.append(label,up,down);
+   row.addEventListener('dragstart',e=>{e.dataTransfer?.setData('text/plain',id);});
+   row.addEventListener('dragover',e=>e.preventDefault());
+   row.addEventListener('drop',e=>{e.preventDefault();const from=e.dataTransfer?.getData('text/plain');if(!from||from===id)return;const a=giftBuilderLayoutOrder.indexOf(from),b=giftBuilderLayoutOrder.indexOf(id);if(a<0||b<0)return;giftBuilderLayoutOrder.splice(a,1);giftBuilderLayoutOrder.splice(b,0,from);renderGiftBuilder();});
+   layout.append(row);
+  });
+ }
+ const extras=giftBuilderExtras(),productTotal=giftBuilderSelectedItems().reduce((sum,item)=>sum+Number(products.find(p=>String(p[0])===item.id)?.[2]||0)*item.qty,0);
+ const extraTotal=(extras.postcard?35:0)+(extras.certificate?25:0)+(extras.filler?40:0)+(extras.seasonal_extras.includes('sticker')?20:0)+(extras.seasonal_extras.includes('drawing')?70:0);
+ const selected=giftBuilderSelectedItems();
+ const productLabel=document.getElementById('giftBuilderProductsTotal'),extrasLabel=document.getElementById('giftBuilderExtrasTotal'),totalLabel=document.getElementById('giftBuilderTotal'),add=document.getElementById('giftBuilderAdd');
+ if(productLabel)productLabel.textContent=money(productTotal);if(extrasLabel)extrasLabel.textContent=money(extraTotal);if(totalLabel)totalLabel.textContent=money(productTotal+extraTotal);if(add)add.disabled=!selected.length||!catalogLoaded;
+}
+function moveGiftBuilderItem(id,direction){const from=giftBuilderLayoutOrder.indexOf(id),to=from+direction;if(from<0||to<0||to>=giftBuilderLayoutOrder.length)return;const next=giftBuilderLayoutOrder.slice();[next[from],next[to]]=[next[to],next[from]];giftBuilderLayoutOrder=next;renderGiftBuilder();}
+async function saveGiftBuilderDraft(){
+ const items=giftBuilderSelectedItems();if(!items.length)throw new Error('Сначала выбери товары для подарка.');
+ const extras=giftBuilderExtras();if(extras.postcard&&extras.postcard_text.length<2)throw new Error('Напиши поздравление для открытки.');
+ const d=await apiFetch('/api/gift-builder/draft',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,items,...extras})});
+ giftBuilderDraftId=d.draft_id;return d;
+}
+function renderGiftBuilderChat(){
+ const log=document.getElementById('giftBuilderChatLog');if(!log)return;log.replaceChildren();
+ giftBuilderChatMessages.forEach(m=>{const row=document.createElement('div');row.className='admin-detail-line';const who=document.createElement('b');who.textContent=m.role==='user'?'Вы':'ИИ-консультант';const text=document.createElement('div');text.textContent=m.content;text.style.whiteSpace='pre-wrap';row.append(who,text);log.append(row);});
+ log.scrollTop=log.scrollHeight;
+}
+async function askGiftBuilderAi(){
+ const input=document.getElementById('giftBuilderChatInput'),button=document.getElementById('giftBuilderAsk'),message=input?.value.trim()||'';if(!message)return;
+ button.disabled=true;
+ try{await saveGiftBuilderDraft();giftBuilderChatMessages.push({role:'user',content:message});renderGiftBuilderChat();const d=await apiFetch('/api/gift-builder/consult',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,message})});giftBuilderChatMessages.push({role:'assistant',content:d.reply});input.value='';renderGiftBuilderChat();}
+ catch(e){toast(e.message||'Не удалось отправить сообщение ИИ.');}
+ finally{button.disabled=false;}
+}
+async function addGiftBuilderToCart(){
+ const items=giftBuilderSelectedItems();if(!items.length)return toast('Выбери хотя бы один товар.');
+ for(const item of items){const combined=Number(cart[item.id]||0)+item.qty;if(combined>10)return toast('В корзине максимум 10 штук одного товара.');}
+ const add=document.getElementById('giftBuilderAdd');if(add)add.disabled=true;
+ try{
+  await saveGiftBuilderDraft();
+  items.forEach(item=>{cart[item.id]=Number(cart[item.id]||0)+item.qty;});
+  window.pendingGiftBundleId=giftBuilderDraftId;
+  persistCart();drawProducts();drawCart();showView('cartView');toast('Подарочный набор добавлен в корзину. Оформление сохранено!');
+ }catch(e){toast(e.message||'Не удалось сохранить набор.');}
+ finally{if(add)add.disabled=false;}
+}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function openProductDetail(product){
  let modal=document.getElementById('workDetailModal');
@@ -2612,6 +2714,16 @@ async function openAdminOrder(orderId,orderType) {
    const items=Array.isArray(data.items)?data.items:[];
    addLine('Позиций',items.length);
    items.forEach((item,index)=>addLine('Позиция '+(index+1),item.product_title+' × '+item.quantity+' · '+item.delivery_status));
+   if(data.gift_bundle){
+    const bundle=data.gift_bundle;
+    addLine('Индивидуальная открытка',bundle.postcard?'Да · '+(bundle.postcard_text||'Текст не указан'):'Нет');
+    addLine('Сертификат',bundle.certificate?'Да':'Нет');
+    addLine('Наполнитель',bundle.filler?'Да':'Нет');
+    addLine('Сезонные дополнения',(bundle.seasonal_extras||[]).join(', ')||'Нет');
+    addLine('Порядок расположения',Array.isArray(bundle.layout)?bundle.layout.join(' → '):'—');
+    if(bundle.owner_approved_change?.summary)addLine('Согласованное изменение',bundle.owner_approved_change.summary);
+   }
+   (data.revisions||[]).forEach((revision,index)=>addLine('Подтверждённое изменение '+(index+1),revision.change_summary+' · предыдущая версия № '+revision.previous_order_id));
   }else{
    addLine('Тема',order.subject);
    addLine('Статус заявки',order.status);
@@ -2683,6 +2795,9 @@ async function openAdminOrder(orderId,orderType) {
    const warning=document.createElement('p');warning.className='notice';warning.textContent='Для изменения статуса и комментариев требуется миграция 0006_admin_action_log.sql.';section.append(warning);
   }
   box.append(section);
+  const orderChatPanel=document.createElement('div');orderChatPanel.className='panel';orderChatPanel.style.marginTop='16px';
+  const orderChatHeading=document.createElement('h4');orderChatHeading.textContent='💬 Чат сопровождения заказа';orderChatPanel.append(orderChatHeading);
+  box.append(orderChatPanel);loadAdminOrderChat(String(order.id),orderChatPanel,orderType);
   const historyTitle=document.createElement('h4');historyTitle.textContent='История изменений';box.append(historyTitle);
   const history=Array.isArray(data.history)?data.history:[];
   if(!history.length){
@@ -2703,6 +2818,51 @@ async function openAdminOrder(orderId,orderType) {
  }catch(e){box.textContent=e.message||'Не удалось загрузить заказ.';}
 }
 
+async function loadAdminOrderChat(orderId,root,orderType='product'){
+ root.replaceChildren();
+ const title=document.createElement('h4');title.textContent='💬 Переписка с покупателем';root.append(title);
+ const log=document.createElement('div');log.style.cssText='display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto;padding:6px 0';root.append(log);
+ const changes=document.createElement('div');root.append(changes);
+ try{
+  const d=await apiFetch('/api/admin/order-chat?order_id='+encodeURIComponent(orderId));
+  (d.messages||[]).forEach(m=>{
+   const row=document.createElement('div');row.className='admin-detail-line';
+   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Покупатель':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-консультант';
+   const body=document.createElement('div');body.textContent=m.content||'';body.style.whiteSpace='pre-wrap';body.style.marginTop='4px';
+   const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
+   row.append(who,body,date);log.append(row);
+  });
+  const pending=(d.changes||[]).filter(x=>x.status==='pending');
+  if(pending.length){const h=document.createElement('h4');h.textContent='📝 Предложения изменений от ИИ';changes.append(h);}
+  pending.forEach(change=>{
+   const card=document.createElement('div');card.className='admin-detail-line';
+   const summary=document.createElement('p');summary.textContent=change.ai_summary;card.append(summary);
+   const details=document.createElement('small');details.textContent=change.proposed_json||'';card.append(details);
+   const accept=document.createElement('button');accept.type='button';accept.className='primary';accept.textContent='✓ Подтвердить и создать новую версию';
+   accept.addEventListener('click',async()=>{const note=prompt('Комментарий к подтверждённому изменению (необязательно):','Изменение подтверждено владельцем.');if(note===null)return;if(!confirm('Подтвердить изменение? Старая версия заказа будет закрыта, а новая появится в списке заказов.'))return;accept.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'accept_change',order_id:orderId,change_id:change.id,note})});toast('Создана новая версия заказа № '+result.new_order_id);await openAdminOrder(result.new_order_id,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить изменение.');accept.disabled=false;}});
+   const reject=document.createElement('button');reject.type='button';reject.className='secondary';reject.textContent='Отклонить изменение';
+   reject.addEventListener('click',async()=>{const note=prompt('Комментарий покупателю (необязательно):','Пока не можем внести это изменение. Давайте обсудим детали.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reject_change',order_id:orderId,change_id:change.id,note})});toast('Изменение отклонено, покупатель уведомлён.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось отклонить изменение.');reject.disabled=false;}});
+   card.append(accept,reject);changes.append(card);
+  });
+  const pendingCancels=(d.cancellations||[]).filter(x=>x.status==='requested');
+  if(pendingCancels.length){const h=document.createElement('h4');h.textContent='⚠️ Запросы на отмену';changes.append(h);}
+  pendingCancels.forEach(item=>{
+   const card=document.createElement('div');card.className='admin-detail-line';
+   const reason=document.createElement('p');reason.textContent='Причина: '+(item.reason||'Не указана')+' · '+formatDate(item.created_at);card.append(reason);
+   const approve=document.createElement('button');approve.type='button';approve.className='primary';approve.textContent='Подтвердить отмену';
+   approve.addEventListener('click',async()=>{if(!confirm('Если Telegram charge ID сохранён, Worker попробует выполнить возврат Stars автоматически. Если ID отсутствует, сначала выполните возврат вручную. Подтверждаете, что можно завершить отмену?'))return;const note=prompt('Комментарий покупателю (необязательно):','Запрос на отмену подтверждён.');if(note===null)return;approve.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'approve',order_id:orderId,request_id:item.id,refund_confirmed:orderType!=='product'||true,note})});toast('Отмена подтверждена.');await openAdminOrder(orderId,orderType);await loadAdminOrders();}catch(e){toast(e.message||'Не удалось подтвердить отмену.');approve.disabled=false;}});
+   const reject=document.createElement('button');reject.type='button';reject.className='secondary';reject.textContent='Отклонить запрос';
+   reject.addEventListener('click',async()=>{const note=prompt('Причина отказа:','Не можем отменить этот заказ.');if(note===null)return;reject.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'resolve_cancellation',decision:'reject',order_id:orderId,request_id:item.id,note})});toast('Запрос на отмену отклонён.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось обработать запрос.');reject.disabled=false;}});
+   card.append(approve,reject);changes.append(card);
+  });
+  const mode=document.createElement('select');mode.style.marginTop='12px';
+  [['owner','💬 От имени владельца'],['ai','🤖 От имени ИИ-консультанта']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;mode.append(option);});
+  const input=document.createElement('textarea');input.rows=3;input.maxLength=2000;input.placeholder='Напишите сообщение покупателю…';input.style.cssText='width:100%;box-sizing:border-box;margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit';
+  const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить в чат заказа';send.style.marginTop='8px';
+  send.addEventListener('click',async()=>{const message=input.value.trim();if(!message)return;send.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:orderId,message,sender_type:mode.value})});input.value='';toast(result.notification?.sent?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAdminOrderChat(orderId,root);}catch(e){toast(e.message||'Не удалось отправить сообщение.');send.disabled=false;}});
+  root.append(mode,input,send);
+ }catch(e){const error=document.createElement('p');error.className='notice';error.textContent=e.message||'Не удалось загрузить чат заказа.';root.append(error);}
+}
 async function loadAdminOrders() {
  const status=document.getElementById('adminOrdersStatus');
  const root=document.getElementById('adminOrdersList');
@@ -3308,6 +3468,7 @@ async function checkout() {
  try{
   const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
    items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])})),
+   gift_bundle_id:window.pendingGiftBundleId||'',
    promo_code:activePromo?.code||'',
    delivery_method:deliveryMethod,
    delivery_address:deliveryMethod==='pickup'?'':address,
@@ -3315,11 +3476,12 @@ async function checkout() {
    delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
    priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked
   })});
+  if(window.pendingGiftBundleId)window.pendingGiftBundleId=null;
   const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
   if(deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(totalLabel)totalLabel.textContent=money(data.total_stars||0);
   if(data.paid){
-   quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
+   quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
    if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Заказ оплачен с баланса. Самовывоз: Новаторов, 8 · доставка бесплатно.':'Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
    toast('Заказ оплачен с баланса! 🎁');
    return;
@@ -3328,7 +3490,7 @@ async function checkout() {
   if(statusBox)statusBox.textContent=(deliveryMethod==='pickup'?'Самовывоз: Новаторов, 8 · доставка бесплатно. ':'Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. ')+'Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
-    quickBuyMode=false;cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
+    quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
     quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');loadMe();
    }else{
@@ -3346,7 +3508,44 @@ async function checkout() {
 }
 
 async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
-async function cancelExistingOrder(id){if(!confirm('Отменить неоплаченный заказ? Списанный баланс вернётся.'))return;try{await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast('Заказ отменён, баланс возвращён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
+async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
+let activeOrderChatId='',activeOrderChatType='product';
+async function openOrderChat(id,type,title){
+ activeOrderChatId=String(id);activeOrderChatType=type==='custom'?'custom':'product';
+ const panel=document.getElementById('orderChatPanel');if(panel)panel.classList.remove('hidden');
+ const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;
+ const input=document.getElementById('orderChatInput');if(input)input.value='';
+ await refreshOrderChat();panel?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function refreshOrderChat(){
+ if(!activeOrderChatId)return;
+ const log=document.getElementById('orderChatLog'),status=document.getElementById('orderChatStatus');
+ if(status)status.textContent='Загружаем переписку…';
+ try{
+  const d=await apiFetch('/api/order-chat?order_id='+encodeURIComponent(activeOrderChatId));
+  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;return refreshOrderChat();}
+  if(log){log.replaceChildren();(d.messages||[]).forEach(m=>{
+   const row=document.createElement('div');row.className='admin-detail-line';
+   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-консультант';
+   const body=document.createElement('div');body.textContent=m.content||'';body.style.whiteSpace='pre-wrap';body.style.marginTop='4px';
+   const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
+   row.append(who,body,date);log.append(row);
+  });}
+  const input=document.getElementById('orderChatInput'),send=document.getElementById('orderChatSend');
+  if(input){input.disabled=!d.chat_available;input.placeholder=d.chat_available?'Напишите ИИ-консультанту по этому заказу…':'Первые 3 дня для ИИ-консультанта по заказу завершились.';}
+  if(send)send.disabled=!d.chat_available;
+  if(status)status.textContent=!d.chat_available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'ИИ помогает обсудить изменения. Все изменения применяются только после проверки владельцем.';
+ }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить чат заказа.';}
+}
+async function sendOrderChatMessage(){
+ const input=document.getElementById('orderChatInput'),button=document.getElementById('orderChatSend'),status=document.getElementById('orderChatStatus'),message=input?.value.trim()||'';
+ if(!activeOrderChatId||!message)return;
+ button.disabled=true;button.textContent='ИИ отвечает…';
+ try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-консультанта получен.';}
+ catch(e){if(status)status.textContent=e.message||'Не удалось отправить сообщение.';}
+ finally{button.disabled=false;button.textContent='Отправить';}
+}
+
 async function loadMe() {
  if(!initData)return;
  try{
@@ -3373,7 +3572,11 @@ async function loadMe() {
    const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
    const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
    const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
-   const actions=payable?'<div class="order-actions"><button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':waitingPrice?'<div class="order-actions"><button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button></div>':'';
+   const ageMs=Date.now()-new Date(String(o.created_at||'').replace(' ','T')+'Z').getTime();
+   const canCancel=Number.isFinite(ageMs)&&ageMs>=0&&ageMs<=72*60*60*1000&&!['cancelled','canceled','completed','fulfilled','delivered'].includes(status);
+   const cancelButton=canCancel?'<button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button>':'';
+   const chatButton='<button type="button" class="secondary order-action-btn" data-order-chat="1" data-order-id="'+id+'" data-order-type="'+(o.order_type==='custom'?'custom':'product')+'" data-order-title="'+String(o.title||'Заказ').replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">💬 Чат заказа</button>';
+   const actions='<div class="order-actions">'+(payable?'<button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button>':'')+cancelButton+chatButton+'</div>';
    return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
   }).join(''):'<p class="muted">Пока заказов нет.</p>';
  }catch(e){
@@ -3410,6 +3613,8 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')document.get
 document.addEventListener('click',event=>{
  const orderButton=event.target.closest('button[data-order-action][data-order-id]');
  if(orderButton){const id=orderButton.dataset.orderId;if(orderButton.dataset.orderAction==='pay')payExistingOrder(id);else if(orderButton.dataset.orderAction==='cancel')cancelExistingOrder(id);}
+ const chatButton=event.target.closest('button[data-order-chat][data-order-id]');
+ if(chatButton)openOrderChat(chatButton.dataset.orderId,chatButton.dataset.orderType,chatButton.dataset.orderTitle);
 });
 
 drawProducts();
