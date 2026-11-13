@@ -362,6 +362,7 @@ async function createOrderChatAnswer(env, history, orderContext) {
     "Не меняй цены, оплату, адрес доставки, статус заказа или состав товаров самостоятельно. Если покупатель просит изменить содержание работы, поздравление, пожелания, оформление или комплект, кратко сформулируй предложение для владельца.",
     "Верни строго JSON: {\"reply\":\"ответ покупателю\",\"change_summary\":\"краткое описание запрошенного изменения или пустая строка\",\"proposed_changes\":{\"customer_request\":\"точная суть просьбы\"}}.",
     "Если покупатель просто задаёт вопрос или ещё не определился, change_summary должна быть пустой строкой.",
+    orderContext?.order_type==="gift_builder_draft_not_yet_ordered" ? "Это ещё не оформленный черновик подарка. Не называй его заказом, не утверждай, что что-либо уже куплено или отправлено владельцу. Помоги подобрать дополнения и улучшить идею. Если клиент просит изменить параметры черновика, подскажи ему, что можно вернуться к настройкам конструктора." : "",
     "Контекст заказа: " + JSON.stringify(orderContext).slice(0,5000)
   ].join("\n");
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -2300,6 +2301,56 @@ export default {
           const discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*Number(promo.discount_percent)/100));
           return json({ok:true,code:promo.code,discount_percent:Number(promo.discount_percent),subtotal,eligible_subtotal:eligibleSubtotal,discount_stars:discount,total_stars:subtotal-discount},200,origin);
         }
+      if (path === "/api/gift-builder/draft" && method === "POST") {
+        if (!(await tableExists(env,"gift_bundles"))) return json({error:"Конструктор ещё не установлен. Обновите приложение позже."},503,origin);
+        const body=await readJson(request);
+        const catalog=await getProducts(env);
+        const selected=Array.isArray(body.items)?body.items:[];
+        if(!selected.length||selected.length>20)return json({error:"Выберите от 1 до 20 товаров для набора."},400,origin);
+        const quantities=new Map();
+        for(const item of selected){
+          const id=String(item.id||"");
+          const qty=Number(item.qty);
+          if(!catalog.some(p=>String(p.id)===id)||!Number.isInteger(qty)||qty<1||qty>10)return json({error:"В наборе есть неизвестный товар или некорректное количество."},400,origin);
+          quantities.set(id,(quantities.get(id)||0)+qty);
+          if(quantities.get(id)>10)return json({error:"Максимум 10 штук одного товара."},400,origin);
+        }
+        const items=[...quantities].map(([id,qty])=>({id,qty}));
+        const seasonal=Array.isArray(body.seasonal_extras)?[...new Set(body.seasonal_extras.filter(x=>["sticker","drawing"].includes(x)))]:[];
+        const postcard=body.postcard===true;
+        const certificate=body.certificate===true;
+        const filler=body.filler===true;
+        const postcardText=typeof body.postcard_text==="string"?body.postcard_text.trim().slice(0,700):"";
+        if(postcard&&postcardText.length<2)return json({error:"Напишите текст для открытки или отключите открытку."},400,origin);
+        const layout=Array.isArray(body.layout)?body.layout.map(String).filter(id=>quantities.has(id)).slice(0,20):items.map(x=>x.id);
+        const bundle={items,postcard,postcard_text:postcardText,certificate,filler,seasonal_extras:seasonal,layout,updated_at:new Date().toISOString()};
+        const id=String(body.draft_id||"").trim().slice(0,80)||makeId();
+        const existing=await env.DB.prepare("SELECT id,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(id,telegramId).first();
+        if(existing&&existing.status!=="draft")return json({error:"Этот набор уже оформлен и больше не редактируется."},409,origin);
+        if(existing)await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(JSON.stringify(bundle),id,telegramId).run();
+        else await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,bundle_json,status) VALUES(?,?,?,'draft')").bind(id,telegramId,JSON.stringify(bundle)).run();
+        const productTotal=items.reduce((sum,item)=>sum+Number(catalog.find(p=>String(p.id)===item.id)?.price_stars||0)*item.qty,0);
+        const extras={postcard:postcard?35:0,certificate:certificate?25:0,filler:filler?40:0,sticker:seasonal.includes("sticker")?20:0,drawing:seasonal.includes("drawing")?70:0};
+        return json({ok:true,draft_id:id,bundle,product_total:productTotal,extras_total:Object.values(extras).reduce((a,b)=>a+b,0),extras},200,origin);
+      }
+
+      if (path === "/api/gift-builder/consult" && method === "POST") {
+        const body=await readJson(request),draftId=String(body.draft_id||"").trim().slice(0,80),message=typeof body.message==="string"?body.message.trim().slice(0,1800):"";
+        if(!draftId||!message)return json({error:"Напишите вопрос ИИ-консультанту."},400,origin);
+        const draft=await env.DB.prepare("SELECT bundle_json,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(draftId,telegramId).first();
+        if(!draft||draft.status!=="draft")return json({error:"Черновик подарка не найден или уже оформлен."},404,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(draftId,telegramId,message).run();
+        const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(draftId,telegramId).all();
+        const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+        let answer;
+        try{answer=await createOrderChatAnswer(env,history,{order_type:"gift_builder_draft_not_yet_ordered",status:"draft",bundle_json:draft.bundle_json});}
+        catch(error){try{await notifyOwner(env,"💬 Вопрос по собираемому подарку\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n"+message);}catch{}return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+        if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(draftId,telegramId,answer.reply).run();
+        try{await notifyOwner(env,"🎁 Вопрос в конструкторе подарка\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message);}catch(error){console.error("Gift builder notification failed:",String(error).slice(0,200));}
+        return json({ok:true,reply:answer.reply},200,origin);
+      }
+
       if (path === "/api/orders" && method === "POST") {
         const body = await readJson(request);
         if (!Array.isArray(body.items) || !body.items.length || body.items.length > 43) return json({ error: "Корзина пуста или некорректна" }, 400, origin);
@@ -2322,6 +2373,29 @@ export default {
           const product = catalog.find(p => String(p.id) === id);
           return { id, title: product.title, qty, unit_price: Number(product.price_stars), image_url: product.image_url || null };
         });
+        let giftBundle=null,builderExtraTotal=0,builderExtraLines=[];
+        const giftBundleId=typeof body.gift_bundle_id==="string"?body.gift_bundle_id.trim().slice(0,80):"";
+        if(giftBundleId){
+          const draft=await env.DB.prepare("SELECT bundle_json,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(giftBundleId,telegramId).first();
+          if(!draft||draft.status!=="draft")return json({error:"Черновик подарка не найден или уже оформлен. Откройте конструктор и сохраните набор ещё раз."},409,origin);
+          try{giftBundle=JSON.parse(draft.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать сохранённый набор."},409,origin);}
+          const selected=Array.isArray(giftBundle.items)?giftBundle.items:[];
+          for(const selectedItem of selected){
+            const matching=items.find(item=>item.id===String(selectedItem.id));
+            if(!matching||matching.qty<Number(selectedItem.qty))return json({error:"Состав корзины не совпадает с сохранённым набором. Вернитесь в конструктор и добавьте набор заново."},409,origin);
+          }
+          const seasonal=Array.isArray(giftBundle.seasonal_extras)?giftBundle.seasonal_extras:[];
+          const extras=[
+            ["Индивидуальная открытка",giftBundle.postcard?35:0],
+            ["Подарочный сертификат",giftBundle.certificate?25:0],
+            ["Наполнитель",giftBundle.filler?40:0],
+            ["Сезонные стикеры",seasonal.includes("sticker")?20:0],
+            ["Маленький сезонный рисунок",seasonal.includes("drawing")?70:0]
+          ];
+          builderExtraLines=extras.filter(x=>x[1]>0);
+          builderExtraTotal=builderExtraLines.reduce((sum,x)=>sum+x[1],0);
+          if(giftBundle.postcard&&String(giftBundle.postcard_text||"").trim().length<2)return json({error:"В открытке отсутствует поздравление."},400,origin);
+        }
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         let discount = 0, promoCode = null, discountPercent = 0;
@@ -2362,14 +2436,14 @@ export default {
           }
         }
         const goodsTotal = subtotal-discount;
-        const total = goodsTotal+delivery.total_delivery_stars;
+        const total = goodsTotal+builderExtraTotal+delivery.total_delivery_stars;
         if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
-        const title = items.map(item => item.title + " × " + item.qty).join("; ");
+        const title = items.map(item => item.title + " × " + item.qty).join("; ")+(builderExtraLines.length?" · Дополнения: "+builderExtraLines.map(x=>x[0]).join(", "):"");
         const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?)")
-          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
+          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
         const orderStatements = [
           orderInsert,
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
@@ -2377,6 +2451,7 @@ export default {
           env.DB.prepare("INSERT INTO order_delivery (order_id,telegram_id,address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars) VALUES (?,?,?,?,?,?,?,?,?)")
             .bind(orderId,telegramId,delivery.address,deliveryDetails,deliveryNote,delivery.distance_km,delivery.delivery_stars,priorityDelivery?1:0,delivery.priority_stars)
         ];
+        if(giftBundleId)orderStatements.push(env.DB.prepare("UPDATE gift_bundles SET order_id=?,status='ordered',updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(orderId,giftBundleId,telegramId));
         if(promoCode){
           const reservation=await env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)").bind(promoCode).run();
           if(!reservation.meta||reservation.meta.changes!==1)return json({error:"Промокод только что исчерпал лимит. Попробуйте другой."},409,origin);
@@ -2384,6 +2459,7 @@ export default {
         }
         try {
           await env.DB.batch(orderStatements);
+          if(giftBundleId)await env.DB.prepare("UPDATE order_chat_messages SET order_id=? WHERE order_id=? AND telegram_id=?").bind(orderId,giftBundleId,telegramId).run();
         } catch(orderError) {
           if(promoCode)await env.DB.batch([
             env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
@@ -2419,12 +2495,12 @@ export default {
           ]);
           await notifyOwner(env,"🎁 НОВЫЙ ОПЛАЧЕННЫЙ ЗАКАЗ С БАЛАНСА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nТовары: "+title+"\nАдрес: "+delivery.address+"\nДистанция: "+delivery.distance_km+" км\nДоставка: "+delivery.delivery_stars+" ⭐"+(priorityDelivery?"\nПриоритет: +100 ⭐":"")+"\nИтого: "+total+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐");
           try{await deliverOrderImages(env,orderId,telegramId);}catch(deliveryError){console.error("Balance-paid order delivery failed:",String(deliveryError).slice(0,300));}
-          return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+          return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,builder_extra_stars:builderExtraTotal,distance_km:delivery.distance_km},200,origin);
         }
         const invoiceAmount=total-balanceUsed;
         try{
           const invoiceUrl=await createPaymentIntent(env,{payload:orderId,telegram_id:telegramId,kind:"order",reference_id:orderId,amount_stars:invoiceAmount,title:"Заказ "+orderId.slice(0,8),description:title+". Доставка "+delivery.total_delivery_stars+" ⭐; списание с баланса "+balanceUsed+" ⭐."});
-          return json({ok:true,invoice_url:invoiceUrl,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,invoice_amount_stars:invoiceAmount,delivery_stars:delivery.total_delivery_stars,distance_km:delivery.distance_km},200,origin);
+          return json({ok:true,invoice_url:invoiceUrl,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,invoice_amount_stars:invoiceAmount,delivery_stars:delivery.total_delivery_stars,builder_extra_stars:builderExtraTotal,distance_km:delivery.distance_km},200,origin);
         }catch(error){
           await cancelPendingOrderAndRefund(env,orderId,telegramId);
           throw error;
