@@ -1655,9 +1655,18 @@ export default {
             const cancellation=await env.DB.prepare("SELECT id,status FROM order_cancellation_requests WHERE id=? AND order_id=? AND telegram_id=? AND status='requested'").bind(requestId,orderId,String(target.telegram_id)).first();
             if(!cancellation)return json({error:"Запрос на отмену уже обработан или не найден."},409,origin);
             if(decision==="approve"&&product){
-              if(body.refund_confirmed!==true)return json({error:"Сначала выполните возврат Telegram Stars в платёжной системе и подтвердите его здесь."},409,origin);
               const paidOrder=await env.DB.prepare("SELECT balance_applied_stars FROM orders WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)).first();
               if(!paidOrder)return json({error:"Заказ уже не находится в оплаченном статусе."},409,origin);
+              const payment=await env.DB.prepare("SELECT telegram_payment_charge_id,status FROM payments WHERE order_id=? ORDER BY id DESC LIMIT 1").bind(orderId).first();
+              if(payment&&payment.status!=="refunded"){
+                if(payment.telegram_payment_charge_id){
+                  try{await telegram(env,"refundStarPayment",{user_id:Number(target.telegram_id),telegram_payment_charge_id:payment.telegram_payment_charge_id});}
+                  catch(error){return json({error:"Telegram не подтвердил возврат Stars: "+String(error.message||error).slice(0,180)},502,origin);}
+                  await env.DB.prepare("UPDATE payments SET status='refunded' WHERE order_id=? AND telegram_payment_charge_id=?").bind(orderId,payment.telegram_payment_charge_id).run();
+                }else if(body.refund_confirmed!==true){
+                  return json({error:"У платежа нет Telegram charge ID. Выполните возврат вручную и подтвердите его здесь."},409,origin);
+                }
+              }
               const balanceRefund=Math.max(0,Number(paidOrder.balance_applied_stars||0));
               const refundResults=await env.DB.batch([
                 env.DB.prepare("UPDATE orders SET payment_status='cancelled',fulfillment_status='cancelled',balance_applied_stars=0 WHERE id=? AND telegram_id=? AND payment_status='paid'").bind(orderId,String(target.telegram_id)),
