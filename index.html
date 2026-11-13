@@ -975,6 +975,58 @@ body.dark-theme .bottom button{
 /* Keep non-active seasonal particle systems hidden. */
 body:not(.season-spring):not(.season-winter):not(.season-summer) .season-particles{display:none!important}
 body:not(.season-autumn) .leaf-layer{display:none!important}
+
+/* FINAL DECOR LAYER FIX — all seasonal and festive particles fall in front of UI */
+/* Remove stationary ornaments from the top bar and upper corners in every event. */
+body.event-newyear header::before,body.event-newyear header::after,
+body.dark-theme.event-newyear header::before,body.dark-theme.event-newyear header::after,
+body.event-halloween header::before,body.event-halloween header::after,
+body.dark-theme.event-halloween header::before,body.dark-theme.event-halloween header::after,
+body.event-easter header::before,body.event-easter header::after,
+body.dark-theme.event-easter header::before,body.dark-theme.event-easter header::after,
+body.event-newyear .brand::before,body.event-newyear .brand::after,
+body.dark-theme.event-newyear .brand::before,body.dark-theme.event-newyear .brand::after,
+body.event-halloween .brand::before,body.event-halloween .brand::after,
+body.dark-theme.event-halloween .brand::before,body.dark-theme.event-halloween .brand::after,
+body.event-easter .brand::before,body.event-easter .brand::after,
+body.dark-theme.event-easter .brand::before,body.dark-theme.event-easter .brand::after,
+body.event-newyear::before,body.event-newyear::after,
+body.dark-theme.event-newyear::before,body.dark-theme.event-newyear::after,
+body.event-halloween::before,body.event-halloween::after,
+body.dark-theme.event-halloween::before,body.dark-theme.event-halloween::after,
+body.event-easter::before,body.event-easter::after,
+body.dark-theme.event-easter::before,body.dark-theme.event-easter::after{
+ content:none!important;display:none!important;
+}
+/* Every active seasonal layer is visually above cards, controls and navigation.
+   pointer-events:none means taps still reach the buttons underneath. */
+body .season-particles,body.dark-theme .season-particles,
+body .leaf-layer,body.dark-theme .leaf-layer,
+body #seasonDecorations,body.dark-theme #seasonDecorations{
+ position:fixed!important;inset:0!important;z-index:9000!important;
+ overflow:hidden!important;pointer-events:none!important;contain:layout!important;
+}
+body .season-particles span,body.dark-theme .season-particles span,
+body .leaf-layer .leaf,body.dark-theme .leaf-layer .leaf,
+body #seasonDecorations span,body.dark-theme #seasonDecorations span{
+ pointer-events:none!important;
+}
+/* Preserve each layer's own falling animation and ensure decorative stars/flowers fall too. */
+body #seasonDecorations .festive-fall,
+body #seasonDecorations .festive-twinkle,
+body #seasonDecorations .festive-bauble,
+body #seasonDecorations .festive-bat,
+body #seasonDecorations .festive-egg{
+ top:-14vh!important;bottom:auto!important;
+ animation:festiveFall 16s linear infinite!important;
+}
+body #seasonDecorations .festive-firework{
+ top:auto!important;bottom:18%!important;
+ animation:festiveBurst 3.8s ease-out infinite!important;
+}
+/* Keep the settings dialog above decorative particles. */
+.season-event-overlay{z-index:10050!important}
+
 </style>
 </head>
 <body>
