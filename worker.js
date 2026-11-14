@@ -3005,7 +3005,7 @@ export default {
         const assistantType = conversation.assistant_type === "vip" ? "vip" : "standard";
         if (assistantType === "vip" && !vip) return json({ error: "Для продолжения VIP-диалога нужна действующая VIP-подписка." }, 403, origin);
 
-        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй(?:\s+сертификат)?|активировать(?:\s+сертификат)?|код)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
+        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй\s+сертификат|активировать\s+сертификат|код\s+сертификата)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
         if(certificateMatch && await tableExists(env,"gift_certificates")){
           const code=certificateMatch[1].toUpperCase();
           const redemption=await env.DB.batch([
