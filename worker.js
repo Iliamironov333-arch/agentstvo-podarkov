@@ -2856,13 +2856,24 @@ export default {
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           const result=await createCraftAnswer(env,messages);
+          const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+          const tier=vip?"vip":"standard",chatLimit=vip?100:50;
           let draftId=String(b.conversation_id||"");
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
-          const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+          let chat=await env.DB.prepare("SELECT id,assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
+          if(!chat){
+            const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='workshop'").bind(String(telegramId)).first();
+            if(Number(count?.n||0)>=(vip?5:3))return json({error:"Достигнут лимит чатов ИИ-мастерской. Удалите ненужный незавершённый диалог, чтобы создать новый."},409,origin);
+            await env.DB.prepare("INSERT INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id) VALUES(?,?,'workshop',?,'Новый диалог',?)").bind(draftId,String(telegramId),tier,draftId).run();
+            chat={id:draftId,assistant_tier:tier};
+          }
+          const storedCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+          if(Number(storedCount?.n||0)>=chatLimit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
+                    const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
           const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
           const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
+          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-chatLimit).map(m=>({role:m.role,content:String(m.content||"").slice(0,1500)})),owner_messages:[],estimate_note:""};
           let estimatedStars=Number(existing?.estimated_stars||0);
           if(result.ready){
             const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
@@ -2883,6 +2894,10 @@ export default {
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
             }
           }
+          const latestUser=messages[messages.length-1]?.content||"";
+          await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),String(latestUser).slice(0,7000)).run();
+          await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'assistant',?)").bind(draftId,String(telegramId),String(result.reply||"").slice(0,7000)).run();
+          await env.DB.prepare("UPDATE assistant_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(subject.slice(0,80),draftId,String(telegramId)).run();
           return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
         }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
       }
