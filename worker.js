@@ -435,8 +435,8 @@ async function createSupportAnswer(env, history, isVip) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
-      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 500 })
+    body: JSON.stringify({ model: isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini"), instructions,
+      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 500 })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -2915,8 +2915,8 @@ export default {
           .bind(telegramId).first();
         const chatLimit = vip ? 5 : 3;
         const conversationsResult = await env.DB.prepare(
-          "SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?"
-        ).bind(telegramId, chatLimit).all();
+          "SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT ?"
+        ).bind(telegramId, vip ? 1 : 0, chatLimit).all();
         const conversations = conversationsResult.results || [];
         const requestedId = (new URL(request.url).searchParams.get("conversation_id") || "").trim();
         const activeConversation = requestedId
@@ -2951,12 +2951,13 @@ export default {
             "SELECT id FROM support_conversations WHERE telegram_id=? ORDER BY updated_at ASC"
           ).bind(telegramId).all();
           const existing = conversationsResult.results || [];
-          if (existing.length >= chatLimit) {
-            const oldestId = existing[0].id;
-            await env.DB.batch([
-              env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(telegramId, oldestId),
-              env.DB.prepare("DELETE FROM support_conversations WHERE telegram_id=? AND id=?").bind(telegramId, oldestId)
+          const removeCount = Math.max(0, existing.length - chatLimit + 1);
+          if (removeCount > 0) {
+            const removals = existing.slice(0, removeCount).flatMap(item => [
+              env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(telegramId, item.id),
+              env.DB.prepare("DELETE FROM support_conversations WHERE telegram_id=? AND id=?").bind(telegramId, item.id)
             ]);
+            await env.DB.batch(removals);
           }
           const conversationId = crypto.randomUUID();
           await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
