@@ -3288,7 +3288,7 @@ async function loadAdminOrders() {
  const filter=document.getElementById('adminOrderStatus')?.value||'all';
  status.textContent='Загружаем заказы…';
  try{
-  const params=new URLSearchParams({q,type,status:filter,limit:'100'});
+  const params=new URLSearchParams({q,type:'all',status:'all',limit:'100'});
   const [data,aiData]=await Promise.all([
    apiFetch('/api/admin/orders?'+params.toString()),
    apiFetch('/api/admin/ai-orders').catch(()=>null)
@@ -3297,9 +3297,12 @@ async function loadAdminOrders() {
   if(Array.isArray(aiData?.orders))adminAiOrdersCache=aiData.orders;
   const linkedAiOrderIds=new Set(adminAiOrdersCache.filter(o=>o.record_type==='ai_draft'&&o.order_id).map(o=>String(o.order_id)));
   const bundleOrderIds=new Set(adminAiOrdersCache.filter(o=>o.record_type==='gift_bundle'&&o.order_id).map(o=>String(o.order_id)));
+  const questionnaireIds=new Set(orders.filter(o=>o.order_type==='custom').map(o=>String(o.id)));
   const visibleOrders=orders.filter(order=>{
    if(linkedAiOrderIds.has(String(order.id)))return false;
-   if(order.order_type==='product'&&bundleOrderIds.has(String(order.id)))return false;
+   if(order.order_type==='product'&&(bundleOrderIds.has(String(order.id))||questionnaireIds.has(String(order.id))))return false;
+   if(type!=='all'&&order.order_type!==(type==='custom'?'custom':'product'))return false;
+   if(filter!=='all'&&String(order.admin_status||'')!==filter)return false;
    return true;
   });
   const labels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
