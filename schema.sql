@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS gift_bundles (
   id TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, order_id TEXT,
   title TEXT NOT NULL DEFAULT 'Подарочный набор', bundle_json TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','submitted','ordered','cancelled')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, owner_confirmed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_gift_bundles_user ON gift_bundles(telegram_id,created_at DESC);
 CREATE TABLE IF NOT EXISTS order_chat_messages (
