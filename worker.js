@@ -904,9 +904,37 @@ export default {
 
       if (path === "/api/announcements" && method === "GET") {
         const rows = await env.DB.prepare(
-          "SELECT id,title,body,link_url,starts_at,ends_at FROM announcements WHERE status='published' AND (starts_at IS NULL OR starts_at='' OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR ends_at='' OR datetime(ends_at)>=datetime('now')) AND (audience_type='all' OR (audience_type='selected' AND EXISTS (SELECT 1 FROM json_each(announcements.audience_ids) WHERE CAST(value AS TEXT)=?))) ORDER BY created_at DESC LIMIT 10"
+          "SELECT id,title,body,link_url,starts_at,ends_at,emoji,background,image_url,button_text,placement,sort_order,slide_type,poll_options_json,auto_advance_enabled,auto_advance_seconds,manual_swipe_enabled FROM announcements WHERE status='published' AND (starts_at IS NULL OR starts_at='' OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR ends_at='' OR datetime(ends_at)>=datetime('now')) AND (audience_type='all' OR (audience_type='selected' AND EXISTS (SELECT 1 FROM json_each(announcements.audience_ids) WHERE CAST(value AS TEXT)=?))) ORDER BY sort_order ASC,id ASC LIMIT 50"
         ).bind(telegramId).all();
-        return json({ ok: true, announcements: rows.results || [] }, 200, origin);
+        const announcements=rows.results||[];
+        for(const item of announcements){
+          item.my_vote=null;item.vote_results=[];
+          if(item.slide_type==="poll"){
+            try{
+              const options=JSON.parse(item.poll_options_json||"[]");
+              const [counts,mine]=await Promise.all([
+                env.DB.prepare("SELECT option_index,COUNT(*) AS votes FROM announcement_votes WHERE announcement_id=? GROUP BY option_index").bind(item.id).all(),
+                env.DB.prepare("SELECT option_index FROM announcement_votes WHERE announcement_id=? AND telegram_id=?").bind(item.id,telegramId).first()
+              ]);
+              const map=new Map((counts.results||[]).map(row=>[Number(row.option_index),Number(row.votes||0)]));
+              item.vote_results=options.map((_,i)=>map.get(i)||0);item.my_vote=mine?Number(mine.option_index):null;
+            }catch(error){item.vote_results=[];}
+          }
+        }
+        return json({ ok: true, announcements }, 200, origin);
+      }
+      if (path === "/api/announcement-vote" && method === "POST") {
+        const body=await readJson(request),announcementId=Number(body.announcement_id),optionIndex=Number(body.option_index);
+        if(!Number.isSafeInteger(announcementId)||announcementId<1||!Number.isSafeInteger(optionIndex)||optionIndex<0)return json({error:"Некорректный вариант ответа."},400,origin);
+        const item=await env.DB.prepare("SELECT id,poll_options_json FROM announcements WHERE id=? AND slide_type='poll' AND status='published' AND (starts_at IS NULL OR starts_at='' OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR ends_at='' OR datetime(ends_at)>=datetime('now')) AND (audience_type='all' OR (audience_type='selected' AND EXISTS (SELECT 1 FROM json_each(announcements.audience_ids) WHERE CAST(value AS TEXT)=?)))").bind(announcementId,telegramId).first();
+        if(!item)return json({error:"Опрос сейчас недоступен."},404,origin);
+        let options=[];try{options=JSON.parse(item.poll_options_json||"[]")}catch{}
+        if(!Array.isArray(options)||optionIndex>=options.length)return json({error:"Такого варианта ответа нет."},400,origin);
+        const saved=await env.DB.prepare("INSERT OR IGNORE INTO announcement_votes (announcement_id,telegram_id,option_index) VALUES (?,?,?)").bind(announcementId,telegramId,optionIndex).run();
+        if(!saved.meta||saved.meta.changes!==1)return json({error:"Ты уже голосовал в этом опросе."},409,origin);
+        const counts=await env.DB.prepare("SELECT option_index,COUNT(*) AS votes FROM announcement_votes WHERE announcement_id=? GROUP BY option_index").bind(announcementId).all();
+        const map=new Map((counts.results||[]).map(row=>[Number(row.option_index),Number(row.votes||0)]));
+        return json({ok:true,vote_results:options.map((_,i)=>map.get(i)||0),my_vote:optionIndex},200,origin);
       }
 
       // Administrative access is checked on the server for every request.
@@ -2042,7 +2070,7 @@ export default {
           return json({ok:true,requeued:reset.meta.changes},200,origin);
         }
         if (path === "/api/admin/announcements" && method === "GET") {
-          const rows = await env.DB.prepare("SELECT id,title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_at,updated_at FROM announcements ORDER BY id DESC LIMIT 100").all();
+          const rows = await env.DB.prepare("SELECT * FROM announcements ORDER BY sort_order ASC,id DESC LIMIT 100").all();
           return json({ ok: true, announcements: rows.results || [] }, 200, origin);
         }
         if (path === "/api/admin/announcement-preview" && method === "POST") {
@@ -2060,6 +2088,18 @@ export default {
           const title = typeof body.title === "string" ? body.title.trim().slice(0,100) : "";
           const content = typeof body.body === "string" ? body.body.trim().slice(0,3000) : "";
           const linkUrl = typeof body.link_url === "string" ? body.link_url.trim().slice(0,500) : "";
+          const emoji = typeof body.emoji === "string" ? body.emoji.trim().slice(0,16) || "📢" : "📢";
+          const backgrounds = ["gold","cream","dark","rose","green","blue","purple"];
+          const background = backgrounds.includes(body.background) ? body.background : "gold";
+          const imageUrl = typeof body.image_url === "string" ? body.image_url.trim().slice(0,1000) : "";
+          const buttonText = typeof body.button_text === "string" ? body.button_text.trim().slice(0,40) : "";
+          const placement = ["home","shop","both"].includes(body.placement) ? body.placement : "home";
+          const slideType = body.slide_type === "poll" ? "poll" : "ad";
+          const sortOrder = Number.isSafeInteger(Number(body.sort_order)) ? Math.max(-10000,Math.min(10000,Number(body.sort_order))) : 0;
+          const autoAdvance = body.auto_advance_enabled === true || body.auto_advance_enabled === 1 ? 1 : 0;
+          const autoSeconds = Math.max(2,Math.min(60,Number(body.auto_advance_seconds)||5));
+          const manualSwipe = body.manual_swipe_enabled === false || body.manual_swipe_enabled === 0 ? 0 : 1;
+          const pollOptions = Array.isArray(body.poll_options) ? [...new Set(body.poll_options.map(x=>String(x||"").trim().slice(0,100)).filter(Boolean))].slice(0,10) : [];
           const startsAt = typeof body.starts_at === "string" && body.starts_at.trim() ? body.starts_at.trim().slice(0,40) : null;
           const endsAt = typeof body.ends_at === "string" && body.ends_at.trim() ? body.ends_at.trim().slice(0,40) : null;
           const audienceType = body.audience_type === "selected" ? "selected" : body.audience_type === "all" ? "all" : "";
@@ -2067,18 +2107,20 @@ export default {
           const status = ["draft","published","archived"].includes(body.status) ? body.status : "draft";
           if (!title || title.length < 2 || !content) return json({ error: "Заполните заголовок и текст объявления." }, 400, origin);
           if (!audienceType || (audienceType === "selected" && !audienceIds.length)) return json({ error: "Для выбранной аудитории укажите хотя бы один Telegram ID." }, 400, origin);
+          if (slideType === "poll" && pollOptions.length < 2) return json({ error: "Для опроса добавьте минимум два варианта ответа." }, 400, origin);
           if (linkUrl) { try { const parsed=new URL(linkUrl); if (!["https:","http:"].includes(parsed.protocol)) throw new Error("protocol"); } catch { return json({ error: "Ссылка должна быть корректным HTTP(S)-адресом." }, 400, origin); } }
+          if (imageUrl) { try { const parsed=new URL(imageUrl); if (parsed.protocol !== "https:") throw new Error("protocol"); } catch { return json({ error: "Изображение должно быть HTTPS-ссылкой." }, 400, origin); } }
           if (startsAt && Number.isNaN(Date.parse(startsAt))) return json({ error: "Некорректная дата начала." }, 400, origin);
           if (endsAt && Number.isNaN(Date.parse(endsAt))) return json({ error: "Некорректная дата окончания." }, 400, origin);
           if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return json({ error: "Дата окончания должна быть позже даты начала." }, 400, origin);
           if (id > 0) {
             const existing = await env.DB.prepare("SELECT id FROM announcements WHERE id=?").bind(id).first();
             if (!existing) return json({ error: "Объявление не найдено." }, 404, origin);
-            await env.DB.prepare("UPDATE announcements SET title=?,body=?,link_url=?,starts_at=?,ends_at=?,audience_type=?,audience_ids=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
-              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,id).run();
+            await env.DB.prepare("UPDATE announcements SET title=?,body=?,link_url=?,starts_at=?,ends_at=?,audience_type=?,audience_ids=?,status=?,emoji=?,background=?,image_url=?,button_text=?,placement=?,sort_order=?,slide_type=?,poll_options_json=?,auto_advance_enabled=?,auto_advance_seconds=?,manual_swipe_enabled=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,emoji,background,imageUrl||null,buttonText||null,placement,sortOrder,slideType,JSON.stringify(pollOptions),autoAdvance,autoSeconds,manualSwipe,id).run();
           } else {
-            await env.DB.prepare("INSERT INTO announcements (title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_by) VALUES (?,?,?,?,?,?,?,?,?)")
-              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,telegramId).run();
+            await env.DB.prepare("INSERT INTO announcements (title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_by,emoji,background,image_url,button_text,placement,sort_order,slide_type,poll_options_json,auto_advance_enabled,auto_advance_seconds,manual_swipe_enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+              .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,telegramId,emoji,background,imageUrl||null,buttonText||null,placement,sortOrder,slideType,JSON.stringify(pollOptions),autoAdvance,autoSeconds,manualSwipe).run();
           }
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
@@ -2116,6 +2158,7 @@ export default {
             user_blocks:await tableExists(env,"user_blocks"),support_conversation_controls:await tableExists(env,"support_conversation_controls"),
             support_internal_notes:await tableExists(env,"support_internal_notes"),announcements:await tableExists(env,"announcements"),
             campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients"),
+            announcement_votes:await tableExists(env,"announcement_votes"),
             promo_codes:await tableExists(env,"promo_codes"),promo_redemptions:await tableExists(env,"promo_redemptions"),
             admin_staff:await tableExists(env,"admin_staff")
           };
@@ -2131,7 +2174,8 @@ export default {
             "0012_system_monitoring":tableChecks.system_error_log,
             "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars"),
             "0014_promo_code_scopes":await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids"),
-            "0015_admin_staff":tableChecks.admin_staff&&await columnExists(env,"admin_staff","permissions_json")&&await columnExists(env,"admin_staff","status")
+            "0015_admin_staff":tableChecks.admin_staff&&await columnExists(env,"admin_staff","permissions_json")&&await columnExists(env,"admin_staff","status"),
+            "0022_marketing_carousel_polls":tableChecks.announcement_votes&&await columnExists(env,"announcements","emoji")&&await columnExists(env,"announcements","manual_swipe_enabled")
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
