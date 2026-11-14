@@ -3314,9 +3314,12 @@ async function loadAdminOrders() {
    const paymentLabel=order.payment_status==='paid'?'Оплачен':order.payment_status==='pending'?'Ожидает оплаты':order.payment_status==='cancelled'||order.payment_status==='refunded'?'Отменён':(labels[order.admin_status]||order.admin_status||'Статус неизвестен');
    meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+paymentLabel+' · '+(order.created_at||'')+(Number(order.priority_delivery)===1?' · ⚡ ПРИОРИТЕТ':'');
    info.append(name,meta);
+   const actions=document.createElement('div');actions.className='row-actions';
    const detail=document.createElement('button');detail.type='button';detail.className='secondary';detail.textContent='Подробнее';
    detail.addEventListener('click',()=>openAdminOrder(order.id,order.order_type));
-   row.append(info,detail);
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';
+   remove.addEventListener('click',async()=>{if(!confirm('Скрыть этот заказ из истории админ-панели? Платёжные и финансовые записи сохранятся.'))return;remove.disabled=true;try{await apiFetch('/api/admin/order-hide',{method:'POST',body:JSON.stringify({order_type:order.order_type,order_id:order.id})});toast('Заказ скрыт из истории админ-панели.');await loadAdminOrders();}catch(e){toast(e.message||'Не удалось скрыть заказ.');remove.disabled=false;}});
+   actions.append(detail,remove);row.append(info,actions);
    appendAdminOrderCard(order.order_type==='custom'?'questionnaire':'store',order,row);
   });
   finishAdminOrderCategory('questionnaire');finishAdminOrderCategory('store');
@@ -4172,6 +4175,11 @@ async function sendAiGroupInvoice(){
  if(!confirm('Отправить в группу счёт на '+amount_stars+' Stars?'))return;
  try{await apiFetch('/api/admin/ai-group-invoice',{method:'POST',body:JSON.stringify({amount_stars,title,description})});if(status)status.textContent='Счёт отправлен в группу. Оплата подтвердится автоматически после успешного платежа Telegram.';toast('Счёт отправлен в группу!');document.getElementById('aiInvoiceAmount').value='';}catch(e){if(status)status.textContent=e.message||'Не удалось отправить счёт.';toast(e.message||'Не удалось отправить счёт.');}
 }
+async function addAiOrderDeleteButton(card,o){
+ const button=aiAdminNode('button','Удалить','secondary');
+ button.addEventListener('click',async()=>{if(!confirm('Скрыть этот заказ из истории админ-панели? Платёжные и финансовые записи сохранятся.'))return;button.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'hide',id:o.record_type==='gift_bundle'?(o.order_id||o.id):o.id,record_type:o.record_type})});toast('Заказ скрыт из истории админ-панели.');await loadAiOrders();await loadAdminOrders();}catch(e){toast(e.message||'Не удалось скрыть заказ.');button.disabled=false;}});
+ card.append(button);
+}
 async function loadAiOrders(){
  const status=document.getElementById('aiOrdersStatus');if(!status)return;
  initAdminOrderCategories();
@@ -4226,7 +4234,7 @@ async function loadAiOrders(){
      disclosure.addEventListener('toggle',async()=>{if(!disclosure.open||disclosure.dataset.loaded==='1')return;disclosure.dataset.loaded='1';try{const d=await apiFetch('/api/admin/order-chat?order_id='+encodeURIComponent(o.order_id||o.id));(d.messages||[]).forEach(m=>{const row=aiAdminNode('div',undefined,'admin-detail-line');row.append(aiAdminNode('strong',m.sender_type==='buyer'?'Покупатель':m.sender_type==='ai'?'ИИ-помощник':m.sender_type==='owner'?'Владелец':'Система'));row.append(aiAdminNode('p',m.content||''));row.append(aiAdminNode('small',formatDate(m.created_at),'muted'));chatLog.append(row);});if(!d.messages?.length)chatLog.append(aiAdminNode('p','Пока нет сообщений. Переписка, начатая до оформления набора, появится здесь.','muted'));}catch(e){chatLog.append(aiAdminNode('p',e.message||'Не удалось загрузить переписку.','muted'));}});
      disclosure.append(chatLog,reply,send);card.append(disclosure);
     }
-    appendAdminOrderCard('bundle',o,card);return;
+    await addAiOrderDeleteButton(card,o);appendAdminOrderCard('bundle',o,card);return;
    }
    const details=(()=>{try{return JSON.parse(o.details_json||'{}')}catch{return {}}})();
    const source=details.source||'';
@@ -4255,7 +4263,7 @@ async function loadAiOrders(){
     card.append(aiAdminNode('p',(o.payment_status==='paid'?'Оплачен':'Счёт отправлен')+' · заказ Mini App: '+(o.order_id||'—')+(o.paid_at?' · оплата: '+formatDate(o.paid_at):''),'muted'));
     const saveChanges=aiAdminNode('button','Сохранить изменения пожеланий','secondary');saveChanges.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update_after_approval',id:o.id,subject:subject.value,summary:summary.value})});toast('Пожелания к заказу обновлены.');loadAiOrders();}catch(e){toast(e.message||'Не удалось изменить заказ.');}});card.append(saveChanges);
    }else if(o.order_id){card.append(aiAdminNode('p','Связанный заказ Mini App: '+o.order_id,'muted'));}
-   appendAdminOrderCard(category,o,card);
+   await addAiOrderDeleteButton(card,o);appendAdminOrderCard(category,o,card);
   });
   ['workshop','bundle','assistant'].forEach(finishAdminOrderCategory);
   if(!orders.length)status.textContent='ИИ-заказов пока нет.';

@@ -949,8 +949,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-orders" && method==="GET") {
     if(!has("ai_orders_view"))return aiJson({error:"Недостаточно прав."},403);
     const [draftRows,bundleRows]=await Promise.all([
-      env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at,'ai_draft' AS record_type FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('collecting','review','approved','paid','cancelled') ORDER BY d.created_at DESC LIMIT 100").all(),
-      env.DB.prepare("SELECT COALESCE(o.id,b.order_id,b.id) AS id,o.id AS order_id,b.telegram_id,u.first_name,u.username,COALESCE(o.product_title,b.title,'Подарочный набор') AS subject,COALESCE(o.total_stars,0) AS approved_stars,COALESCE(o.total_stars,0) AS estimated_stars,o.payment_status,o.paid_at,COALESCE(o.created_at,b.updated_at,b.created_at) AS created_at,CASE WHEN b.status='cancelled' OR o.payment_status IN ('cancelled','refunded') THEN 'cancelled' WHEN o.payment_status='paid' THEN 'paid' ELSE 'ordered' END AS status,b.bundle_json AS details_json,'gift_bundle' AS record_type FROM gift_bundles b LEFT JOIN orders o ON o.id=b.order_id AND o.telegram_id=b.telegram_id LEFT JOIN users u ON u.telegram_id=b.telegram_id WHERE b.status IN ('ordered','cancelled') ORDER BY COALESCE(o.created_at,b.updated_at,b.created_at) DESC LIMIT 100").all()
+      env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at,'ai_draft' AS record_type FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('collecting','review','approved','paid','cancelled') AND NOT EXISTS (SELECT 1 FROM admin_hidden_orders h WHERE h.order_type='ai_draft' AND h.order_id=d.id) ORDER BY d.created_at DESC LIMIT 100").all(),
+      env.DB.prepare("SELECT COALESCE(o.id,b.order_id,b.id) AS id,o.id AS order_id,b.telegram_id,u.first_name,u.username,COALESCE(o.product_title,b.title,'Подарочный набор') AS subject,COALESCE(o.total_stars,0) AS approved_stars,COALESCE(o.total_stars,0) AS estimated_stars,o.payment_status,o.paid_at,COALESCE(o.created_at,b.updated_at,b.created_at) AS created_at,CASE WHEN b.status='cancelled' OR o.payment_status IN ('cancelled','refunded') THEN 'cancelled' WHEN o.payment_status='paid' THEN 'paid' ELSE 'ordered' END AS status,b.bundle_json AS details_json,'gift_bundle' AS record_type FROM gift_bundles b LEFT JOIN orders o ON o.id=b.order_id AND o.telegram_id=b.telegram_id LEFT JOIN users u ON u.telegram_id=b.telegram_id WHERE b.status IN ('ordered','cancelled') AND NOT EXISTS (SELECT 1 FROM admin_hidden_orders h WHERE h.order_type='gift_bundle' AND h.order_id=COALESCE(o.id,b.order_id,b.id)) ORDER BY COALESCE(o.created_at,b.updated_at,b.created_at) DESC LIMIT 100").all()
     ]);
     const orders=[...(draftRows.results||[]),...(bundleRows.results||[])].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,150);
     return aiJson({ok:true,orders});
@@ -958,6 +958,17 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-orders" && method==="POST") {
     if(!has("ai_orders_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
+    if(body.action==="hide") {
+      const recordType=String(body.record_type||"");
+      const id=String(body.id||"").trim().slice(0,100);
+      if(!id||!["ai_draft","gift_bundle"].includes(recordType))return aiJson({error:"Укажите тип и номер заказа."},400);
+      const table=recordType==="ai_draft"?"ai_order_drafts":"orders";
+      const found=await env.DB.prepare("SELECT id FROM "+table+" WHERE id=?").bind(id).first();
+      if(!found)return aiJson({error:"Заказ не найден."},404);
+      await env.DB.prepare("INSERT OR IGNORE INTO admin_hidden_orders(order_type,order_id,hidden_by) VALUES(?,?,?)").bind(recordType,id,telegramId).run();
+      await aiLog(env,{actor:telegramId,type:"ai_order_hidden_from_admin",details:{id,record_type:recordType}});
+      return aiJson({ok:true,hidden:true});
+    }
     if(body.action==="reply_workshop") {
       const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,3000);
       if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
