@@ -415,7 +415,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
 
 async function createSupportAnswer(env, history, isVip) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
-  const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\\?/g) || []).length : 0), 0);
+  const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
   const forceFinal = questionsUsed >= 16;
   const instructions = [
     await getGlobalAiToneInstruction(env),
@@ -432,16 +432,32 @@ async function createSupportAnswer(env, history, isVip) {
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
-      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 500 })
+    body: JSON.stringify({ model, instructions,
+      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 900 })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    console.error("OpenAI support request failed:", response.status, JSON.stringify(data).slice(0, 1000));
-    throw new Error("Сервис помощника временно недоступен. Попробуй позже.");
+    const apiError = data?.error || {};
+    const diagnostic = {
+      stage: "openai_request",
+      model,
+      http_status: response.status,
+      error_code: apiError.code || null,
+      error_type: apiError.type || null,
+      error_param: apiError.param || null,
+      error_message: String(apiError.message || "OpenAI returned a non-2xx response").slice(0, 350),
+      request_id: response.headers.get("x-request-id") || null,
+      history_messages: history.length,
+      question_count: questionsUsed
+    };
+    console.error("OpenAI support request failed:", JSON.stringify(diagnostic));
+    const failure = new Error("Сервис помощника временно недоступен. Попробуй позже.");
+    failure.diagnostic = diagnostic;
+    throw failure;
   }
   let answer = typeof data.output_text === "string" ? data.output_text : "";
   if (!answer && Array.isArray(data.output)) {
@@ -449,7 +465,22 @@ async function createSupportAnswer(env, history, isVip) {
       .filter(part => part.type === "output_text" && typeof part.text === "string")
       .map(part => part.text).join("\n");
   }
-  if (!answer.trim()) throw new Error("Помощник не вернул ответ. Попробуй ещё раз.");
+  if (!answer.trim()) {
+    const diagnostic = {
+      stage: "openai_empty_output",
+      model,
+      response_status: data?.status || null,
+      incomplete_reason: data?.incomplete_details?.reason || null,
+      output_items: Array.isArray(data?.output) ? data.output.length : 0,
+      history_messages: history.length,
+      question_count: questionsUsed,
+      request_id: response.headers.get("x-request-id") || data?.id || null
+    };
+    console.error("Support assistant returned empty output:", JSON.stringify(diagnostic));
+    const failure = new Error("Помощник не смог подготовить ответ. Попробуй ещё раз.");
+    failure.diagnostic = diagnostic;
+    throw failure;
+  }
   return answer.trim().slice(0, 4000);
 }
 
@@ -2940,6 +2971,7 @@ export default {
           reply = await createSupportAnswer(env, history, !!vip);
         } catch (error) {
           console.error("Support assistant failed:", String(error));
+          await writeSystemError(env, error?.diagnostic || error, "/api/support/chat");
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
         }
         await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'ai')")
