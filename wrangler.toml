@@ -9,3 +9,16 @@ database_id = "077f0476-4ec0-4ddb-8236-be3575182b0a"
 
 [triggers]
 crons = ["*/1 * * * *"]
+
+# Explicit isolated staging target. Always deploy this environment with --env staging.
+[env.staging]
+name = "agentstvo-podarkov-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "agentstvo-podarkov-staging"
+database_id = "bb26ba92-bc62-43dc-ab4d-57cb1d399bbc"
+
+# Staging must never inherit the production every-minute scheduled job.
+[env.staging.triggers]
+crons = []
