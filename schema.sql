@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS campaigns (id INTEGER PRIMARY KEY AUTOINCREMENT, titl
 CREATE TABLE IF NOT EXISTS custom_orders (id TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, username TEXT, first_name TEXT, subject TEXT NOT NULL, answers_json TEXT NOT NULL, total_stars INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 
 CREATE TABLE IF NOT EXISTS gift_certificates (
-  code TEXT PRIMARY KEY CHECK(length(code) BETWEEN 4 AND 32),
+  code TEXT PRIMARY KEY CHECK(length(code) BETWEEN 8 AND 32),
   points INTEGER NOT NULL CHECK(points BETWEEN 1 AND 1000000),
   is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
   redeemed_by TEXT,
@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS gift_certificates (
   FOREIGN KEY (redeemed_by) REFERENCES users(telegram_id)
 );
 CREATE INDEX IF NOT EXISTS idx_gift_certificates_status ON gift_certificates(is_active, redeemed_at, created_at DESC);
+CREATE TABLE IF NOT EXISTS gift_certificate_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id TEXT NOT NULL,
+  attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gift_certificate_attempts_user ON gift_certificate_attempts(telegram_id, attempted_at DESC);
 
 CREATE TABLE IF NOT EXISTS favorites (     telegram_id TEXT NOT NULL,     product_id TEXT NOT NULL,     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     PRIMARY KEY (telegram_id, product_id),     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id),     FOREIGN KEY (product_id) REFERENCES products(id) );
 
