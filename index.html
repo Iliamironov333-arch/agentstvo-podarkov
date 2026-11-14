@@ -1492,7 +1492,7 @@ html body>#seasonDecorations .festive-firework{
    <div class="sectionhead"><h3>🎟️ Подарочные сертификаты</h3><button class="secondary" type="button" onclick="loadAdminGiftCertificates()">↻ Обновить</button></div>
    <p class="muted">Создавай одноразовые коды. Покупатель вводит код в чате помощника, а сервер начисляет указанные баллы на его внутренний баланс.</p>
    <div class="admin-user-detail">
-    <label>Код сертификата<input id="adminGiftCertificateCode" maxlength="32" placeholder="Например, GIFT2026"></label>
+    <label>Код сертификата (8–32 символа)<input id="adminGiftCertificateCode" minlength="8" maxlength="32" placeholder="Например, GIFT2026"></label>
     <label>Количество баллов<input id="adminGiftCertificatePoints" type="number" min="1" max="1000000" step="1" placeholder="Например, 250"></label>
     <button class="primary" type="button" onclick="saveAdminGiftCertificate()">＋ Создать сертификат</button>
    </div>
