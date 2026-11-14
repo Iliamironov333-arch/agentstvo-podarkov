@@ -3005,14 +3005,14 @@ export default {
         const assistantType = conversation.assistant_type === "vip" ? "vip" : "standard";
         if (assistantType === "vip" && !vip) return json({ error: "Для продолжения VIP-диалога нужна действующая VIP-подписка." }, 403, origin);
 
-        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй|активировать|код)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
+        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй(?:\s+сертификат)?|активировать(?:\s+сертификат)?|код)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
         if(certificateMatch && await tableExists(env,"gift_certificates")){
           const code=certificateMatch[1].toUpperCase();
           const redemption=await env.DB.batch([
             env.DB.prepare("UPDATE gift_certificates SET redeemed_by=?,redeemed_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND redeemed_by IS NULL AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(telegramId,code),
             env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,points,'gift_certificate',?,? FROM gift_certificates WHERE code=? AND redeemed_by=? AND redeemed_at>=datetime('now','-1 minute') AND changes()=1")
               .bind(telegramId,"Активация подарочного сертификата "+code,"gift-certificate:"+code,code,telegramId),
-            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+(SELECT points FROM gift_certificates WHERE code=? AND redeemed_by=?),updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS(SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+(SELECT points FROM gift_certificates WHERE code=? AND redeemed_by=?),updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1 AND EXISTS(SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
               .bind(code,telegramId,telegramId,"gift-certificate:"+code)
           ]);
           const certificate=await env.DB.prepare("SELECT points,redeemed_by,is_active,expires_at FROM gift_certificates WHERE code=?").bind(code).first();
