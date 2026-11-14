@@ -2192,20 +2192,6 @@ async function openAdminUser(telegramId) {
    });
    staffActions.append(staffButton);box.append(staffActions);
   }
-  const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
-  const audit=document.createElement('div');audit.className='admin-block-controls';
-  const auditTitle=document.createElement('h4');auditTitle.textContent='История административных действий';audit.append(auditTitle);
-  if(!adminHistory.length){
-   const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
-  }else{
-   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки',staff_role_changed:'Изменение должности',staff_permissions_changed:'Изменение прав доступа'};
-   adminHistory.forEach(item=>{
-    const line=document.createElement('p');line.className='notice';
-    line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
-    audit.append(line);
-   });
-  }
-  box.append(audit);
   const canAdjust=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;
    if(canAdjust){
     const controls=document.createElement('div');controls.className='admin-balance-controls';
