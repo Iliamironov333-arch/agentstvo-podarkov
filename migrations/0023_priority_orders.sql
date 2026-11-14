@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN priority_order INTEGER NOT NULL DEFAULT 0;
