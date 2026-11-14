@@ -2856,8 +2856,8 @@ export default {
       }
 
       if (path === "/api/craft/create" && method === "POST") {
-        const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
-        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
+        const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-100):[];
+        if(!messages.length||messages.length>100||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
