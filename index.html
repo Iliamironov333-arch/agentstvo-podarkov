@@ -2122,13 +2122,33 @@ async function openAdminUser(telegramId) {
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
   const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть единую CRM-карточку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
+  const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
+  const historySummary=document.createElement('summary');historySummary.textContent='📚 История покупок и действий · журнал 90 дней';historySummary.style.cssText='cursor:pointer;font-weight:800;padding:10px 0';
+  const historyContent=document.createElement('div');historyContent.style.cssText='padding:4px 0 10px';
+  historyDetails.append(historySummary,historyContent);box.append(historyDetails);
+  const addHistoryLine=(label,value)=>{
+   const line=document.createElement('div');line.className='admin-detail-line';
+   const b=document.createElement('b');b.textContent=label+': ';
+   const span=document.createElement('span');span.textContent=value==null||value===''?'—':String(value);
+   line.append(b,span);historyContent.append(line);
+  };
   const orders=Array.isArray(data.orders)?data.orders:[];
-  addLine('Заказов',orders.length);
-  orders.forEach(o=>addLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
-  const history=Array.isArray(data.balance_history)?data.balance_history:[];
-  addLine('Операций с балансом',history.length);
-  history.forEach(t=>addLine('Баланс · '+t.created_at,(Number(t.amount_stars)>0?'+':'')+t.amount_stars+' · '+(t.operation_type||'')+' · '+(t.description||'')));
+  addHistoryLine('Покупок',orders.length);
+  orders.forEach(o=>addHistoryLine('Заказ '+o.id,String(o.product_title||'Заказ')+' · '+Number(o.total_stars||0)+' ⭐ · '+o.payment_status+' · '+o.created_at));
+  const balanceHistory=Array.isArray(data.balance_history)?data.balance_history:[];
+  addHistoryLine('Операций с балансом',balanceHistory.length);
+  balanceHistory.forEach(t=>addHistoryLine('Баланс · '+t.created_at,(Number(t.amount_stars)>0?'+':'')+t.amount_stars+' · '+(t.operation_type||'')+' · '+(t.description||'')));
   const blockHistory=Array.isArray(data.block_history)?data.block_history:[];
+  if(blockHistory.length){addHistoryLine('История ограничений',blockHistory.map(item=>(item.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(item.status==='active'?'Активна':'Снята')+' · '+(item.reason||'')+' · '+(item.blocked_at||'')+(item.unblocked_at?' · снята: '+item.unblocked_at:'')).join(' | '));}
+  const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
+  const actionNames={profile_viewed:'Открыт профиль',order_status_changed:'Изменён статус заказа',order_comment:'Добавлен комментарий',staff_role_changed:'Изменена должность',staff_permissions_changed:'Изменены права',balance_adjusted:'Изменён баланс',user_blocked:'Пользователь ограничен',user_unblocked:'Ограничение снято'};
+  addHistoryLine('Действий администраторов за 90 дней',adminHistory.length);
+  adminHistory.forEach(item=>{
+   let details={};try{details=JSON.parse(item.details||'{}')}catch{}
+   const detailText=details.order_id?' · заказ '+details.order_id:details.reason?' · '+details.reason:details.source==='admin_users_profile'?' · просмотр карточки клиента':'';
+   addHistoryLine((actionNames[item.action_type]||item.action_type)+' · '+item.created_at,'Администратор '+(item.actor_telegram_id||'—')+detailText);
+  });
+  if(!orders.length&&!balanceHistory.length&&!blockHistory.length&&!adminHistory.length)historyContent.append(document.createTextNode('История пока пуста.'));
   const activeBlock=blockHistory.find(item=>item.status==='active');
   const blockControls=document.createElement('div');blockControls.className='admin-block-controls';
   const blockHeading=document.createElement('h4');blockHeading.textContent='Ограничения пользователя';blockControls.append(blockHeading);
@@ -2149,16 +2169,7 @@ async function openAdminUser(telegramId) {
    [['purchases','Запретить покупки'],['full','Полностью закрыть доступ']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;blockType.append(option);});
    const blockReason=document.createElement('input');blockReason.id='adminBlockReason';blockReason.type='text';blockReason.maxLength=500;blockReason.placeholder='Обязательная причина блокировки';blockReason.setAttribute('aria-label','Причина блокировки');
    const blockButton=document.createElement('button');blockButton.type='button';blockButton.className='primary';blockButton.textContent='Применить блокировку';blockButton.disabled=!!data.migrations_pending;
-   blockButton.addEventListener('click',()=>adminSetUserBlock(telegramId));
-   blockControls.append(blockType,blockReason,blockButton);
-  }
-  if(blockHistory.length){
-   const historyTitle=document.createElement('h5');historyTitle.textContent='История блокировок';blockControls.append(historyTitle);
-   blockHistory.forEach(item=>{
-    const line=document.createElement('p');line.className='notice';
-    line.textContent=(item.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(item.status==='active'?'Активна':'Снята')+' · '+(item.reason||'')+' · '+(item.blocked_at||'')+(item.unblocked_at?' · снята: '+item.unblocked_at:'');
-    blockControls.append(line);
-   });
+   blockButton.addEventListener('click',()=>adminSetUserBlock(telegramId));blockControls.append(blockType,blockReason,blockButton);
   }
   box.append(blockControls);
   if(adminSession?.root_owner===true){
@@ -2181,20 +2192,6 @@ async function openAdminUser(telegramId) {
    });
    staffActions.append(staffButton);box.append(staffActions);
   }
-  const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
-  const audit=document.createElement('div');audit.className='admin-block-controls';
-  const auditTitle=document.createElement('h4');auditTitle.textContent='История административных действий';audit.append(auditTitle);
-  if(!adminHistory.length){
-   const empty=document.createElement('p');empty.className='notice';empty.textContent='Административных действий пока нет.';audit.append(empty);
-  }else{
-   const labels={balance_adjustment:'Изменение баланса',user_block:'Блокировка пользователя',user_unblock:'Снятие блокировки',staff_role_changed:'Изменение должности',staff_permissions_changed:'Изменение прав доступа'};
-   adminHistory.forEach(item=>{
-    const line=document.createElement('p');line.className='notice';
-    line.textContent=(labels[item.action_type]||item.action_type||'Действие')+' · '+(item.created_at||'Дата неизвестна')+' · '+(item.details||'');
-    audit.append(line);
-   });
-  }
-  box.append(audit);
   const canAdjust=adminSession?.root_owner||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;
    if(canAdjust){
     const controls=document.createElement('div');controls.className='admin-balance-controls';

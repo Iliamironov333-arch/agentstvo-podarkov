@@ -873,7 +873,8 @@ export default {
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
     ctx.waitUntil(Promise.all([
       env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run(),
-      env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run()
+      env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run(),
+      env.DB.prepare("DELETE FROM admin_action_log WHERE created_at < datetime('now','-90 days')").run()
     ]).catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
@@ -1385,12 +1386,16 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0, 64);
           if (!targetId) return json({ error: "Укажите Telegram ID пользователя." }, 400, origin);
+          try {
+            await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)")
+              .bind(telegramId,targetId,"profile_viewed",JSON.stringify({source:"admin_users_profile"})).run();
+          } catch (error) { if (!isMissingTableError(error,"admin_action_log")) console.error("Profile view audit failed:",String(error).slice(0,250)); }
           const [profile, orders, transactions, blocks, adminHistory] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
             optionalTableRows(env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId), "user_blocks"),
-            optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId), "admin_action_log")
+            optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND created_at>=datetime('now','-90 days') ORDER BY id DESC LIMIT 100").bind(targetId), "admin_action_log")
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
           return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending) }, 200, origin);
@@ -1645,8 +1650,10 @@ export default {
             const senderType=body.sender_type==="ai"?"ai":"owner";
             if(!message)return json({error:"Введите сообщение покупателю."},400,origin);
             await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,?,?)").bind(orderId,String(target.telegram_id),senderType,message).run();
+            const bundle=await env.DB.prepare("SELECT title FROM gift_bundles WHERE order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first().catch(()=>null);
+            const orderLabel=String(bundle?.title||product?.product_title||custom?.subject||"заказ").replace(/[\\r\\n]+/g," ").trim().slice(0,120)||"заказ";
             let notification={sent:false};
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-консультант":"💬 Владелец")+" по заказу № "+orderId+"\n\n"+message});notification.sent=true;}
+            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-помощник по заказу «"+orderLabel+"»":"💬 Сообщение по заказу «"+orderLabel+"»")+"\n\n"+message});notification.sent=true;}
             catch(error){notification.error=String(error.message||error).slice(0,240);}
             return json({ok:true,notification},200,origin);
           }
