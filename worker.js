@@ -871,7 +871,10 @@ export default {
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
-    ctx.waitUntil(env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run().catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
+    ctx.waitUntil(Promise.all([
+      env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run(),
+      env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run()
+    ]).catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
