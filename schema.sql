@@ -47,9 +47,21 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (order_id TEXT PRIMARY KEY, code TE
 
 CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 
+CREATE TABLE IF NOT EXISTS support_conversations (
+  id TEXT PRIMARY KEY,
+  telegram_id TEXT NOT NULL,
+  assistant_type TEXT NOT NULL CHECK (assistant_type IN ('standard','vip')),
+  title TEXT NOT NULL DEFAULT 'Новый диалог',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+);
+
 CREATE TABLE IF NOT EXISTS support_chat_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   telegram_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL DEFAULT 'legacy',
+  assistant_type TEXT NOT NULL DEFAULT 'standard' CHECK (assistant_type IN ('standard','vip')),
   role TEXT NOT NULL CHECK (role IN ('user','assistant')),
   content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 4000),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sender_type TEXT NOT NULL DEFAULT 'ai',
@@ -103,6 +115,8 @@ CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active,created_at)
 CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(code,status);
 
 CREATE INDEX IF NOT EXISTS idx_support_chat_user ON support_chat_messages(telegram_id, id);
+CREATE INDEX IF NOT EXISTS idx_support_conversations_user ON support_conversations(telegram_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_messages_conversation ON support_chat_messages(telegram_id, conversation_id, id);
 
 CREATE INDEX IF NOT EXISTS idx_support_internal_notes_user ON support_internal_notes(telegram_id, id DESC);
 
