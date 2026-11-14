@@ -872,7 +872,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/block-user") return "users_ban";
   if (path === "/api/admin/unblock-user") return "users_unban";
   if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
-  if (path === "/api/admin/order-update" || path === "/api/admin/order-notify") return "orders_manage";
+  if (path === "/api/admin/order-update" || path === "/api/admin/order-notify" || path === "/api/admin/order-hide") return "orders_manage";
   if (path === "/api/admin/order-chat") return method === "GET" ? "orders_view" : "orders_manage";
   if (path === "/api/admin/products") return "catalog_view";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
@@ -1829,10 +1829,10 @@ export default {
           const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status='superseded' THEN 'superseded' WHEN c.status IN ('cancelled','canceled') OR o.payment_status IN ('cancelled','refunded') THEN 'cancelled' WHEN o.payment_status='pending' OR c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery,COALESCE(o.priority_order,0) AS priority_order FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery,COALESCE(o.priority_order,0) AS priority_order FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND NOT EXISTS (SELECT 1 FROM admin_hidden_orders h WHERE h.order_type='product' AND h.order_id=id) AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all(),
             type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,o.payment_status AS payment_status,o.fulfillment_status AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id) WHERE admin_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,o.payment_status AS payment_status,o.fulfillment_status AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id) WHERE admin_status<>'superseded' AND NOT EXISTS (SELECT 1 FROM admin_hidden_orders h WHERE h.order_type='custom' AND h.order_id=id) AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all()
           ]);
           const rows = [...(products.results || []), ...(custom.results || [])]
@@ -2272,6 +2272,18 @@ export default {
         if (path === "/api/admin/system-controls" && method === "GET") {
           const row = await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='sales_paused'").first();
           return json({ ok: true, sales_paused: row?.value === "1", updated_at: row?.updated_at || null }, 200, origin);
+        }
+        if (path === "/api/admin/order-hide" && method === "POST") {
+          const body = await readJson(request);
+          const orderType = String(body.order_type || "");
+          const orderId = String(body.order_id || "").trim().slice(0,100);
+          if (!["product","custom"].includes(orderType) || !orderId) return json({error:"Укажите тип и номер заказа."},400,origin);
+          const table = orderType === "product" ? "orders" : "custom_orders";
+          const found = await env.DB.prepare("SELECT id FROM " + table + " WHERE id=?").bind(orderId).first();
+          if (!found) return json({error:"Заказ не найден."},404,origin);
+          await env.DB.prepare("INSERT OR IGNORE INTO admin_hidden_orders(order_type,order_id,hidden_by) VALUES(?,?,?)").bind(orderType,orderId,telegramId).run();
+          if (await tableExists(env,"admin_action_log")) await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,action_type,details) VALUES(?,?,?)").bind(telegramId,"order_hidden_from_admin",JSON.stringify({order_id:orderId,order_type:orderType})).run();
+          return json({ok:true,hidden:true},200,origin);
         }
         const aiAdminResponse = await handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,permissions);
         if (aiAdminResponse) return json(await aiAdminResponse.json(),aiAdminResponse.status,origin);
