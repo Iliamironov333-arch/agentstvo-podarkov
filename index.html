@@ -3742,7 +3742,25 @@ async function subscribeVip(planType) {
 
 async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
 
-function renderSupportMessages(messages) {
+let supportPendingActions = [];
+
+async function openSupportDestination(action) {
+ if (!action || typeof action !== 'object') return;
+ if (action.view === 'product') {
+  let product = products.find(item => String(item[0]) === String(action.product_id));
+  if (!product && initData) {
+   try { await loadProducts(); product = products.find(item => String(item[0]) === String(action.product_id)); } catch {}
+  }
+  if (product) openProductDetail(product);
+  else { showView('catalogView'); toast('Работа не найдена в актуальном каталоге.'); }
+  return;
+ }
+ const allowed = ['catalogView','cartView','ordersView','balanceView','profileView','vipView','aiWorkshopView','supportView','aboutView'];
+ if (allowed.includes(action.view)) showView(action.view);
+}
+
+function renderSupportMessages(messages, actions = []) {
+ supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
  root.replaceChildren();
  if (!messages.length) {
@@ -3759,15 +3777,27 @@ function renderSupportMessages(messages) {
   const content = document.createElement('span'); content.textContent = item.content;
   bubble.append(label,content); root.appendChild(bubble);
  }
+ if (messages.length && messages[messages.length-1].role === 'assistant' && supportPendingActions.length) {
+  const actionRow = document.createElement('div');
+  actionRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;max-width:100%';
+  supportPendingActions.forEach(action => {
+   if (!action || typeof action.label !== 'string' || !action.label.trim()) return;
+   const button = document.createElement('button');
+   button.type = 'button'; button.className = 'secondary'; button.textContent = action.label;
+   button.addEventListener('click', () => openSupportDestination(action));
+   actionRow.append(button);
+  });
+  if (actionRow.childElementCount) root.append(actionRow);
+ }
  root.scrollTop = root.scrollHeight;
 }
 
-async function loadSupportHistory() {
+async function loadSupportHistory(actions = []) {
  const root = document.getElementById('supportChatLog');
  if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
   const data = await apiFetch('/api/support/chat');
-  renderSupportMessages(data.messages || []);
+  renderSupportMessages(data.messages || [], actions);
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
@@ -3782,7 +3812,7 @@ async function sendSupport() {
  try {
   const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})});
   input.value = '';
-  await loadSupportHistory();
+  await loadSupportHistory(data.actions || []);
   result.textContent = data.vip ? 'Ответ VIP-помощника готов.' : 'Ответ помощника готов.';
  } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
  finally { button.disabled = false; }
