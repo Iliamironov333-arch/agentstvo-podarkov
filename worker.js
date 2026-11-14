@@ -871,6 +871,7 @@ export default {
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
+    ctx.waitUntil(env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run().catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
@@ -2671,7 +2672,9 @@ export default {
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
-        const title = items.map(item => item.title + " × " + item.qty).join("; ")+(builderExtraLines.length?" · Дополнения: "+builderExtraLines.map(x=>x[0]).join(", "):"");
+        const title = giftBundleId
+          ? "🎁 Подарочный набор · " + items.map(item => item.title + " × " + item.qty).join("; ") + (builderExtraLines.length ? " · Дополнения: " + builderExtraLines.map(x=>x[0]).join(", ") : "")
+          : items.map(item => item.title + " × " + item.qty).join("; ") + (builderExtraLines.length ? " · Дополнения: " + builderExtraLines.map(x=>x[0]).join(", ") : "");
         const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars,priority_order) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?,?)")
           .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse,priorityOrder?1:0);
         const orderStatements = [
