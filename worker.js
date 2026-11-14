@@ -3070,7 +3070,10 @@ export default {
         if(/корзин|оформить заказ|оплатить заказ/.test(lowerMessage))actions.push({label:"🛒 Перейти в корзину",view:"cartView"});
         if(/заказ/.test(lowerMessage) && !actions.some(item=>item.view==="ordersView"))actions.push({label:"📦 Мои заказы",view:"ordersView"});
         if(/баланс|баллы|пополн/.test(lowerMessage))actions.push({label:"⭐ Мой баланс",view:"balanceView"});
-        if(/индивидуальн|на заказ|создать заказ|сделать заказ|нарисова|изготов/.test(lowerMessage))actions.push({label:"🧵 Обсудить индивидуальный заказ",view:"aiWorkshopView"});
+        if(/индивидуальн|на заказ|создать заказ|сделать заказ|нарисова|изготов/.test(lowerMessage)){
+          actions.push({label:"🧵 Обсудить идею",view:"aiWorkshopView"});
+          actions.push({label:"🎨 Создать индивидуальный заказ",view:"customWizardView"});
+        }
         if(/профил/.test(lowerMessage))actions.push({label:"👤 Мой профиль",view:"profileView"});
         if(/vip|вип-подпис|подписк/.test(lowerMessage))actions.push({label:"👑 VIP",view:"vipView"});
         if(/помощник|поддержк/.test(lowerMessage))actions.push({label:"🤖 Помощники",view:"supportView"});
