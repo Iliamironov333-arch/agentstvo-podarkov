@@ -1977,6 +1977,8 @@ export default {
           await telegram(env,"sendMessage",{chat_id:targetId,text:message});
           await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'human')")
             .bind(targetId,message).run();
+          const latestChat=await env.DB.prepare("SELECT id FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='support' ORDER BY updated_at DESC LIMIT 1").bind(targetId).first();
+          if(latestChat)await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'owner',?)").bind(latestChat.id,targetId,message).run();
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
               .bind(telegramId,targetId,"support_human_reply",JSON.stringify({length:message.length})).run();
@@ -3005,9 +3007,11 @@ export default {
         if(Number(messageCount?.n||0)>limit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit},409,origin);
         const conversationControl=await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
         await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(conversationId,String(telegramId),message).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'user',?,'buyer')").bind(String(telegramId),message).run();
         await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='Новый диалог' THEN ? ELSE title END WHERE id=? AND telegram_id=?").bind(message.slice(0,60),conversationId,String(telegramId)).run();
         if(conversationControl?.mode==="human"){
           await notifyOwner(env,"💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: "+telegramId+"\n\n"+message);
+          await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'assistant',?,'human')").bind(String(telegramId),"Сообщение передано владельцу. ИИ-помощник временно приостановлен.").run();
           await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'assistant',?)").bind(conversationId,String(telegramId),"Сообщение передано владельцу. ИИ-помощник временно приостановлен.").run();
           return json({ok:true,conversation_id:conversationId,handoff:true},200,origin);
         }
@@ -3017,6 +3021,7 @@ export default {
         try{answer=await createSupportAnswer(env,history,!!vip,await getProducts(env));}
         catch(error){console.error("Support assistant failed:",String(error));await writeSystemError(env,error?.diagnostic||error,"/api/support/chat");return json({error:error.message||"Не удалось получить ответ помощника."},503,origin);}
         await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content,actions_json) VALUES(?,?,'assistant',?,?)").bind(conversationId,String(telegramId),answer.reply,JSON.stringify(answer.actions||[])).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'assistant',?,'ai')").bind(String(telegramId),answer.reply).run();
         if(/(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message)){
           await env.DB.prepare("INSERT INTO support_messages(telegram_id,message) VALUES(?,?)").bind(telegramId,message).run();
           await notifyOwner(env,"💬 Запрос на помощь владельца\nTelegram ID: "+telegramId+"\n\n"+message);
