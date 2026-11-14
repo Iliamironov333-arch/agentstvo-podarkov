@@ -3805,7 +3805,8 @@ function updateSupportAssistantUi() {
  if (label) label.textContent = activeSupportAssistant === 'vip' ? '👑 VIP-помощник' : '🤖 Обычный помощник';
 }
 
-async function loadSupportHistory(conversationId, actions) {\n supportPendingActions = Array.isArray(actions) ? actions : [];
+async function loadSupportHistory(conversationId, actions) {
+ supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
  if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
