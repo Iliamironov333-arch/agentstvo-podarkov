@@ -1488,6 +1488,17 @@ html body>#seasonDecorations .festive-firework{
    <label>Подтверждение<input id="adminBackupRestoreConfirm" maxlength="20" placeholder="Введите RESTORE D1"></label>
    <button class="secondary" type="button" id="adminBackupRestoreButton" onclick="restoreAdminBackup()">Восстановить базу</button>
   </div>
+  <div class="panel" id="adminGiftCertificatesPanel">
+   <div class="sectionhead"><h3>🎟️ Подарочные сертификаты</h3><button class="secondary" type="button" onclick="loadAdminGiftCertificates()">↻ Обновить</button></div>
+   <p class="muted">Создавай одноразовые коды. Покупатель вводит код в чате помощника, а сервер начисляет указанные баллы на его внутренний баланс.</p>
+   <div class="admin-user-detail">
+    <label>Код сертификата<input id="adminGiftCertificateCode" maxlength="32" placeholder="Например, GIFT2026"></label>
+    <label>Количество баллов<input id="adminGiftCertificatePoints" type="number" min="1" max="1000000" step="1" placeholder="Например, 250"></label>
+    <button class="primary" type="button" onclick="saveAdminGiftCertificate()">＋ Создать сертификат</button>
+   </div>
+   <p id="adminGiftCertificatesStatus" class="notice" aria-live="polite">Список сертификатов загружается…</p>
+   <div id="adminGiftCertificatesList"></div>
+  </div>
   <div class="panel" id="adminPromosPanel">
    <div class="sectionhead"><h3>🏷️ Промокоды и акции</h3><button class="secondary" type="button" onclick="loadAdminPromos()">↻ Обновить</button></div>
    <p class="muted">Дополнительная скидка применяется только по введённому коду. Итоговую цену всегда рассчитывает Worker.</p>
@@ -1729,6 +1740,7 @@ html body>#seasonDecorations .festive-firework{
    <button class="secondary" id="supportVipButton" type="button" onclick="selectSupportAssistant('vip')" style="min-height:48px">👑 VIP-помощник</button>
   </div>
   <p class="notice" id="supportAssistantInfo">Обычный помощник: ответы на вопросы и помощь с приложением.</p>
+  <p class="muted">🎟️ Чтобы активировать подарочный сертификат, напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс после серверной проверки.</p>
  </div>
  <div class="panel">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -1985,7 +1997,7 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)restoreC
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
  if (id === 'aiWorkshopView') loadCraftConversation();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'adminPanelView') { initAdminCategories(); loadAdminGiftCertificates(); loadAdminPromos(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
 }
 
@@ -2682,6 +2694,34 @@ async function restoreAdminBackup(){
  try{const data=await apiFetch('/api/admin/backup-restore',{method:'POST',body:JSON.stringify({bookmark,timestamp,confirmation})});status.textContent=(data.message||'База восстановлена.')+' Предыдущая точка: '+(data.previous_bookmark||'—')+'. Новая точка: '+(data.new_bookmark||'—')+'.';await loadAdminBackupHistory();toast('Восстановление D1 завершено.');}
  catch(e){status.textContent=e.message||'Не удалось восстановить D1.';toast(status.textContent);}
  finally{button.disabled=false;}
+}
+async function loadAdminGiftCertificates(){
+ const status=document.getElementById('adminGiftCertificatesStatus'),root=document.getElementById('adminGiftCertificatesList');if(!status||!root)return;
+ status.textContent='Загружаем сертификаты…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/gift-certificates');
+  if(data.migration_pending){status.textContent='Для сертификатов требуется миграция 0025_gift_certificates.sql.';return;}
+  const rows=data.certificates||[];status.textContent='Сертификатов: '+rows.length;
+  rows.forEach(item=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.code+' · '+Number(item.points).toLocaleString('ru-RU')+' баллов';
+   const meta=document.createElement('small');meta.textContent=item.redeemed_by?'Использован · Telegram ID: '+item.redeemed_by+' · '+(item.redeemed_at||''):(item.is_active?'Активен · ещё не использован':'Отключён');
+   info.append(title,meta);row.append(info);
+   if(item.is_active&&!item.redeemed_by){const disable=document.createElement('button');disable.type='button';disable.className='secondary';disable.textContent='Отключить';disable.addEventListener('click',async()=>{if(!confirm('Отключить сертификат '+item.code+'?'))return;disable.disabled=true;try{await apiFetch('/api/admin/gift-certificate-disable',{method:'POST',body:JSON.stringify({code:item.code})});await loadAdminGiftCertificates();}catch(e){toast(e.message||'Не удалось отключить сертификат.');disable.disabled=false;}});row.append(disable);}
+   root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить сертификаты.';}
+}
+async function saveAdminGiftCertificate(){
+ const code=document.getElementById('adminGiftCertificateCode')?.value.trim()||'';
+ const points=Number(document.getElementById('adminGiftCertificatePoints')?.value||0);
+ const button=document.querySelector('#adminGiftCertificatesPanel button.primary');if(button)button.disabled=true;
+ try{
+  const data=await apiFetch('/api/admin/gift-certificates',{method:'POST',body:JSON.stringify({code,points})});
+  document.getElementById('adminGiftCertificateCode').value='';document.getElementById('adminGiftCertificatePoints').value='';
+  toast('Сертификат '+data.code+' создан на '+Number(data.points).toLocaleString('ru-RU')+' баллов.');await loadAdminGiftCertificates();
+ }catch(e){toast(e.message||'Не удалось создать сертификат.');}
+ finally{if(button)button.disabled=false;}
 }
 async function loadAdminPromos(){
  const status=document.getElementById('adminPromosStatus'),root=document.getElementById('adminPromosList');if(!status||!root)return;
@@ -3679,6 +3719,13 @@ let supportConversations = [];
 let activeSupportConversationId = null;
 let activeSupportAssistant = 'standard';
 let supportChatLimit = 3;
+let supportPendingActions = [];
+
+function openSupportDestination(view) {
+ const allowed = ['catalogView','cartView','ordersView','balanceView','aiWorkshopView','profileView','vipView','supportView'];
+ if (!allowed.includes(view)) return;
+ showView(view);
+}
 
 function renderSupportMessages(messages) {
  const root = document.getElementById('supportChatLog');
@@ -3690,7 +3737,8 @@ function renderSupportMessages(messages) {
    : 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
   root.appendChild(empty); return;
  }
- for (const item of messages) {
+ for (let messageIndex=0; messageIndex<messages.length; messageIndex++) {
+  const item=messages[messageIndex];
   const bubble = document.createElement('div');
   bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
   const label = document.createElement('b');
@@ -3698,6 +3746,16 @@ function renderSupportMessages(messages) {
   label.style.display = 'block'; label.style.marginBottom = '4px';
   const content = document.createElement('span'); content.textContent = item.content;
   bubble.append(label,content); root.appendChild(bubble);
+  if (messageIndex === messages.length-1 && item.role === 'assistant' && supportPendingActions.length) {
+   const actionRow=document.createElement('div');
+   actionRow.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;max-width:100%';
+   supportPendingActions.forEach(action=>{
+    if(!action || !action.label || !action.view)return;
+    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=action.label;
+    button.addEventListener('click',()=>openSupportDestination(action.view));actionRow.append(button);
+   });
+   if(actionRow.childElementCount)root.append(actionRow);
+  }
  }
  root.scrollTop = root.scrollHeight;
 }
@@ -3747,7 +3805,7 @@ function updateSupportAssistantUi() {
  if (label) label.textContent = activeSupportAssistant === 'vip' ? '👑 VIP-помощник' : '🤖 Обычный помощник';
 }
 
-async function loadSupportHistory(conversationId) {
+async function loadSupportHistory(conversationId, actions) {\n supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
  if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
@@ -3809,7 +3867,7 @@ async function sendSupport() {
   if (!activeSupportConversationId) throw new Error('Не удалось открыть чат. Попробуй ещё раз.');
   const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message,conversation_id:activeSupportConversationId})});
   input.value = '';
-  await loadSupportHistory(activeSupportConversationId);
+  await loadSupportHistory(activeSupportConversationId,data.actions||[]);
   result.textContent = data.assistant_type === 'vip' || data.vip && activeSupportAssistant === 'vip' ? 'Ответ VIP-помощника готов.' : 'Ответ помощника готов.';
  } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
  finally { button.disabled = false; }
