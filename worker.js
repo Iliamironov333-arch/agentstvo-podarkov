@@ -402,7 +402,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
     "Меняй поля только если клиент прямо попросил изменить их. Если клиент просто спрашивает совет, updates=null.",
     (allowItemChanges?"items можно менять только из списка каталога, используя точные id и qty 1..10. Не добавляй несуществующие товары. Не меняй цены, оплату и VIP-статус.":"После оформления заказа НЕ меняй товары и их количество, цену, оплату или доставку. Изменять можно только пожелание, оформление открытки, коробку и дополнительные детали."),
     "postcard_tone: warm/funny/formal/festive/gentle; postcard_detail: simple/medium/premium; filler_level: many/medium/none; sticker_qty: 0..10; seasonal_extras допускает только secret_seasonal.",
-    vipActive?"VIP активен. Можно выставить postcard_detail=premium или priority_order=true только если пользователь прямо просит; priority_order не включай без прямого запроса.":"VIP не активен. Не предлагай включать premium или priority_order.",
+    vipActive?"VIP активен. Можно выставить postcard_detail=premium только если пользователь прямо просит.":"VIP не активен. Не предлагай включать premium или priority_order.",
     "Текущий черновик: "+JSON.stringify(bundle).slice(0,5000),
     "Каталог: "+JSON.stringify(catalog.map(p=>({id:String(p.id),title:p.title}))).slice(0,3000)
   ].join("\n");
@@ -2535,7 +2535,7 @@ export default {
         if(existing)await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(JSON.stringify(bundle),id,telegramId).run();
         else await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,bundle_json,status) VALUES(?,?,?,'draft')").bind(id,telegramId,JSON.stringify(bundle)).run();
         const productTotal=items.reduce((sum,item)=>sum+Number(catalog.find(p=>String(p.id)===item.id)?.price_stars||0)*item.qty,0);
-        const extras={postcard:35,filler:fillerLevel==="many"?65:fillerLevel==="medium"?35:0,secret_seasonal:seasonal.includes("secret_seasonal")?45:0,stickers:stickerQty*10};
+        const extras={postcard:35,filler:fillerLevel==="none"?0:40,secret_seasonal:seasonal.includes("secret_seasonal")?70:0,stickers:stickerQty>0?20:0};
         return json({ok:true,draft_id:id,bundle,product_total:productTotal,extras_total:Object.values(extras).reduce((a,b)=>a+b,0),extras},200,origin);
       }
 
@@ -2618,9 +2618,9 @@ export default {
           if((giftBundle.postcard_detail==="premium"||giftBundle.priority_order)&&!activeVipForOrder)return json({error:"Для выбранных VIP-опций нужна действующая подписка."},403,origin);
           const extras=[
             ["Индивидуальная открытка",giftBundle.postcard?35:0],
-            ["Наполнитель",giftBundle.filler_level==="many"?65:giftBundle.filler_level==="medium"?35:0],
-            ["Секретный сезонный подарок",seasonal.includes("secret_seasonal")?45:0],
-            ["Стикеры × "+Math.max(0,Math.min(10,Number(giftBundle.sticker_qty)||0)),Math.max(0,Math.min(10,Number(giftBundle.sticker_qty)||0))*10]
+            ["Наполнитель",giftBundle.filler_level==="none"?0:40],
+            ["Секретный сезонный подарок",seasonal.includes("secret_seasonal")?70:0],
+            ["Стикеры × "+Math.max(0,Math.min(10,Number(giftBundle.sticker_qty)||0)),Number(giftBundle.sticker_qty)>0?20:0]
           ];
           builderExtraLines=extras.filter(x=>x[1]>0);
           builderExtraTotal=builderExtraLines.reduce((sum,x)=>sum+x[1],0);
