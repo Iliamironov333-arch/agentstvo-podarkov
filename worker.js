@@ -2923,13 +2923,19 @@ export default {
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        const chatMeta=await env.DB.prepare("SELECT assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
+        const chatLimit=chatMeta?.assistant_tier==="vip"?100:50;
+        const chatCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        if(Number(chatCount?.n||0)>=chatLimit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});
-        details.conversation=details.conversation.slice(-16);
+        details.conversation=details.conversation.slice(-chatLimit);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-8):[];
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
+        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
+        await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
         await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
         await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
         await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
