@@ -1630,7 +1630,7 @@ let giftBuilderSelection={};
 let giftBuilderLayoutOrder=[];
 let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
-try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
+try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));window.pendingGiftBundlePriority=localStorage.getItem('gift-pending-bundle-priority')==='1';}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
 const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
@@ -1994,7 +1994,7 @@ async function addGiftBuilderToCart(){
   window.pendingGiftBundlePriority=!!giftBuilderExtras().priority_order;
   window.pendingGiftBundleId=giftBuilderDraftId;
   window.pendingGiftBundleExtraStars=Math.max(0,Number(savedDraft.extras_total||0));
-  try{localStorage.setItem('gift-pending-bundle-id',giftBuilderDraftId);localStorage.setItem('gift-pending-bundle-extras',String(window.pendingGiftBundleExtraStars));}catch{}
+  try{localStorage.setItem('gift-pending-bundle-id',giftBuilderDraftId);localStorage.setItem('gift-pending-bundle-extras',String(window.pendingGiftBundleExtraStars));localStorage.setItem('gift-pending-bundle-priority',window.pendingGiftBundlePriority?'1':'0');}catch{}
   persistCart();drawProducts();drawCart();showView('cartView');toast('Подарочный набор добавлен в корзину. Оформление сохранено!');
  }catch(e){toast(e.message||'Не удалось сохранить набор.');}
  finally{if(add)add.disabled=false;}
@@ -3591,7 +3591,7 @@ async function checkout() {
   const wasGiftBundle=!!window.pendingGiftBundleId;
   if(wasGiftBundle){
    window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;
-   try{localStorage.removeItem('gift-pending-bundle-id');localStorage.removeItem('gift-pending-bundle-extras');}catch{}
+   try{localStorage.removeItem('gift-pending-bundle-id');localStorage.removeItem('gift-pending-bundle-extras');localStorage.removeItem('gift-pending-bundle-priority');}catch{}
    cart={};activePromo=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
   }
   const deliveryCost=document.getElementById('deliveryCost'),totalLabel=document.getElementById('total');
