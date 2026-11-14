@@ -2628,7 +2628,7 @@ async function loadAdminTechnicalCenter(){
   const integrations=document.createElement('div');integrations.className='notice';const integrationLabels={telegram_bot:'Telegram Bot API',telegram_webhook:'Webhook Telegram',openai:'OpenAI API'};Object.entries(d.integrations||{}).forEach(([key,ready])=>{const line=document.createElement('div');line.textContent=integrationLabels[key]+': '+(ready?'настроено':'не настроено');integrations.append(line);});tables.append(integrations);
   Object.entries(d.tables||{}).forEach(([name,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=name;const right=document.createElement('b');right.textContent=ready?'Подключена':'Нужна миграция';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
   const migrationTitle=document.createElement('h4');migrationTitle.textContent='Готовность миграций';tables.append(migrationTitle);
-  const migrationLabels={'0004_order_item_images':'0004 · Изображения в заказах','0005_delivery_retry_lease':'0005 · Безопасный повтор доставки','0006_admin_action_log':'0006 · Журнал действий владельца','0007_user_blocks':'0007 · Блокировки покупателей','0008_support_human_takeover':'0008 · Передача ИИ-диалогов владельцу','0009_support_internal_notes':'0009 · Приватные заметки CRM','0010_announcements':'0010 · Объявления','0011_mass_mailing':'0011 · Массовые рассылки','0012_system_monitoring':'0012 · Журнал системных ошибок','0013_promo_codes':'0013 · Промокоды','0014_promo_code_scopes':'0014 · Ограничения промокодов по товарам и категориям'};
+  const migrationLabels={'0004_order_item_images':'0004 · Изображения в заказах','0005_delivery_retry_lease':'0005 · Безопасный повтор доставки','0006_admin_action_log':'0006 · Журнал действий владельца','0007_user_blocks':'0007 · Блокировки покупателей','0008_support_human_takeover':'0008 · Передача ИИ-диалогов владельцу','0009_support_internal_notes':'0009 · Приватные заметки CRM','0010_announcements':'0010 · Объявления','0011_mass_mailing':'0011 · Массовые рассылки','0012_system_monitoring':'0012 · Журнал системных ошибок','0013_promo_codes':'0013 · Промокоды','0014_promo_code_scopes':'0014 · Ограничения промокодов по товарам и категориям','0024_support_multi_chat':'0024 · Помощники и сохранённые чаты','0025_gift_certificates':'0025 · Подарочные сертификаты'};
   Object.entries(d.migrations||{}).forEach(([key,ready])=>{const row=document.createElement('div');row.className='lineitem';const left=document.createElement('span');left.textContent=migrationLabels[key]||key;const right=document.createElement('b');right.textContent=ready?'Готова':'Не применена';right.style.color=ready?'var(--gold)':'var(--muted)';row.append(left,right);tables.append(row);});
   await Promise.all([loadAdminFeatureFlags(),loadAdminErrorLog(),loadAdminTimeTravelStatus()]);
  }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
@@ -3722,6 +3722,7 @@ let supportChatLimit = 3;
 let supportPendingActions = [];
 
 function openSupportDestination(view) {
+ if (view === 'owner') { openOwnerChat(); return; }
  const allowed = ['catalogView','cartView','ordersView','balanceView','aiWorkshopView','profileView','vipView','supportView'];
  if (!allowed.includes(view)) return;
  showView(view);
