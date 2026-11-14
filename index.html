@@ -1480,6 +1480,11 @@ body.dark-theme .announcement-bg-purple{background:linear-gradient(135deg,#392d4
    <input id="priorityDelivery" type="checkbox" style="width:auto">
    <span>⚡ Приоритетная доставка <b>+100 ⭐</b></span>
   </label>
+  <label style="display:flex;align-items:center;gap:9px;margin:12px 0">
+   <input id="priorityOrder" type="checkbox" style="width:auto">
+   <span>👑 Приоритетная обработка заказа — только VIP</span>
+  </label>
+  <p class="notice" id="priorityOrderHint">Приоритетная обработка доступна только с действующей VIP-подпиской.</p>
   <p id="deliveryCalcStatus" class="notice" aria-live="polite">Точную стоимость рассчитаем по адресу при оформлении.</p>
  </div>
  <div class="panel">
@@ -2015,6 +2020,8 @@ function openProductDetail(product){
  content.append(image,title,price,description,add);modal.classList.add('open');
 }
 function updateDeliveryMethodUI(){
+ const priorityOrder=document.getElementById('priorityOrder');if(priorityOrder){priorityOrder.disabled=!vipActive;if(!vipActive)priorityOrder.checked=false;}
+ const priorityHint=document.getElementById('priorityOrderHint');if(priorityHint)priorityHint.textContent=vipActive?'VIP активен: приоритетная обработка заказа доступна.':'Приоритетная обработка доступна только с действующей VIP-подпиской.';
  const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
  const fields=document.getElementById('deliveryAddressFields');
  const priority=document.getElementById('priorityDelivery');
@@ -3578,7 +3585,8 @@ async function checkout() {
    delivery_address:deliveryMethod==='pickup'?'':address,
    delivery_details:deliveryMethod==='pickup'?'':(document.getElementById('deliveryDetails')?.value.trim()||''),
    delivery_note:document.getElementById('deliveryNote')?.value.trim()||'',
-   priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked
+   priority_delivery:deliveryMethod==='courier'&&!!document.getElementById('priorityDelivery')?.checked,
+   priority_order:!!window.pendingGiftBundlePriority||!!document.getElementById('priorityOrder')?.checked
   })});
   const wasGiftBundle=!!window.pendingGiftBundleId;
   if(wasGiftBundle){
