@@ -3839,7 +3839,7 @@ async function restoreCraftConversation(){
    const input=document.getElementById('craftChatInput');if(input)input.placeholder=craftConversationReady?'Напишите мастеру Агентства…':'Расскажите подробнее о задумке…';
    const button=document.getElementById('craftSendBtn');if(button){button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
    renderCraftChat();if(craftConversationReady)startCraftPolling();
-  }else{craftMessages=[];craftQuestionCount=0;craftConversationReady=false;renderCraftChat();}
+  }else{craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];craftQuestionCount=0;craftConversationReady=false;renderCraftChat();}
  }catch(e){console.warn('Не удалось восстановить диалог мастерской:',e);craftMessages=[];renderCraftChat();}
 }
 
@@ -3857,7 +3857,7 @@ function resetCraftConversation(existingId){
 async function sendCraftMessage(){
  const input=document.getElementById('craftChatInput'),button=document.getElementById('craftSendBtn'),status=document.getElementById('craftResultStatus'),message=input.value.trim();
  if(!message){status.textContent='Напишите ответ, чтобы продолжить.';return;}
- if(!craftMessages.length)resetCraftConversation();
+ if(!craftMessages.length)resetCraftConversation(craftDraftId);
  input.value='';button.disabled=true;button.textContent=craftConversationReady?'Отправляем…':'Мастер думает…';status.textContent=craftConversationReady?'Передаём сообщение владельцу…':'Анализируем пожелания и подбираем варианты…';
  try{
   if(craftConversationReady){
