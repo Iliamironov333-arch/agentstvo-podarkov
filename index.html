@@ -200,7 +200,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none
 .admin-category-section .admin-user-row,.admin-category-section .admin-order-actions{min-width:0;max-width:100%;flex-wrap:wrap}
 .admin-category-section .admin-user-row>*,.admin-category-section .admin-order-actions>*{min-width:0;max-width:100%}
 body.light-theme .panel textarea,body.light-theme .panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .panel select,body.light-theme .admin-category-section textarea,body.light-theme .admin-category-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),body.light-theme .admin-category-section select{background:#fff;color:#382819;border-color:#dfc8a8}
-.order-card{padding:12px 0;border-bottom:1px solid var(--line);min-width:0}.order-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px}.order-action-btn,.owner-contact-btn{width:100%;min-width:0;min-height:44px;border-radius:14px!important;padding:10px 12px;line-height:1.25;white-space:normal;overflow-wrap:anywhere}.owner-contact-btn{margin-top:10px}#adminPanelView input,#adminPanelView textarea,#adminPanelView select{box-sizing:border-box;width:100%;max-width:100%;min-width:0}#adminPanelView .admin-category-section button{border-radius:13px;min-height:44px;line-height:1.25;white-space:normal;overflow-wrap:anywhere;word-break:normal;padding:10px 12px}#adminPanelView .admin-category-section .row-actions,#adminPanelView .admin-category-section .admin-product-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px}#adminPanelView .admin-category-section .row-actions button,#adminPanelView .admin-category-section .admin-product-actions button{width:100%;min-width:0}#adminPanelView input[type=date]{width:100%;min-width:0}
+.order-card{padding:12px 0;border-bottom:1px solid var(--line);min-width:0}.orders-collapsible{margin:12px 0;border:1px solid var(--line);border-radius:14px;padding:0 12px;background:var(--panel2)}.orders-collapsible>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style-position:inside;padding:13px 0;font-weight:700}.orders-collapsible>summary small{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:99px;background:var(--panel);color:var(--muted);font-size:12px}.orders-collapsible[open]>summary{border-bottom:1px solid var(--line)}.order-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px}.order-action-btn,.owner-contact-btn{width:100%;min-width:0;min-height:44px;border-radius:14px!important;padding:10px 12px;line-height:1.25;white-space:normal;overflow-wrap:anywhere}.owner-contact-btn{margin-top:10px}#adminPanelView input,#adminPanelView textarea,#adminPanelView select{box-sizing:border-box;width:100%;max-width:100%;min-width:0}#adminPanelView .admin-category-section button{border-radius:13px;min-height:44px;line-height:1.25;white-space:normal;overflow-wrap:anywhere;word-break:normal;padding:10px 12px}#adminPanelView .admin-category-section .row-actions,#adminPanelView .admin-category-section .admin-product-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px}#adminPanelView .admin-category-section .row-actions button,#adminPanelView .admin-category-section .admin-product-actions button{width:100%;min-width:0}#adminPanelView input[type=date]{width:100%;min-width:0}
 /* Единый стиль текстовых полей во всех разделах приложения */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 textarea{
@@ -1849,7 +1849,7 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','📦 Управление','Пользователи, заказы и поддержка'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','📦 Управление','Пользователи и поддержка'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
@@ -3928,20 +3928,40 @@ async function loadMe() {
   const orders=Array.isArray(od.orders)?od.orders:[];
   const pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');
-  if(root)root.innerHTML=orders.length?orders.map(o=>{
-   const status=String(o.status||'').toLowerCase();
-   const terminal=['paid','cancelled','canceled','completed','fulfilled','delivered'].includes(status);
-   const waitingPrice=o.order_type==='custom'&&status==='awaiting_price';
-   const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
-   const state=o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status):(status==='paid'?'Оплачен':payable?'Ожидает оплаты':status==='cancelled'?'Отменён':o.status);
-   const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
-   const ageMs=Date.now()-new Date(String(o.created_at||'').replace(' ','T')+'Z').getTime();
-   const canCancel=Number.isFinite(ageMs)&&ageMs>=0&&ageMs<=72*60*60*1000&&!['cancelled','canceled','completed','fulfilled','delivered'].includes(status);
-   const cancelButton=canCancel?'<button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button>':'';
-   const chatButton='<button type="button" class="secondary order-action-btn" data-order-chat="1" data-order-id="'+id+'" data-order-type="'+(o.order_type==='custom'?'custom':'product')+'" data-order-title="'+String(o.title||'Заказ').replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">💬 Чат заказа</button>';
-   const actions='<div class="order-actions">'+(payable?'<button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button>':'')+cancelButton+chatButton+'</div>';
-   return '<div class="order-card"><div class="lineitem"><span><b>'+(o.title||o.order_id)+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+state+'</small></b></div>'+actions+'</div>';
-  }).join(''):'<p class="muted">Пока заказов нет.</p>';
+  if(root){
+   const paidWasOpen=root.querySelector('[data-orders-group="paid"]')?.open===true;
+   const cancelledWasOpen=root.querySelector('[data-orders-group="cancelled"]')?.open===true;
+   const escapeOrderText=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+   const renderOrder=o=>{
+    const status=String(o.status||'').toLowerCase();
+    const paymentStatus=String(o.payment_status||'').toLowerCase();
+    const isPaid=paymentStatus==='paid'||status==='paid';
+    const isCancelled=['cancelled','canceled'].includes(status)||['cancelled','canceled'].includes(paymentStatus);
+    const terminal=isPaid||isCancelled||['completed','fulfilled','delivered'].includes(status);
+    const waitingPrice=o.order_type==='custom'&&status==='awaiting_price';
+    const payable=['pending','awaiting_payment','unpaid','payment_pending','new'].includes(status)&&Number(o.amount)>0&&!terminal&&!waitingPrice;
+    const fulfillmentLabels={new:'ожидает обработки',in_progress:'в работе',ready:'готов',completed:'завершён',fulfilled:'завершён',delivered:'доставлен'};
+    const state=isCancelled?'Отменён':isPaid?'Оплачен'+(fulfillmentLabels[String(o.fulfillment_status||'').toLowerCase()]?' · '+fulfillmentLabels[String(o.fulfillment_status||'').toLowerCase()]:''):o.order_type==='custom'?(waitingPrice?'Ожидает назначения цены':status==='new'?'Принят • ожидает обработки':payable?'Ожидает оплаты':o.status):(payable?'Ожидает оплаты':o.status);
+    const id=String(o.order_id).replace(/[^a-zA-Z0-9_-]/g,'');
+    const ageMs=Date.now()-new Date(String(o.created_at||'').replace(' ','T')+'Z').getTime();
+    const canCancel=Number.isFinite(ageMs)&&ageMs>=0&&ageMs<=72*60*60*1000&&!['cancelled','canceled','completed','fulfilled','delivered'].includes(status)&&!isCancelled;
+    const cancelButton=canCancel?'<button type="button" class="secondary order-action-btn" data-order-action="cancel" data-order-id="'+id+'">Отменить заказ</button>':'';
+    const orderTitle=escapeOrderText(o.title||o.order_id);
+    const chatTitle=escapeOrderText(o.title||'Заказ');
+    const chatButton='<button type="button" class="secondary order-action-btn" data-order-chat="1" data-order-id="'+id+'" data-order-type="'+(o.order_type==='custom'?'custom':'product')+'" data-order-title="'+chatTitle+'">💬 Чат заказа</button>';
+    const actions='<div class="order-actions">'+(payable?'<button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button>':'')+cancelButton+chatButton+'</div>';
+    return '<div class="order-card"><div class="lineitem"><span><b>'+orderTitle+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+escapeOrderText(state)+'</small></b></div>'+actions+'</div>';
+   };
+   const paidOrders=orders.filter(o=>String(o.payment_status||o.status||'').toLowerCase()==='paid');
+   const cancelledOrders=orders.filter(o=>['cancelled','canceled'].includes(String(o.payment_status||o.status||'').toLowerCase()));
+   const activeOrders=orders.filter(o=>!paidOrders.includes(o)&&!cancelledOrders.includes(o));
+   const collapsedGroup=(key,title,items)=>items.length?'<details class="orders-collapsible" data-orders-group="'+key+'"><summary><span>'+title+'</span><small>'+items.length+'</small></summary>'+items.map(renderOrder).join('')+'</details>':'';
+   root.innerHTML=orders.length
+    ?activeOrders.map(renderOrder).join('')+collapsedGroup('paid','Оплаченные заказы',paidOrders)+collapsedGroup('cancelled','Отменённые заказы',cancelledOrders)
+    :'<p class="muted">Пока заказов нет.</p>';
+   const paidDisclosure=root.querySelector('[data-orders-group="paid"]');if(paidDisclosure)paidDisclosure.open=paidWasOpen;
+   const cancelledDisclosure=root.querySelector('[data-orders-group="cancelled"]');if(cancelledDisclosure)cancelledDisclosure.open=cancelledWasOpen;
+  }
  }catch(e){
   console.warn('Не удалось загрузить список заказов:',e);
   const root=document.getElementById('ordersList');if(root)root.innerHTML='<p class="muted">Не удалось загрузить заказы. Попробуйте обновить раздел.</p>';
