@@ -1445,21 +1445,13 @@ body.dark-theme .announcement-bg-purple{background:linear-gradient(135deg,#392d4
  <div class="grid" id="products"></div>
 </section>
 <section id="giftBuilderView" class="hidden">
- <div class="sectionhead"><h2>🎁 Собери подарок</h2><span>конструктор набора</span></div>
- <div class="panel"><h3>1. Выбери товары из каталога</h3><p class="notice">Можно выбрать несколько разных работ и указать количество каждой.</p><div id="giftBuilderProducts" class="grid"></div></div>
- <div class="panel"><h3>2. Добавь оформление</h3>
-  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderPostcard" type="checkbox" style="width:auto"> <span>💌 Индивидуальная открытка <b>+35 ⭐</b></span></label>
-  <label>Текст поздравления<textarea id="giftBuilderPostcardText" rows="3" maxlength="700" placeholder="Напиши, кому и что пожелать…"></textarea></label>
-  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderCertificate" type="checkbox" style="width:auto"> <span>🏷️ Подарочный сертификат <b>+25 ⭐</b></span></label>
-  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderFiller" type="checkbox" style="width:auto"> <span>🎀 Наполнитель для набора <b>+40 ⭐</b></span></label>
- </div>
- <div class="panel"><h3>3. Расположи предметы</h3><p class="notice">Перетаскивай карточки, чтобы задать порядок расположения. На iPad можно также использовать стрелки.</p><div id="giftBuilderLayout" style="display:grid;gap:8px"></div></div>
- <div class="panel"><h3>4. Сезонные дополнения</h3>
-  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderSticker" type="checkbox" style="width:auto"> <span>✨ Набор сезонных стикеров <b>+20 ⭐</b></span></label>
-  <label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderDrawing" type="checkbox" style="width:auto"> <span>🖍️ Маленький сезонный рисунок <b>+70 ⭐</b></span></label>
- </div>
- <div class="panel"><h3>5. ИИ-консультант</h3><p class="notice">Обсуди собранный набор с ИИ до оформления заказа.</p><div id="giftBuilderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto"></div><textarea id="giftBuilderChatInput" rows="2" maxlength="1800" placeholder="Например: что ещё подойдёт к этому подарку?"></textarea><button class="secondary" id="giftBuilderAsk" type="button" onclick="askGiftBuilderAi()">Спросить ИИ-консультанта</button></div>
- <div class="panel"><div class="lineitem"><span>Товары</span><b id="giftBuilderProductsTotal">0 ⭐</b></div><div class="lineitem"><span>Дополнения</span><b id="giftBuilderExtrasTotal">0 ⭐</b></div><div class="lineitem"><span>Итого без доставки</span><b id="giftBuilderTotal">0 ⭐</b></div><p class="notice">Доплаты за оформление показаны заранее. Доставка рассчитывается отдельно при оформлении.</p><div class="row-actions"><button class="secondary" type="button" onclick="showView('catalogView')">← Назад в каталог</button><button class="primary" type="button" id="giftBuilderAdd" onclick="addGiftBuilderToCart()">Добавить набор в корзину 🎁</button></div></div>
+ <div class="sectionhead"><h2>🎁 Создай набор</h2><span id="giftBuilderStepLabel">Шаг 1 из 4</span></div>
+ <div class="panel" style="position:sticky;top:8px;z-index:8;background:var(--panel);backdrop-filter:blur(14px)"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:8px"><b id="giftBuilderProgressText">Выбор картины</b><span id="giftBuilderProgressPercent">25%</span></div><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden"><div id="giftBuilderProgress" style="height:100%;width:25%;background:linear-gradient(90deg,#d49a36,#f6d88b);border-radius:99px;transition:width .35s ease"></div></div></div>
+ <div class="panel gift-step" data-gift-step="1"><h3>1. Выбери картину</h3><p class="notice">Нажми на понравившуюся работу. Можно выбрать несколько картин.</p><div id="giftBuilderProducts" class="grid"></div></div>
+ <div class="panel gift-step hidden" data-gift-step="2"><h3>2. Открытка</h3><label>Пожелание для открытки<textarea id="giftBuilderPostcardText" rows="4" maxlength="700" placeholder="Напиши, кому предназначен подарок и что хочется пожелать…"></textarea></label><label>Тон открытки<select id="giftBuilderTone"><option value="warm">Тёплый и душевный</option><option value="funny">Весёлый и лёгкий</option><option value="formal">Элегантный и сдержанный</option><option value="festive">Праздничный</option><option value="gentle">Нежный</option></select></label><label>Детальность оформления<select id="giftBuilderDetail"><option value="simple">Лаконично</option><option value="medium" selected>Средняя детализация</option><option value="premium" disabled>Премиальное оформление — VIP 👑</option></select></label><p class="notice" id="giftBuilderVipPostcard">👑 VIP открывает больше скрапбукинга, декоративных слоёв, фактурных деталей и сложную композицию.</p><label>Дополнительные пожелания<textarea id="giftBuilderPostcardWishes" rows="3" maxlength="700" placeholder="Например: добавить цветы, звёзды или определённые цвета…"></textarea></label></div>
+ <div class="panel gift-step hidden" data-gift-step="3"><h3>3. Детали набора</h3><label>Какую подарочную коробку ты хочешь?<textarea id="giftBuilderBox" rows="2" maxlength="350" placeholder="Например: светлая коробка с золотой лентой…"></textarea></label><label>Количество наполнителя<select id="giftBuilderFiller"><option value="many">Много</option><option value="medium" selected>Среднее количество</option><option value="none">Без наполнителя</option></select></label><label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderSeasonal" type="checkbox" style="width:auto"><span>🎁 Секретный сезонный подарок</span></label><label>Количество стикеров<select id="giftBuilderStickerQty"><option value="0">Не добавлять</option><option value="1">1 штука</option><option value="2">2 штуки</option><option value="3">3 штуки</option><option value="4">4 штуки</option><option value="5">5 штук</option><option value="10">10 штук</option></select></label><label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderPriority" type="checkbox" style="width:auto"><span>⚡ Приоритетный заказ <b>только VIP</b></span></label><p id="giftBuilderPriorityHint" class="notice">Приоритетная обработка заказа доступна участникам с действующей VIP-подпиской.</p></div>
+ <div class="panel gift-step hidden" data-gift-step="4"><h3>4. ИИ-помощник</h3><p class="notice">Попроси ИИ поправить пожелание, предложить оформление или внести изменения в состав набора. Перед оформлением он покажет, что собирается изменить.</p><div id="giftBuilderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto"></div><textarea id="giftBuilderChatInput" rows="3" maxlength="1800" placeholder="Например: сделай открытку более праздничной и добавь синие детали…"></textarea><button class="secondary" id="giftBuilderAsk" type="button" onclick="askGiftBuilderAi()">Отправить ИИ-помощнику</button><div class="lineitem"><span>Товары</span><b id="giftBuilderProductsTotal">0 ⭐</b></div><div class="lineitem"><span>Дополнения</span><b id="giftBuilderExtrasTotal">0 ⭐</b></div><div class="lineitem"><span>Итого без доставки</span><b id="giftBuilderTotal">0 ⭐</b></div><p class="notice">После оформления заказ можно обсуждать с ИИ ещё 3 дня, пока владелец не подтвердил заказ и не выставил счёт.</p></div>
+ <div class="panel" style="position:sticky;bottom:76px;z-index:7;background:var(--panel);backdrop-filter:blur(14px)"><div class="row-actions" style="margin:0"><button class="secondary" id="giftBuilderBack" type="button" onclick="giftBuilderPrevStep()" disabled>← Назад</button><button class="primary" id="giftBuilderContinue" type="button" onclick="giftBuilderNextStep()" style="flex:2;margin-top:0">Продолжить →</button></div><button class="primary hidden" id="giftBuilderAdd" type="button" onclick="addGiftBuilderToCart()">Перейти к оформлению заказа 🎁</button></div>
 </section>
 <section id="cartView" class="hidden">
  <div class="sectionhead"><h2>🛒 Корзина</h2><span id="cartCount">0 товаров</span></div>
@@ -1907,19 +1899,33 @@ function drawProducts() {
 }
 
 document.addEventListener('change',event=>{if(event.target?.closest?.('#giftBuilderView'))renderGiftBuilder();});
+let giftBuilderStep=1;
 function openGiftBuilder(){
- giftBuilderSelection={};
- Object.entries(cart||{}).forEach(([id,qty])=>{if(Number(qty)>0)giftBuilderSelection[String(id)]=Math.min(10,Number(qty));});
- giftBuilderLayoutOrder=Object.keys(giftBuilderSelection);
- giftBuilderDraftId=null;giftBuilderChatMessages=[];
- ['giftBuilderPostcard','giftBuilderCertificate','giftBuilderFiller','giftBuilderSticker','giftBuilderDrawing'].forEach(id=>{const el=document.getElementById(id);if(el)el.checked=false;});
- const text=document.getElementById('giftBuilderPostcardText');if(text)text.value='';
- const log=document.getElementById('giftBuilderChatLog');if(log)log.replaceChildren();
- renderGiftBuilder();showView('giftBuilderView');
+ giftBuilderSelection={};Object.entries(cart||{}).forEach(([id,qty])=>{if(Number(qty)>0)giftBuilderSelection[String(id)]=Math.min(10,Number(qty));});
+ giftBuilderLayoutOrder=Object.keys(giftBuilderSelection);giftBuilderDraftId=null;giftBuilderChatMessages=[];giftBuilderStep=1;
+ ['giftBuilderSeasonal','giftBuilderPriority'].forEach(id=>{const el=document.getElementById(id);if(el)el.checked=false;});
+ ['giftBuilderPostcardText','giftBuilderPostcardWishes','giftBuilderBox','giftBuilderChatInput'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ ['giftBuilderTone','giftBuilderDetail','giftBuilderFiller','giftBuilderStickerQty'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=id==='giftBuilderDetail'?1:0;});
+ const detail=document.getElementById('giftBuilderDetail');if(detail&&vipActive)detail.querySelector('option[value="premium"]').disabled=false;
+ const priority=document.getElementById('giftBuilderPriority');if(priority){priority.disabled=!vipActive;priority.checked=false;}
+ const hint=document.getElementById('giftBuilderPriorityHint');if(hint)hint.textContent=vipActive?'VIP активен: можно выбрать приоритетную обработку заказа.':'Приоритетная обработка заказа доступна только участникам с действующей VIP-подпиской.';
+ const log=document.getElementById('giftBuilderChatLog');if(log)log.replaceChildren();giftBuilderUpdateStep();renderGiftBuilder();showView('giftBuilderView');
 }
+function giftBuilderUpdateStep(){
+ const titles={1:'Выбор картины',2:'Открытка',3:'Детали набора',4:'ИИ-помощник'},percent=giftBuilderStep*25;
+ document.querySelectorAll('.gift-step').forEach(el=>el.classList.toggle('hidden',Number(el.dataset.giftStep)!==giftBuilderStep));
+ const label=document.getElementById('giftBuilderStepLabel'),progress=document.getElementById('giftBuilderProgress'),pt=document.getElementById('giftBuilderProgressText'),pp=document.getElementById('giftBuilderProgressPercent'),back=document.getElementById('giftBuilderBack'),next=document.getElementById('giftBuilderContinue'),finish=document.getElementById('giftBuilderAdd');
+ if(label)label.textContent='Шаг '+giftBuilderStep+' из 4';if(progress)progress.style.width=percent+'%';if(pt)pt.textContent=titles[giftBuilderStep];if(pp)pp.textContent=percent+'%';if(back)back.disabled=giftBuilderStep===1;if(next)next.classList.toggle('hidden',giftBuilderStep===4);if(finish)finish.classList.toggle('hidden',giftBuilderStep!==4);
+}
+function giftBuilderNextStep(){
+ if(giftBuilderStep===1&&!giftBuilderSelectedItems().length)return toast('Сначала выбери хотя бы одну картину.');
+ if(giftBuilderStep===2&&document.getElementById('giftBuilderPostcardText')?.value.trim().length<2)return toast('Напиши пожелание для открытки.');
+ if(giftBuilderStep<4){giftBuilderStep++;giftBuilderUpdateStep();window.scrollTo({top:0,behavior:'smooth'});}
+}
+function giftBuilderPrevStep(){if(giftBuilderStep>1){giftBuilderStep--;giftBuilderUpdateStep();window.scrollTo({top:0,behavior:'smooth'});}}
 function giftBuilderSelectedItems(){return Object.entries(giftBuilderSelection).filter(([,qty])=>Number(qty)>0).map(([id,qty])=>({id,qty:Number(qty)}));}
 function giftBuilderExtras(){
- return {postcard:document.getElementById('giftBuilderPostcard')?.checked===true,postcard_text:document.getElementById('giftBuilderPostcardText')?.value.trim()||'',certificate:document.getElementById('giftBuilderCertificate')?.checked===true,filler:document.getElementById('giftBuilderFiller')?.checked===true,seasonal_extras:[...(document.getElementById('giftBuilderSticker')?.checked?['sticker']:[]),...(document.getElementById('giftBuilderDrawing')?.checked?['drawing']:[])],layout:giftBuilderLayoutOrder.slice()};
+ return {postcard:true,postcard_text:document.getElementById('giftBuilderPostcardText')?.value.trim()||'',postcard_tone:document.getElementById('giftBuilderTone')?.value||'warm',postcard_detail:document.getElementById('giftBuilderDetail')?.value||'medium',postcard_wishes:document.getElementById('giftBuilderPostcardWishes')?.value.trim()||'',box_request:document.getElementById('giftBuilderBox')?.value.trim()||'',filler_level:document.getElementById('giftBuilderFiller')?.value||'medium',seasonal_extras:document.getElementById('giftBuilderSeasonal')?.checked?['secret_seasonal']:[],sticker_qty:Number(document.getElementById('giftBuilderStickerQty')?.value||0),priority_order:document.getElementById('giftBuilderPriority')?.checked===true,layout:giftBuilderLayoutOrder.slice()};
 }
 function renderGiftBuilder(){
  const root=document.getElementById('giftBuilderProducts');if(!root)return;root.replaceChildren();
@@ -1928,11 +1934,11 @@ function renderGiftBuilder(){
   const image=document.createElement('div');image.className='art';if(p[5]){const img=document.createElement('img');img.src=p[5];img.alt=p[1];img.loading='lazy';image.append(img);}else image.textContent=p[3]||'🎁';
   const title=document.createElement('b');title.textContent=p[1];
   const price=document.createElement('div');price.className='price';price.textContent=money(p[2]);
-  const label=document.createElement('label');label.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px';
-  const check=document.createElement('input');check.type='checkbox';check.checked=qty>0;check.disabled=p[2]==null;check.style.width='auto';check.addEventListener('change',()=>{if(check.checked)giftBuilderSelection[id]=1;else delete giftBuilderSelection[id];giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(x=>x!==id);if(check.checked)giftBuilderLayoutOrder.push(id);renderGiftBuilder();});
-  const labelText=document.createElement('span');labelText.textContent='Добавить';label.append(check,labelText);
-  const count=document.createElement('input');count.type='number';count.min='1';count.max='10';count.value=String(qty||1);count.disabled=!qty;count.setAttribute('aria-label','Количество: '+p[1]);count.style.cssText='width:75px;margin-top:8px';count.addEventListener('change',()=>{const n=Math.max(1,Math.min(10,Math.floor(Number(count.value)||1)));giftBuilderSelection[id]=n;renderGiftBuilder();});
-  card.append(image,title,price,label,count);root.append(card);
+  card.style.cursor=p[2]==null?'not-allowed':'pointer';card.style.border=qty>0?'2px solid var(--accent)':'1px solid var(--line)';card.style.transition='transform .18s ease,border-color .18s ease,box-shadow .18s ease';card.style.transform=qty>0?'translateY(-2px)':'none';card.setAttribute('role','button');card.setAttribute('aria-pressed',String(qty>0));card.tabIndex=p[2]==null?-1:0;
+  const selected=document.createElement('div');selected.textContent=qty>0?'✓ Выбрано':'Нажми, чтобы выбрать';selected.style.cssText='font-size:13px;color:var(--muted);margin-top:8px';
+  card.addEventListener('click',e=>{if(e.target.closest('input'))return;if(p[2]==null)return;if(qty>0)delete giftBuilderSelection[id];else giftBuilderSelection[id]=1;giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(x=>x!==id);if(giftBuilderSelection[id])giftBuilderLayoutOrder.push(id);renderGiftBuilder();});
+  const count=document.createElement('input');count.type='number';count.min='1';count.max='10';count.value=String(qty||1);count.disabled=!qty;count.setAttribute('aria-label','Количество: '+p[1]);count.style.cssText='width:75px;margin-top:8px';count.addEventListener('click',e=>e.stopPropagation());count.addEventListener('change',e=>{e.stopPropagation();const n=Math.max(1,Math.min(10,Math.floor(Number(count.value)||1)));giftBuilderSelection[id]=n;renderGiftBuilder();});
+  card.append(image,title,price,selected,count);root.append(card);
  });
  const layout=document.getElementById('giftBuilderLayout');if(layout){layout.replaceChildren();giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(id=>!!giftBuilderSelection[id]);Object.keys(giftBuilderSelection).forEach(id=>{if(!giftBuilderLayoutOrder.includes(id))giftBuilderLayoutOrder.push(id);});
   giftBuilderLayoutOrder.forEach((id,index)=>{
@@ -1949,7 +1955,7 @@ function renderGiftBuilder(){
   });
  }
  const extras=giftBuilderExtras(),productTotal=giftBuilderSelectedItems().reduce((sum,item)=>sum+Number(products.find(p=>String(p[0])===item.id)?.[2]||0)*item.qty,0);
- const extraTotal=(extras.postcard?35:0)+(extras.certificate?25:0)+(extras.filler?40:0)+(extras.seasonal_extras.includes('sticker')?20:0)+(extras.seasonal_extras.includes('drawing')?70:0);
+ const extraTotal=(extras.postcard_text?35:0)+(extras.filler_level==='many'?65:extras.filler_level==='medium'?35:0)+(extras.seasonal_extras.includes('secret_seasonal')?45:0)+(Number(extras.sticker_qty||0)*10);
  const selected=giftBuilderSelectedItems();
  const productLabel=document.getElementById('giftBuilderProductsTotal'),extrasLabel=document.getElementById('giftBuilderExtrasTotal'),totalLabel=document.getElementById('giftBuilderTotal'),add=document.getElementById('giftBuilderAdd');
  if(productLabel)productLabel.textContent=money(productTotal);if(extrasLabel)extrasLabel.textContent=money(extraTotal);if(totalLabel)totalLabel.textContent=money(productTotal+extraTotal);if(add)add.disabled=!selected.length||!catalogLoaded;
@@ -1957,7 +1963,7 @@ function renderGiftBuilder(){
 function moveGiftBuilderItem(id,direction){const from=giftBuilderLayoutOrder.indexOf(id),to=from+direction;if(from<0||to<0||to>=giftBuilderLayoutOrder.length)return;const next=giftBuilderLayoutOrder.slice();[next[from],next[to]]=[next[to],next[from]];giftBuilderLayoutOrder=next;renderGiftBuilder();}
 async function saveGiftBuilderDraft(){
  const items=giftBuilderSelectedItems();if(!items.length)throw new Error('Сначала выбери товары для подарка.');
- const extras=giftBuilderExtras();if(extras.postcard&&extras.postcard_text.length<2)throw new Error('Напиши поздравление для открытки.');
+ const extras=giftBuilderExtras();if(extras.postcard_text.length<2)throw new Error('Напиши пожелание для открытки.');if(extras.postcard_detail==='premium'&&!vipActive)throw new Error('Премиальное оформление открытки доступно только с VIP.');if(extras.priority_order&&!vipActive)throw new Error('Приоритетный заказ доступен только с VIP.');
  const d=await apiFetch('/api/gift-builder/draft',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,items,...extras})});
  giftBuilderDraftId=d.draft_id;return d;
 }
@@ -1980,6 +1986,7 @@ async function addGiftBuilderToCart(){
  try{
   const savedDraft=await saveGiftBuilderDraft();
   items.forEach(item=>{cart[item.id]=Number(cart[item.id]||0)+item.qty;});
+  window.pendingGiftBundlePriority=!!giftBuilderExtras().priority_order;
   window.pendingGiftBundleId=giftBuilderDraftId;
   window.pendingGiftBundleExtraStars=Math.max(0,Number(savedDraft.extras_total||0));
   try{localStorage.setItem('gift-pending-bundle-id',giftBuilderDraftId);localStorage.setItem('gift-pending-bundle-extras',String(window.pendingGiftBundleExtraStars));}catch{}
