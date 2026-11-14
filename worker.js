@@ -392,7 +392,7 @@ async function createOrderChatAnswer(env, history, orderContext) {
   return { reply: output.trim().slice(0,4000), change_summary: "", proposed_changes: {} };
 }
 
-async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive){
+async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allowItemChanges=true){
   if(!env.OPENAI_API_KEY)throw new Error("ИИ-помощник временно недоступен.");
   const instructions=[
     await getGlobalAiToneInstruction(env),
@@ -400,7 +400,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive){
     "Твоя задача — консультировать и по прямой просьбе клиента изменять только черновик набора, который ещё не оформлен.",
     "Верни строго JSON: {\"reply\":\"короткий ответ клиенту\",\"updates\":null ИЛИ объект с полями postcard_text,postcard_tone,postcard_detail,postcard_wishes,box_request,filler_level,seasonal_extras,sticker_qty,items}.",
     "Меняй поля только если клиент прямо попросил изменить их. Если клиент просто спрашивает совет, updates=null.",
-    "items можно менять только из списка каталога, используя точные id и qty 1..10. Не добавляй несуществующие товары. Не меняй цены, оплату и VIP-статус.",
+    (allowItemChanges?"items можно менять только из списка каталога, используя точные id и qty 1..10. Не добавляй несуществующие товары. Не меняй цены, оплату и VIP-статус.":"После оформления заказа НЕ меняй товары и их количество, цену, оплату или доставку. Изменять можно только пожелание, оформление открытки, коробку и дополнительные детали."),
     "postcard_tone: warm/funny/formal/festive/gentle; postcard_detail: simple/medium/premium; filler_level: many/medium/none; sticker_qty: 0..10; seasonal_extras допускает только secret_seasonal.",
     vipActive?"VIP активен. Можно выставить postcard_detail=premium или priority_order=true только если пользователь прямо просит; priority_order не включай без прямого запроса.":"VIP не активен. Не предлагай включать premium или priority_order.",
     "Текущий черновик: "+JSON.stringify(bundle).slice(0,5000),
@@ -2355,6 +2355,30 @@ export default {
         const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
         if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
+        const linkedBundle=product?await env.DB.prepare("SELECT id,bundle_json FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
+        if(linkedBundle){
+          let bundle={};try{bundle=JSON.parse(linkedBundle.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать детали набора."},409,origin);}
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
+          const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(orderId,telegramId).all();
+          const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+          const catalog=await getProducts(env),vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+          let answer;try{answer=await createGiftBuilderAnswer(env,history,bundle,catalog,!!vip,false);}catch(error){return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+          let updated=false;
+          if(answer.updates){const u=answer.updates,next={...bundle};
+            for(const key of ["postcard_text","postcard_wishes","box_request"])if(typeof u[key]==="string")next[key]=u[key].trim().slice(0,key==="box_request"?350:700);
+            if(["warm","funny","formal","festive","gentle"].includes(u.postcard_tone))next.postcard_tone=u.postcard_tone;
+            if(["simple","medium","premium"].includes(u.postcard_detail)&&(u.postcard_detail!=="premium"||vip))next.postcard_detail=u.postcard_detail;
+            if(["many","medium","none"].includes(u.filler_level))next.filler_level=u.filler_level;
+            if(Array.isArray(u.seasonal_extras))next.seasonal_extras=[...new Set(u.seasonal_extras.filter(x=>x==="secret_seasonal"))];
+            if(Number.isInteger(Number(u.sticker_qty)))next.sticker_qty=Math.max(0,Math.min(10,Number(u.sticker_qty)));
+            await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=? AND status='ordered'").bind(JSON.stringify({...next,updated_at:new Date().toISOString()}),linkedBundle.id,orderId).run();
+            updated=true;
+          }
+          const reply=answer.reply+(updated?"\\n\\nИзменения в пожеланиях и оформлении сохранены в заказе. Владелец увидит обновлённые детали.":"");
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(orderId,telegramId,reply).run();
+          try{await notifyOwner(env,"🎁 ИИ-чат набора\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+(updated?"\\nОбновлены детали набора.":""));}catch{}
+          return json({ok:true,reply,updated},200,origin);
+        }
         await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
         const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 30").bind(orderId,telegramId).all();
         const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
@@ -2535,7 +2559,7 @@ export default {
           if(["many","medium","none"].includes(u.filler_level))next.filler_level=u.filler_level;
           if(Array.isArray(u.seasonal_extras))next.seasonal_extras=[...new Set(u.seasonal_extras.filter(x=>x==="secret_seasonal"))];
           if(Number.isInteger(Number(u.sticker_qty)))next.sticker_qty=Math.max(0,Math.min(10,Number(u.sticker_qty)));
-          if(Array.isArray(u.items)){
+          if(allowItemChanges&&Array.isArray(u.items)){
             const counts=new Map();for(const item of u.items){const id=String(item.id||""),qty=Number(item.qty);if(catalog.some(p=>String(p.id)===id)&&Number.isInteger(qty)&&qty>=1&&qty<=10)counts.set(id,qty);}
             if(counts.size)next.items=[...counts].map(([id,qty])=>({id,qty}));
           }
