@@ -928,15 +928,17 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   if(path==="/api/admin/notifications" && method==="GET") {
     if(!ownerOnly())return aiJson({error:"Уведомления владельца доступны только владельцу."},403);
-    const rows=await env.DB.prepare("SELECT id,type,title,body,reference_id,created_at,read_at FROM admin_notifications ORDER BY id DESC LIMIT 60").all();
-    return aiJson({ok:true,notifications:rows.results||[]});
+    await env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run();
+    const rows=await env.DB.prepare("SELECT id,type,title,body,reference_id,created_at,read_at FROM admin_notifications WHERE created_at>=datetime('now','-7 days') ORDER BY id DESC LIMIT 100").all();
+    return aiJson({ok:true,notifications:rows.results||[],retention_days:7});
   }
   if(path==="/api/admin/notifications" && method==="POST") {
     if(!ownerOnly())return aiJson({error:"Управлять уведомлениями может только владелец."},403);
     const body=await aiReadJson(request),id=Number(body.id);
     if(body.action==="read_all")await env.DB.prepare("UPDATE admin_notifications SET read_at=CURRENT_TIMESTAMP WHERE read_at IS NULL").run();
+    else if(body.action==="delete_all")await env.DB.prepare("DELETE FROM admin_notifications").run();
     else if(Number.isSafeInteger(id)&&id>0)await env.DB.prepare("UPDATE admin_notifications SET read_at=CURRENT_TIMESTAMP WHERE id=? AND read_at IS NULL").bind(id).run();
-    else return aiJson({error:"Укажите уведомление."},400);
+    else return aiJson({error:"Укажите уведомление или действие."},400);
     return aiJson({ok:true});
   }
   if(path==="/api/admin/ai-complaints" && method==="GET") {
@@ -946,8 +948,12 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   if(path==="/api/admin/ai-orders" && method==="GET") {
     if(!has("ai_orders_view"))return aiJson({error:"Недостаточно прав."},403);
-    const rows=await env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('review','approved','paid') ORDER BY d.created_at DESC LIMIT 100").all();
-    return aiJson({ok:true,orders:rows.results||[]});
+    const [draftRows,bundleRows]=await Promise.all([
+      env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at,'ai_draft' AS record_type FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('collecting','review','approved','paid') ORDER BY d.created_at DESC LIMIT 100").all(),
+      env.DB.prepare("SELECT o.id,o.id AS order_id,o.telegram_id,u.first_name,u.username,o.product_title AS subject,o.total_stars AS approved_stars,o.total_stars AS estimated_stars,o.payment_status,o.paid_at,o.created_at,CASE WHEN o.payment_status='paid' THEN 'paid' ELSE 'ordered' END AS status,b.bundle_json AS details_json,'gift_bundle' AS record_type FROM gift_bundles b INNER JOIN orders o ON o.id=b.order_id AND o.telegram_id=b.telegram_id LEFT JOIN users u ON u.telegram_id=o.telegram_id WHERE b.status='ordered' ORDER BY o.created_at DESC LIMIT 100").all()
+    ]);
+    const orders=[...(draftRows.results||[]),...(bundleRows.results||[])].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,150);
+    return aiJson({ok:true,orders});
   }
   if(path==="/api/admin/ai-orders" && method==="POST") {
     if(!has("ai_orders_manage"))return aiJson({error:"Недостаточно прав."},403);
