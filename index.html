@@ -1136,6 +1136,57 @@ html body > div.bottom button{
   opacity:1!important;
   pointer-events:auto!important;
 }
+
+/* 2026-11: unified low-cost seasonal effects, readable navigation and restrained event borders */
+html{scroll-behavior:auto}
+html body>.season-particles,html body>.leaf-layer,html body>#seasonDecorations{
+ position:fixed!important;inset:0!important;z-index:1!important;pointer-events:none!important;
+ overflow:hidden!important;contain:strict!important;isolation:auto!important
+}
+html body>.season-particles *,html body>.leaf-layer *,html body>#seasonDecorations *{pointer-events:none!important}
+html body>header,html body>main,html body>nav{position:relative;z-index:2}
+html body>.bottom{z-index:100!important;position:fixed!important}
+html body>.toast,html body>.season-event-overlay,html body>.work-detail-overlay{z-index:110!important}
+.season-particles span,.leaf-layer .leaf,#seasonDecorations span{
+ filter:none!important;text-shadow:none!important;will-change:transform;backface-visibility:hidden
+}
+.leaf-layer{opacity:.32!important}
+body.dark-theme .leaf-layer{opacity:.24!important}
+body.event-halloween:before,body.event-halloween:after,
+body.dark-theme.event-halloween:before,body.dark-theme.event-halloween:after,
+body.event-halloween header:before,body.event-halloween header:after,
+body.dark-theme.event-halloween header:before,body.dark-theme.event-halloween header:after,
+body.event-halloween .brand:before,body.event-halloween .brand:after,
+body.dark-theme.event-halloween .brand:before,body.dark-theme.event-halloween .brand:after,
+body.event-halloween .promo-line:before,body.event-halloween .promo-line:after,
+body.dark-theme.event-halloween .promo-line:before,body.dark-theme.event-halloween .promo-line:after{
+ content:none!important;display:none!important
+}
+body.event-halloween .hero,body.dark-theme.event-halloween .hero{
+ border:1px solid #b87950!important;outline:none!important;box-shadow:0 5px 18px #0002!important
+}
+body.event-halloween .product,body.event-halloween .menu-card,
+body.dark-theme.event-halloween .product,body.dark-theme.event-halloween .menu-card{
+ outline:none!important;box-shadow:0 3px 12px #0002!important
+}
+body.event-halloween .secondary,body.dark-theme.event-halloween .secondary,
+body.event-halloween nav button,body.dark-theme.event-halloween nav button{
+ outline:none!important;box-shadow:none!important
+}
+body.event-halloween .bottom,body.dark-theme.event-halloween .bottom{
+ border-top:1px solid #704b49!important;box-shadow:0 -3px 14px #0003!important
+}
+body .bottom button{font-size:12px!important;font-weight:600!important;line-height:1.25!important}
+body:not(.dark-theme) .bottom button{color:#66513b!important}
+body:not(.dark-theme) .bottom button.active{color:#8b4b12!important}
+body.dark-theme .bottom button{color:#d4dbe5!important}
+body.dark-theme .bottom button.active{color:#ffe0a0!important}
+body.event-halloween .bottom button,body.dark-theme.event-halloween .bottom button{color:#ead8e2!important}
+body.event-halloween .bottom button.active,body.dark-theme.event-halloween .bottom button.active{color:#ffc27c!important}
+@media(prefers-reduced-motion:reduce){
+ .season-particles span,.leaf-layer .leaf,#seasonDecorations span{animation:none!important}
+}
+
 </style>
 </head>
 <body>
@@ -1704,18 +1755,46 @@ function buyProductNow(productId){
  toast('Работа добавлена к быстрому оформлению. Укажи адрес доставки.');
 }
 
-function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)resetCraftConversation();
- allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
- document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
- document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
- if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
- if (id === 'supportView') { loadSupportHistory(); refreshVipHelpCard(); }
- if (id === 'vipSupportView') refreshVipHelpCard();
- if (id === 'balanceView') loadBalance();
- if (id === 'vipView') loadVip();
- if (id === 'aiWorkshopView') loadCraftConversation();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
- if (id === 'menuView') loadAnnouncements();
+const viewLoadState=new Map();
+let activeViewId='menuView';
+function runViewLoad(key,task,ttl=8000){
+ const now=Date.now(),state=viewLoadState.get(key);
+ if(state?.promise)return state.promise;
+ if(state&&now-state.time<ttl)return Promise.resolve();
+ const entry={time:now,promise:null};
+ entry.promise=Promise.resolve().then(task).catch(error=>console.warn('View data load failed:',key,error)).finally(()=>{entry.promise=null;entry.time=Date.now();});
+ viewLoadState.set(key,entry);
+ return entry.promise;
+}
+function showView(id) {
+ if(id==='aiWorkshopView'&&!craftMessages.length)resetCraftConversation();
+ allViews.forEach(v=>document.getElementById(v)?.classList.toggle('hidden',v!==id));
+ document.querySelectorAll('.bottom button').forEach(b=>b.classList.toggle('active',b.dataset.view===id));
+ const filters=document.getElementById('filters');if(filters)filters.style.display=id==='catalogView'?'flex':'none';
+ if(activeViewId===id)return;
+ activeViewId=id;
+ if(['ordersView','profileView','balanceView'].includes(id))runViewLoad('customer-data',loadMe,6000);
+ if(id==='supportView'){runViewLoad('support-history',loadSupportHistory,8000);runViewLoad('vip-card',refreshVipHelpCard,15000);}
+ if(id==='vipSupportView')runViewLoad('vip-card',refreshVipHelpCard,15000);
+ if(id==='balanceView')runViewLoad('balance',loadBalance,6000);
+ if(id==='vipView')runViewLoad('vip',loadVip,10000);
+ if(id==='aiWorkshopView')runViewLoad('craft-conversation',loadCraftConversation,5000);
+ if(id==='adminPanelView')initAdminCategories();
+ if(id==='menuView')runViewLoad('announcements',loadAnnouncements,20000);
+}
+const showAdminCategoryBase=showAdminCategory;
+function showAdminCategory(key){
+ showAdminCategoryBase(key);
+ const jobs={
+  operations:[['admin-dashboard',loadAdminDashboard],['admin-users',loadAdminUsers],['admin-orders',loadAdminOrders],['admin-support',loadAdminSupport],['admin-announcements',loadAdminAnnouncements],['admin-campaigns',loadAdminCampaigns]],
+  store:[['admin-products',loadAdminProducts]],
+  cheats:[['admin-system-controls',loadAdminSystemControls]],
+  ai:[['admin-ai-bot',loadAiBotAdmin]],
+  aiorders:[['admin-ai-orders',loadAiOrders]],
+  reports:[['admin-reports',loadAiReports]],
+  server:[['admin-technical',loadAdminTechnicalCenter],['admin-diagnostics',loadAdminServerDiagnostics]]
+ };
+ (jobs[key]||[]).forEach(([name,task])=>runViewLoad(name,task,10000));
 }
 
 function openBot(action) {
@@ -1739,10 +1818,10 @@ function renderSeasonDecorations(eventId){
  if(!eventId){root?.remove();return;}
  if(!root){root=document.createElement('div');root.id='seasonDecorations';root.setAttribute('aria-hidden','true');document.body.appendChild(root);}
  root.replaceChildren();
- const make=(cls,char,count)=>{for(let i=0;i<count;i++){const el=document.createElement('span');el.className=cls;el.textContent=char;el.style.left=(Math.random()*100).toFixed(2)+'%';el.style.animationDelay=(-Math.random()*22).toFixed(2)+'s';el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';root.appendChild(el)}};
- if(eventId==='newyear'){make('festive-fall','❄',30);make('festive-fall','✦',18);make('festive-bauble','🔴',1);make('festive-firework','✺',5);}
- if(eventId==='halloween'){make('festive-fall','🍂',20);make('festive-twinkle','✦',12);make('festive-bat','🦇',5);}
- if(eventId==='easter'){make('festive-fall','🌸',18);make('festive-twinkle','✿',18);make('festive-egg','🥚',6);}
+ const make=(cls,char,count)=>{for(let i=0;i<count;i++){const el=document.createElement('span');el.className=cls;el.textContent=char;el.style.left=(Math.random()*100).toFixed(2)+'%';el.style.animationDelay=(-Math.random()*18).toFixed(2)+'s';el.style.animationDuration=(18+Math.random()*12).toFixed(2)+'s';el.style.fontSize=(12+Math.random()*12).toFixed(0)+'px';root.appendChild(el)}};
+ if(eventId==='newyear'){make('festive-fall','❄',12);make('festive-fall','✦',6);make('festive-bauble','🔴',1);make('festive-firework','✺',2);}
+ if(eventId==='halloween'){make('festive-fall','🍂',8);make('festive-twinkle','✦',4);}
+ if(eventId==='easter'){make('festive-fall','🌸',8);make('festive-twinkle','✿',6);make('festive-egg','🥚',3);}
 }
 function applySeasonEvent(eventId,notify=false){
  const season=eventId?eventSeason(eventId):'';
