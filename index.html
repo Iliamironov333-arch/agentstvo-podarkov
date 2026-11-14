@@ -1325,7 +1325,7 @@ html body>.bottom{z-index:30!important}
  content:"";position:absolute;width:5px;height:4px;left:calc(50% - 2.5px);top:-5px;
  border:1px solid #e7d29b;border-radius:3px 3px 0 0;
 }
-#seasonDecorations .festive-firework{
+html body>#seasonDecorations .festive-firework{
  position:absolute!important;display:block;width:5px;height:5px;padding:0;
  top:var(--burst-y,35vh)!important;bottom:auto!important;left:var(--burst-x,50%)!important;
  border-radius:50%;background:#fff5c5;
@@ -1990,12 +1990,12 @@ function renderSeasonDecorations(eventId){
  const make=(cls,char,count,options={})=>{
   for(let i=0;i<count;i++){
    const el=document.createElement('span');el.className=cls;el.textContent=char||'';
-   el.style.left=(options.leftRange?options.leftRange[0]+Math.random()*(options.leftRange[1]-options.leftRange[0]):Math.random()*100).toFixed(2)+'%';
+   const left=(options.leftRange?options.leftRange[0]+Math.random()*(options.leftRange[1]-options.leftRange[0]):Math.random()*100).toFixed(2)+'%';el.style.left=left;
    el.style.animationDelay=(-Math.random()*(options.delay||22)).toFixed(2)+'s';
    el.style.animationDuration=(options.durationMin||12+Math.random()*18)+'s';
    if(!options.durationMin)el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';
    el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';
-   if(options.topRange)el.style.top=(options.topRange[0]+Math.random()*(options.topRange[1]-options.topRange[0])).toFixed(2)+'vh';
+   if(options.topRange){const top=(options.topRange[0]+Math.random()*(options.topRange[1]-options.topRange[0])).toFixed(2)+'vh';el.style.top=top;if(cls==='festive-firework'){el.style.setProperty('--burst-x',left);el.style.setProperty('--burst-y',top);}}
    if(options.size){el.style.width=options.size+'px';el.style.height=options.size+'px';}
    root.appendChild(el);
   }
