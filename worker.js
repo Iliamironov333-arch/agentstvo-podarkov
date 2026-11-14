@@ -440,7 +440,7 @@ async function createSupportAnswer(env, history, isVip, products = []) {
   const model = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
   const response = await fetch("https://api.openai.com/v1/responses", {
     method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({model,instructions,input:history.slice(-50).map(item=>({role:item.role,content:item.content})),max_output_tokens:isVip?1600:1200})
+    body:JSON.stringify({model,instructions,input:history.slice(-50).map(item=>({role:item.role==="user"?"user":"assistant",content:item.content})),max_output_tokens:isVip?1600:1200})
   });
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error("ИИ-помощник временно недоступен.");
