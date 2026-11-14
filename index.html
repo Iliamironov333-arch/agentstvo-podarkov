@@ -1912,8 +1912,8 @@ function openGiftBuilder(){
  ['giftBuilderPostcardText','giftBuilderPostcardWishes','giftBuilderBox','giftBuilderChatInput'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
  ['giftBuilderTone','giftBuilderDetail','giftBuilderFiller','giftBuilderStickerQty'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=id==='giftBuilderDetail'?1:0;});
  const detail=document.getElementById('giftBuilderDetail');if(detail){const premium=detail.querySelector('option[value="premium"]');if(premium){premium.disabled=!vipActive;premium.textContent=vipActive?'Премиальное оформление — VIP 👑':'🔒 Премиальное оформление — Только с VIP';}}
- const priority=document.getElementById('giftBuilderPriority');if(priority){priority.disabled=!vipActive;priority.checked=false;}
- const hint=document.getElementById('giftBuilderPriorityHint');if(hint)hint.textContent=vipActive?'VIP активен: можно выбрать приоритетную обработку заказа.':'Приоритетная обработка заказа доступна только участникам с действующей VIP-подпиской.';
+ const priority=document.getElementById('giftBuilderPriority');if(priority){priority.disabled=!vipActive;priority.checked=false;const label=priority.closest('label')?.querySelector('span');if(label)label.textContent=vipActive?'⚡ Приоритетный заказ — VIP 👑':'🔒 Приоритетный заказ — Только с VIP';}
+ const hint=document.getElementById('giftBuilderPriorityHint');if(hint)hint.textContent=vipActive?'VIP активен: можно выбрать приоритетную обработку заказа.':'🔒 Приоритетная обработка заказа доступна только участникам с действующей VIP-подпиской.';
  const log=document.getElementById('giftBuilderChatLog');if(log)log.replaceChildren();giftBuilderUpdateStep();renderGiftBuilder();showView('giftBuilderView');
 }
 function giftBuilderUpdateStep(){
@@ -2021,7 +2021,7 @@ function openProductDetail(product){
 }
 function updateDeliveryMethodUI(){
  const priorityOrder=document.getElementById('priorityOrder');if(priorityOrder){priorityOrder.disabled=!vipActive;if(!vipActive)priorityOrder.checked=false;}
- const priorityHint=document.getElementById('priorityOrderHint');if(priorityHint)priorityHint.textContent=vipActive?'VIP активен: приоритетная обработка заказа доступна.':'Приоритетная обработка доступна только с действующей VIP-подпиской.';
+ const priorityHint=document.getElementById('priorityOrderHint');if(priorityHint)priorityHint.textContent=vipActive?'VIP активен: приоритетная обработка заказа доступна.':'🔒 Приоритетная обработка доступна только с действующей VIP-подпиской.';
  const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
  const fields=document.getElementById('deliveryAddressFields');
  const priority=document.getElementById('priorityDelivery');
