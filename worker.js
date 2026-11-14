@@ -2861,7 +2861,6 @@ export default {
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
-          const result=await createCraftAnswer(env,messages,!!vip);
           const tier=vip?"vip":"standard",chatLimit=vip?100:50;
           let draftId=String(b.conversation_id||"");
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
@@ -2874,6 +2873,7 @@ export default {
           }
           const storedCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
           if(Number(storedCount?.n||0)>chatLimit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
+          const result=await createCraftAnswer(env,messages,!!vip);
                     const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
           const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
