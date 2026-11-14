@@ -1729,11 +1729,11 @@ html body>#seasonDecorations .festive-firework{
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>💬 Поддержка</h2></div>
  <div class="panel" id="vipHelpCard"><h3>👑 Помощь Агентства VIP</h3><p class="muted" id="vipHelpDescription">Проверяем действующую подписку…</p><button class="primary" id="vipHelpButton" onclick="openVipSupport()" disabled>🔒 VIP-помощь заблокирована</button></div>
- <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p><button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button></div>
+ <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Помощник может предложить кнопки перехода и подготовить идею для ИИ-мастерской.</p><div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" type="button" onclick="createSupportChat()">＋ Новый чат</button><span class="muted" id="supportChatQuota"></span></div><div id="supportConversationList" class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"></div><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p><button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button></div>
 </section>
 <section id="aiWorkshopView" class="hidden">
   <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
-  <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник уточняет пожелания, подбирает готовую работу и рассчитывает предварительную цену.</p></div>
+  <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" type="button" onclick="createCraftChat()">＋ Новый чат</button><span class="muted" id="craftChatQuota"></span></div><div id="craftConversationList" class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="createCraftChat()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник уточняет пожелания, подбирает готовую работу и рассчитывает предварительную цену.</p></div>
   <div class="panel hidden" id="craftResultPanel"><h3>Предложение мастерской</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
  </section>
 <section id="vipSupportView" class="hidden"><div class="sectionhead"><h2>👑 VIP-помощь Агентства</h2><span id="vipHelpStatus">Проверка подписки…</span></div><div class="panel"><p class="muted">Персональная помощь для владельцев действующей VIP-подписки. Опишите вопрос — помощник учтёт VIP-статус и при необходимости передаст обращение владельцу.</p><textarea id="vipSupportMessage" rows="4" maxlength="2000" placeholder="Опишите, с чем нужна помощь…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="vipSupportSendBtn" onclick="sendVipSupport()">Отправить в VIP-поддержку</button><p class="notice" id="vipSupportResult" aria-live="polite"></p></div></section>
@@ -3742,50 +3742,38 @@ async function subscribeVip(planType) {
 
 async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
 
-function renderSupportMessages(messages) {
- const root = document.getElementById('supportChatLog');
- root.replaceChildren();
- if (!messages.length) {
-  const empty = document.createElement('p'); empty.className = 'muted';
-  empty.textContent = 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
-  root.appendChild(empty); return;
- }
- for (const item of messages) {
-  const bubble = document.createElement('div');
-  bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
-  const label = document.createElement('b');
-  label.textContent = item.role === 'user' ? 'Ты' : 'Помощник';
-  label.style.display = 'block'; label.style.marginBottom = '4px';
-  const content = document.createElement('span'); content.textContent = item.content;
-  bubble.append(label,content); root.appendChild(bubble);
- }
- root.scrollTop = root.scrollHeight;
+let activeSupportConversationId="";
+let supportConversationRows=[];
+let craftTemplatePending="";
+function makeAssistantChip(label,active,onClick){const b=document.createElement('button');b.type='button';b.className=active?'primary':'secondary';b.textContent=label;b.style.cssText='font-size:12px;padding:7px 10px';b.onclick=onClick;return b;}
+function renderSupportMessages(messages){
+ const root=document.getElementById('supportChatLog');root.replaceChildren();
+ if(!messages.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Привет! Я помощник Агентства подарков. Чем могу помочь?';root.appendChild(empty);}
+ for(const item of messages){const bubble=document.createElement('div');bubble.style.cssText='max-width:92%;align-self:'+(item.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(item.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';const label=document.createElement('b');label.textContent=item.role==='user'?'Ты':item.role==='owner'?'Владелец Агентства':'Помощник';label.style.display='block';label.style.marginBottom='4px';const content=document.createElement('span');content.textContent=item.content||'';bubble.append(label,content);const actions=Array.isArray(item.actions)?item.actions:[];if(actions.length){const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:10px';actions.forEach(action=>{const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.textContent=action.label||'Открыть';btn.style.cssText='font-size:12px;padding:8px 10px';btn.onclick=()=>runAssistantAction(action);row.append(btn);});bubble.append(row);}root.append(bubble);}root.scrollTop=root.scrollHeight;
 }
-
-async function loadSupportHistory() {
- const root = document.getElementById('supportChatLog');
- if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
- try {
-  const data = await apiFetch('/api/support/chat');
-  renderSupportMessages(data.messages || []);
- } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
+async function loadSupportHistory(){
+ const root=document.getElementById('supportChatLog');if(!initData){root.textContent='Открой мини-приложение через Telegram, чтобы начать диалог.';return;}
+ try{const list=await apiFetch('/api/assistant/conversations?kind=support');supportConversationRows=list.conversations||[];const quota=document.getElementById('supportChatQuota');if(quota)quota.textContent=(list.conversations?.length||0)+' / '+list.limit+' чатов · до '+(list.vip?100:50)+' сообщений в каждом';const listRoot=document.getElementById('supportConversationList');if(listRoot){listRoot.replaceChildren();supportConversationRows.forEach(c=>{const wrap=document.createElement('span');wrap.style.cssText='display:inline-flex;gap:3px;align-items:center';wrap.append(makeAssistantChip((c.title||'Чат').slice(0,24),c.id===activeSupportConversationId,()=>selectSupportChat(c.id)));const del=document.createElement('button');del.type='button';del.className='secondary';del.textContent='×';del.title='Удалить чат';del.style.cssText='padding:5px 8px';del.onclick=()=>deleteSupportChat(c.id);wrap.append(del);listRoot.append(wrap);});}if(!activeSupportConversationId&&supportConversationRows.length)activeSupportConversationId=supportConversationRows[0].id;if(!activeSupportConversationId){renderSupportMessages([]);return;}const data=await apiFetch('/api/support/chat?conversation_id='+encodeURIComponent(activeSupportConversationId));renderSupportMessages(data.messages||[]);}
+ catch(e){root.textContent=e.message||'Не удалось загрузить историю диалога.';}
+}
+async function selectSupportChat(id){activeSupportConversationId=id;await loadSupportHistory();}
+async function createSupportChat(){try{const d=await apiFetch('/api/assistant/conversations',{method:'POST',body:JSON.stringify({kind:'support'})});activeSupportConversationId=d.id;await loadSupportHistory();document.getElementById('supportMessage')?.focus();}catch(e){const r=document.getElementById('supportResult');if(r)r.textContent=e.message||'Не удалось создать чат.';}}
+async function deleteSupportChat(id){if(!confirm('Удалить этот чат из истории?'))return;try{await apiFetch('/api/assistant/conversations',{method:'DELETE',body:JSON.stringify({id})});if(activeSupportConversationId===id)activeSupportConversationId='';await loadSupportHistory();}catch(e){toast(e.message||'Не удалось удалить чат.');}}
+async function runAssistantAction(action){
+ if(!action||typeof action!=='object')return;
+ if(action.type==='navigate'){const allowed=['menuView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','balanceView','profileView','dealsView','aboutView'];if(allowed.includes(action.view))showView(action.view);return;}
+ if(action.type==='product'){if(!catalogLoaded)await loadProducts();const product=products.find(p=>String(p[0])===String(action.product_id));if(!product){toast('Эта работа больше не найдена в каталоге.');return;}showView('catalogView');openProductDetail(product);return;}
+ if(action.type==='workshop_template'&&typeof action.template==='string'){craftTemplatePending=action.template.slice(0,2500);const created=await createCraftChat();if(!created)return;showView('aiWorkshopView');const input=document.getElementById('craftChatInput');if(input){input.value=craftTemplatePending;input.focus();}const status=document.getElementById('craftResultStatus');if(status)status.textContent='Шаблон перенесён. Проверь описание и отправь его мастеру, чтобы начать обсуждение.';}
 }
 
 function openOwnerChat(){const url='https://t.me/Iliya_Mironov_33';if(window.Telegram?.WebApp?.openTelegramLink)window.Telegram.WebApp.openTelegramLink(url);else window.open(url,'_blank','noopener');}
-async function sendSupport() {
- const input = document.getElementById('supportMessage');
- const result = document.getElementById('supportResult');
- const button = document.getElementById('supportSendBtn');
- const message = input.value.trim();
- if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
- button.disabled = true; result.textContent = 'Помощник готовит ответ…';
- try {
-  const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})});
-  input.value = '';
-  await loadSupportHistory();
-  result.textContent = data.vip ? 'Ответ VIP-помощника готов.' : 'Ответ помощника готов.';
- } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
- finally { button.disabled = false; }
+async function sendSupport(){
+ const input=document.getElementById('supportMessage'),result=document.getElementById('supportResult'),button=document.getElementById('supportSendBtn'),message=input.value.trim();
+ if(!message){result.textContent='Напиши сообщение перед отправкой.';return;}
+ button.disabled=true;result.textContent='Помощник готовит ответ…';
+ try{const data=await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message,conversation_id:activeSupportConversationId||undefined})});activeSupportConversationId=data.conversation_id||activeSupportConversationId;input.value='';await loadSupportHistory();result.textContent=data.vip?'Ответ VIP-помощника готов.':'Ответ помощника готов.';}
+ catch(e){result.textContent=e.message||'Не удалось получить ответ.';}
+ finally{button.disabled=false;}
 }
 
 
@@ -3815,31 +3803,49 @@ async function pollCraftMessages(){
  if(!craftDraftId)return;
  try{const d=await apiFetch('/api/craft/messages?draft_id='+encodeURIComponent(craftDraftId));const next=Array.isArray(d.conversation)?d.conversation:[];if(next.length!==craftMessages.length||next.some((m,i)=>m.role!==craftMessages[i]?.role||m.content!==craftMessages[i]?.content)){craftMessages=next;renderCraftChat();}}catch(e){console.warn('Не удалось обновить переписку ИИ-мастерской:',e);}
 }
-async function loadCraftConversation(){
- if(!craftDraftId){try{craftDraftId=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}}
+let craftConversationRows=[];
+async function loadCraftConversation(){await loadCraftConversations(true);}
+async function loadCraftConversations(loadActive=true){
+ if(!initData)return;
+ try{
+  const d=await apiFetch('/api/assistant/conversations?kind=workshop');craftConversationRows=d.conversations||[];
+  const quota=document.getElementById('craftChatQuota');if(quota)quota.textContent=craftConversationRows.length+' / '+d.limit+' чатов · до '+(d.vip?100:50)+' сообщений в каждом';
+  const list=document.getElementById('craftConversationList');if(list){list.replaceChildren();craftConversationRows.forEach(c=>{const wrap=document.createElement('span');wrap.style.cssText='display:inline-flex;gap:3px;align-items:center';wrap.append(makeAssistantChip((c.title||'Диалог мастерской').slice(0,22),c.id===craftDraftId,()=>selectCraftChat(c.id)));if(!['review','approved','paid'].includes(c.status)){const del=document.createElement('button');del.type='button';del.className='secondary';del.textContent='×';del.title='Удалить незавершённый чат';del.style.cssText='padding:5px 8px';del.onclick=()=>deleteCraftChat(c.id);wrap.append(del);}list.append(wrap);});}
+  if(loadActive){let selected=craftConversationRows.find(c=>c.id===craftDraftId);if(!selected){let saved='';try{saved=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}selected=craftConversationRows.find(c=>c.id===saved)||craftConversationRows[0];}
+   if(selected){craftDraftId=selected.id;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}await restoreCraftConversation();}
+   else{craftDraftId='';craftMessages=[];renderCraftChat();}
+  }
+ }catch(e){console.warn('Не удалось загрузить список чатов мастерской:',e);const status=document.getElementById('craftResultStatus');if(status)status.textContent=e.message||'Не удалось загрузить историю.';}
+}
+async function selectCraftChat(id){craftDraftId=id;try{localStorage.setItem('agentstvo-craft-draft-id',id);}catch{}await restoreCraftConversation();await loadCraftConversations(false);}
+async function createCraftChat(){
+ try{const d=await apiFetch('/api/assistant/conversations',{method:'POST',body:JSON.stringify({kind:'workshop'})});resetCraftConversation(d.id);await loadCraftConversations(false);document.getElementById('craftChatInput')?.focus();return true;}
+ catch(e){const status=document.getElementById('craftResultStatus');if(status)status.textContent=e.message||'Не удалось создать чат.';return false;}
+}
+async function deleteCraftChat(id){
+ if(!confirm('Удалить незавершённый диалог мастерской?'))return;
+ try{await apiFetch('/api/assistant/conversations',{method:'DELETE',body:JSON.stringify({id})});if(craftDraftId===id){if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}craftDraftId='';craftMessages=[];}await loadCraftConversations(true);}
+ catch(e){toast(e.message||'Не удалось удалить диалог.');}
+}
+async function restoreCraftConversation(){
  if(!craftDraftId)return;
  try{
   const d=await apiFetch('/api/craft/messages?draft_id='+encodeURIComponent(craftDraftId));
-  if(Array.isArray(d.conversation)&&d.conversation.length){craftMessages=d.conversation;craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];craftQuestionCount=Math.min(16,craftMessages.filter(m=>m.role==='user').length);craftConversationReady=['review','approved','paid'].includes(d.status);const p=document.getElementById('craftResultPanel');if(p)p.classList.toggle('hidden',!craftConversationReady);const final=craftMessages.filter(m=>m.role==='assistant').slice(-1)[0];const result=document.getElementById('craftResultText');if(result)result.textContent=final?.content||'';const status=document.getElementById('craftResultStatus');if(status)status.textContent=craftConversationReady?(d.status==='paid'?'Заказ оплачен. Можно продолжить переписку с владельцем здесь.':'Подбор отправлен владельцу. Вы можете продолжить диалог с ним здесь.'):'Незавершённый диалог восстановлен. Продолжайте отвечать ИИ-мастеру.';const input=document.getElementById('craftChatInput');if(input)input.placeholder=craftConversationReady?'Напишите мастеру Агентства…':'Расскажите подробнее о задумке…';const button=document.getElementById('craftSendBtn');if(button){button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}renderCraftChat();if(craftConversationReady)startCraftPolling();}
- }catch(e){console.warn('Не удалось восстановить диалог мастерской:',e);}
+  if(Array.isArray(d.conversation)&&d.conversation.length){
+   craftMessages=d.conversation;craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];craftQuestionCount=Math.min(16,craftMessages.filter(m=>m.role==='user').length);craftConversationReady=['review','approved','paid'].includes(d.status);
+   const p=document.getElementById('craftResultPanel');if(p)p.classList.toggle('hidden',!craftConversationReady);
+   const final=craftMessages.filter(m=>m.role==='assistant').slice(-1)[0];const result=document.getElementById('craftResultText');if(result)result.textContent=final?.content||'';
+   const status=document.getElementById('craftResultStatus');if(status)status.textContent=craftConversationReady?(d.status==='paid'?'Заказ оплачен. Можно продолжить переписку с владельцем здесь.':'Подбор отправлен владельцу. Вы можете продолжить диалог с ним здесь.'):'Сохранённый диалог восстановлен. Продолжайте с того места, где остановились.';
+   const input=document.getElementById('craftChatInput');if(input)input.placeholder=craftConversationReady?'Напишите мастеру Агентства…':'Расскажите подробнее о задумке…';
+   const button=document.getElementById('craftSendBtn');if(button){button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
+   renderCraftChat();if(craftConversationReady)startCraftPolling();
+  }else{craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];craftQuestionCount=0;craftConversationReady=false;renderCraftChat();}
+ }catch(e){console.warn('Не удалось восстановить диалог мастерской:',e);craftMessages=[];renderCraftChat();}
 }
-async function restoreCraftConversation(){
- let saved='';try{saved=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
- if(!saved){resetCraftConversation();return;}
- try{
-  const d=await apiFetch('/api/craft/messages?draft_id='+encodeURIComponent(saved));
-  craftDraftId=saved;craftMessages=Array.isArray(d.conversation)?d.conversation:[];craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];
-  if(!craftMessages.length){resetCraftConversation();return;}
-  craftQuestionCount=Math.min(16,craftMessages.filter(m=>m.role==='user').length);craftConversationReady=['review','approved','paid'].includes(d.status);
-  const panel=document.getElementById('craftResultPanel'),result=document.getElementById('craftResultText'),status=document.getElementById('craftResultStatus'),input=document.getElementById('craftChatInput');
-  if(craftConversationReady){panel?.classList.remove('hidden');if(result)result.textContent='Предложение сохранено. Статус: '+d.status+'.';if(input)input.placeholder='Напишите мастеру Агентства…';startCraftPolling();}
-  else{panel?.classList.add('hidden');if(status)status.textContent='Незавершённый диалог восстановлен. Продолжайте с того места, где остановились. 💬';}
-  renderCraftChat();
- }catch(error){resetCraftConversation();}
-}
-function resetCraftConversation(){
+
+function resetCraftConversation(existingId){
  if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
- craftDraftId=newCraftId();craftOwnerMessages=[];try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
+ craftDraftId=existingId||newCraftId();craftOwnerMessages=[];try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
  craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
  craftQuestionCount=0;craftConversationReady=false;
  const panel=document.getElementById('craftResultPanel');if(panel)panel.classList.add('hidden');
@@ -3851,7 +3857,7 @@ function resetCraftConversation(){
 async function sendCraftMessage(){
  const input=document.getElementById('craftChatInput'),button=document.getElementById('craftSendBtn'),status=document.getElementById('craftResultStatus'),message=input.value.trim();
  if(!message){status.textContent='Напишите ответ, чтобы продолжить.';return;}
- if(!craftMessages.length)resetCraftConversation();
+ if(!craftMessages.length)resetCraftConversation(craftDraftId);
  input.value='';button.disabled=true;button.textContent=craftConversationReady?'Отправляем…':'Мастер думает…';status.textContent=craftConversationReady?'Передаём сообщение владельцу…':'Анализируем пожелания и подбираем варианты…';
  try{
   if(craftConversationReady){
@@ -3864,7 +3870,7 @@ async function sendCraftMessage(){
   craftMessages.push({role:'user',content:message});
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   craftMessages.push({role:'assistant',content:d.reply||'Помощник не вернул сообщение.'});
-  craftDraftId=d.draft_id||craftDraftId;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
+  craftDraftId=d.draft_id||craftDraftId;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}await loadCraftConversations(false);
   if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предложение сохранено и передано владельцу. Предварительная оценка ИИ: '+Number(d.estimated_stars||0)+' ⭐. Владелец может изменить итоговую цену перед отправкой счёта. Теперь можно продолжить диалог с ним здесь.';input.placeholder='Напишите мастеру Агентства…';startCraftPolling();}
   else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();

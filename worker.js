@@ -413,77 +413,53 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
   const parsed=JSON.parse(match[0]);return {reply:String(parsed.reply||"Готово.").slice(0,3000),updates:parsed.updates&&typeof parsed.updates==="object"?parsed.updates:null};
 }
 
-async function createSupportAnswer(env, history, isVip) {
-  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
-  const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
-  const forceFinal = questionsUsed >= 16;
+async function createSupportAnswer(env, history, isVip, products = []) {
+  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник временно недоступен.");
+  const views = {
+    menuView:"главное меню", catalogView:"каталог", giftBuilderView:"конструктор подарка",
+    cartView:"корзина", ordersView:"заказы", customWizardView:"индивидуальный заказ",
+    vipView:"VIP", supportView:"помощник", aiWorkshopView:"ИИ-мастерская",
+    balanceView:"баланс", profileView:"профиль", dealsView:"акции", aboutView:"о проекте"
+  };
+  const catalog = (products || []).slice(0,100).map(p=>({id:String(p.id),title:String(p.title||"").slice(0,100),price_stars:p.price_stars==null?null:Number(p.price_stars)}));
   const instructions = [
     await getGlobalAiToneInstruction(env),
-    "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
-    "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
-    "Если клиент обсуждает свою будущую работу или индивидуальный заказ, проведи консультацию максимум из 16 вопросов за весь диалог: задавай по одному вопросу, не повторяй уже известное, выясни задумку, получателя, повод, бюджет, размер, стиль, цвета, материалы/технику, детализацию и срок.",
-    "Для индивидуального заказа уточняй бюджет только в рублях. Никогда не спрашивай, предпочитает ли клиент рубли или Telegram Stars, и не предлагай выбор валюты/способа оплаты в ходе консультации. Не путай бюджет в рублях с оплатой товаров каталога через Telegram Stars.",
-    "При подборе индивидуальной работы предложи 2–3 варианта готового заказа, предварительно оцени стоимость и подстрой предложение под бюджет. Чётко говори, что цена ориентировочная и окончательно подтверждается владельцем.",
-    "Не превращай консультацию в мастер-класс: не объясняй, как самостоятельно изготовить работу, и не выдавай пошаговые инструкции. Помогай выбрать и заказать готовую работу Агентства.",
-    "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
-    "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
-    "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
-    "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
-    isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
-    forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
-  ].filter(Boolean).join("\n");
-  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+    "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском, доброжелательно и ясно.",
+    "Помогай по каталогу, конкретным работам, корзине, заказам, оплате, балансу, профилю, VIP, индивидуальным заказам и ИИ-мастерской.",
+    "У тебя есть проверенный реестр экранов и работ. Для навигации возвращай только точные view из реестра; для товара — только существующий product_id из каталога. Никогда не придумывай ID, экран или URL.",
+    "Если клиент просит открыть раздел, предложи соответствующую кнопку. Если просит конкретную работу, найди её по названию среди реальных товаров и предложи кнопку товара. Можно вернуть несколько полезных действий, но не больше трёх.",
+    "Если клиент обсуждает идею подарка, придумай интересные варианты, название, описание готовой работы, материалы/оформление и ориентировочную цену. Не давай инструкций по самостоятельному изготовлению. Отметь, что цена индивидуальной работы предварительная и подтверждается владельцем.",
+    "После обсуждения идеи можно вернуть workshop_template с кратким описанием и кнопку «Использовать этот шаблон», чтобы передать идею в ИИ-мастерскую.",
+    "Не выдумывай наличие, статус заказа, оплату, баланс, сроки или цены. Не утверждай, что кнопка уже нажата или заказ изменён.",
+    "Верни строго JSON без Markdown: {\"reply\":\"текст\",\"actions\":[{\"type\":\"navigate\",\"view\":\"catalogView\",\"label\":\"Открыть каталог\"},{\"type\":\"product\",\"product_id\":\"реальный ID\",\"label\":\"Открыть работу\"},{\"type\":\"workshop_template\",\"template\":\"описание идеи\",\"label\":\"Использовать этот шаблон\"}]}",
+    "Допускаются только типы действий navigate, product, workshop_template. Необязательные действия — пустой массив.",
+    isVip ? "Пользователь VIP: можно давать более подробные идеи и рекомендации." : "Пользователь без VIP: давай ясные и полезные базовые рекомендации.",
+    "Реестр экранов: " + JSON.stringify(views),
+    "Проверенный каталог: " + JSON.stringify(catalog)
+  ].join("\n");
+  const model = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
   const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, instructions,
-      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 900 })
+    method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
+    body:JSON.stringify({model,instructions,input:history.slice(-50).map(item=>({role:item.role==="user"?"user":"assistant",content:item.content})),max_output_tokens:isVip?1600:1200})
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const apiError = data?.error || {};
-    const diagnostic = {
-      stage: "openai_request",
-      model,
-      http_status: response.status,
-      error_code: apiError.code || null,
-      error_type: apiError.type || null,
-      error_param: apiError.param || null,
-      error_message: String(apiError.message || "OpenAI returned a non-2xx response").slice(0, 350),
-      request_id: response.headers.get("x-request-id") || null,
-      history_messages: history.length,
-      question_count: questionsUsed
-    };
-    console.error("OpenAI support request failed:", JSON.stringify(diagnostic));
-    const failure = new Error("Сервис помощника временно недоступен. Попробуй позже.");
-    failure.diagnostic = diagnostic;
-    throw failure;
-  }
-  let answer = typeof data.output_text === "string" ? data.output_text : "";
-  if (!answer && Array.isArray(data.output)) {
-    answer = data.output.flatMap(item => Array.isArray(item.content) ? item.content : [])
-      .filter(part => part.type === "output_text" && typeof part.text === "string")
-      .map(part => part.text).join("\n");
-  }
-  if (!answer.trim()) {
-    const diagnostic = {
-      stage: "openai_empty_output",
-      model,
-      response_status: data?.status || null,
-      incomplete_reason: data?.incomplete_details?.reason || null,
-      output_items: Array.isArray(data?.output) ? data.output.length : 0,
-      history_messages: history.length,
-      question_count: questionsUsed,
-      request_id: response.headers.get("x-request-id") || data?.id || null
-    };
-    console.error("Support assistant returned empty output:", JSON.stringify(diagnostic));
-    const failure = new Error("Помощник не смог подготовить ответ. Попробуй ещё раз.");
-    failure.diagnostic = diagnostic;
-    throw failure;
-  }
-  return answer.trim().slice(0, 4000);
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error("ИИ-помощник временно недоступен.");
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
+  const match=output.match(/\{[\s\S]*\}/);
+  if(!match)throw new Error("ИИ-помощник вернул некорректный ответ.");
+  let parsed;try{parsed=JSON.parse(match[0]);}catch{throw new Error("ИИ-помощник вернул некорректный ответ.");}
+  const validViews=new Set(Object.keys(views)),validProducts=new Set(catalog.map(p=>p.id));
+  const actions=(Array.isArray(parsed.actions)?parsed.actions:[]).slice(0,3).flatMap(a=>{
+    if(!a||typeof a!=="object")return [];
+    const label=String(a.label||"Открыть").slice(0,60);
+    if(a.type==="navigate"&&validViews.has(a.view))return [{type:"navigate",view:a.view,label}];
+    if(a.type==="product"&&validProducts.has(String(a.product_id)))return [{type:"product",product_id:String(a.product_id),label}];
+    if(a.type==="workshop_template"&&typeof a.template==="string"&&a.template.trim())return [{type:"workshop_template",template:a.template.trim().slice(0,2500),label:"Использовать этот шаблон"}];
+    return [];
+  });
+  return {reply:String(parsed.reply||"Готово.").slice(0,4000),actions};
 }
-
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   if (!env.OPENAI_API_KEY) return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
   const prompt = [
@@ -529,7 +505,7 @@ async function getGlobalAiToneInstruction(env){
   return map[tone]||map.respectful;
  }catch{return "Общий тон Агентства: уважительный, спокойный и ясный.";}
 }
-async function createCraftAnswer(env,messages){
+async function createCraftAnswer(env,messages,isVip=false){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
  const questionsUsed=Math.max(0,assistantTurns-1);
@@ -551,7 +527,7 @@ async function createCraftAnswer(env,messages){
   "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ уже принят или оплачен."
  ].filter(Boolean).join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:isVip?(env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini"):(env.OPENAI_MODEL||"gpt-4o-mini"),instructions,input,max_output_tokens:isVip?1900:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула ответ.");
  a=a.trim();let ready=a.startsWith("[READY]");a=a.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,7000);
@@ -2001,6 +1977,11 @@ export default {
           await telegram(env,"sendMessage",{chat_id:targetId,text:message});
           await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'human')")
             .bind(targetId,message).run();
+          const latestChat=await env.DB.prepare("SELECT id FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='support' ORDER BY updated_at DESC LIMIT 1").bind(targetId).first();
+          if(latestChat){
+            await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'owner',?)").bind(latestChat.id,targetId,message).run();
+            await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(latestChat.id).run();
+          }
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
               .bind(telegramId,targetId,"support_human_reply",JSON.stringify({length:message.length})).run();
@@ -2875,18 +2856,30 @@ export default {
       }
 
       if (path === "/api/craft/create" && method === "POST") {
-        const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
-        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
+        const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-100):[];
+        if(!messages.length||messages.length>100||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
-          const result=await createCraftAnswer(env,messages);
+          const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+          const tier=vip?"vip":"standard",chatLimit=vip?100:50;
           let draftId=String(b.conversation_id||"");
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
-          const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+          let chat=await env.DB.prepare("SELECT id,assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
+          if(!chat){
+            const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='workshop'").bind(String(telegramId)).first();
+            if(Number(count?.n||0)>=(vip?5:3))return json({error:"Достигнут лимит чатов ИИ-мастерской. Удалите ненужный незавершённый диалог, чтобы создать новый."},409,origin);
+            await env.DB.prepare("INSERT INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id) VALUES(?,?,'workshop',?,'Новый диалог',?)").bind(draftId,String(telegramId),tier,draftId).run();
+            chat={id:draftId,assistant_tier:tier};
+          }
+          await env.DB.prepare("UPDATE assistant_conversations SET assistant_tier=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(tier,draftId,String(telegramId)).run();
+          const storedCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+          if(Number(storedCount?.n||0)>chatLimit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
+          const result=await createCraftAnswer(env,messages,!!vip);
+                    const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
           const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
           const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
+          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-chatLimit).map(m=>({role:m.role,content:String(m.content||"").slice(0,1500)})),owner_messages:[],estimate_note:""};
           let estimatedStars=Number(existing?.estimated_stars||0);
           if(result.ready){
             const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
@@ -2907,29 +2900,46 @@ export default {
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
             }
           }
+          const latestUser=messages[messages.length-1]?.content||"";
+          await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),String(latestUser).slice(0,7000)).run();
+          await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'assistant',?)").bind(draftId,String(telegramId),String(result.reply||"").slice(0,7000)).run();
+          await env.DB.prepare("UPDATE assistant_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(subject.slice(0,80),draftId,String(telegramId)).run();
           return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
         }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
-        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        if(!draft){
+          const emptyChat=await env.DB.prepare("SELECT id FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
+          if(emptyChat)return json({ok:true,messages:[],conversation:[],status:"collecting",subject:"Новый диалог",estimated_stars:0},200,origin);
+          return json({error:"Диалог мастерской не найден."},404,origin);
+        }
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
-        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
+        const saved=await env.DB.prepare("SELECT role,content,created_at FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=? ORDER BY id ASC LIMIT 100").bind(draftId,String(telegramId)).all();
+        const conversation=(saved.results||[]).length?(saved.results||[]):(Array.isArray(details.conversation)?details.conversation:[]);
+        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation,status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        const vipNow=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const chatLimit=vipNow?100:50;
+        await env.DB.prepare("UPDATE assistant_conversations SET assistant_tier=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(vipNow?"vip":"standard",draftId,String(telegramId)).run();
+        const chatCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        if(Number(chatCount?.n||0)>=chatLimit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});
-        details.conversation=details.conversation.slice(-16);
+        details.conversation=details.conversation.slice(-chatLimit);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-8):[];
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
+        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
+        await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
         await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
         return json({ok:true,conversation:details.conversation},200,origin);
       }
@@ -2941,49 +2951,105 @@ export default {
         try{const reply=await createVipSupportAnswer(env,message);if(/(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message)){await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId,"[VIP] "+message).run();await notifyOwner(env,"👑 VIP-обращение\nTelegram ID: "+telegramId+"\n\n"+message);}return json({ok:true,reply,vip:true},200,origin);}
         catch(e){console.error("VIP support failed:",String(e));return json({error:e.message||"VIP-помощь временно недоступна."},503,origin);}
       }
+      if (path === "/api/assistant/conversations" && method === "GET") {
+        const kind=String(url.searchParams.get("kind")||"support");
+        if(!["support","workshop"].includes(kind))return json({error:"Неизвестный тип чата."},400,origin);
+        const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        if(kind==="workshop"){
+          const legacy=await env.DB.prepare("SELECT id,subject,created_at,updated_at,details_json FROM ai_order_drafts WHERE telegram_id=? AND status IN ('collecting','review','approved','paid') AND details_json LIKE '%miniapp_workshop%'").bind(String(telegramId)).all();
+          for(const d of legacy.results||[]){
+            await env.DB.prepare("INSERT OR IGNORE INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id,created_at,updated_at) VALUES(?,?,'workshop','standard',?,?,?,?)").bind(String(d.id),String(telegramId),String(d.subject||'Диалог мастерской').slice(0,80),String(d.id),d.created_at||new Date().toISOString(),d.updated_at||d.created_at||new Date().toISOString()).run();
+            const stored=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(String(d.id),String(telegramId)).first();
+            if(!Number(stored?.n||0)){
+              let details={};try{details=JSON.parse(d.details_json||"{}");}catch{}
+              for(const m of (Array.isArray(details.conversation)?details.conversation:[]).slice(-100)){
+                if(!m||!["user","assistant","owner"].includes(m.role)||typeof m.content!=="string"||!m.content.trim())continue;
+                await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,?,?)").bind(String(d.id),String(telegramId),m.role,m.content.slice(0,7000)).run();
+              }
+            }
+          }
+        }
+        const rows=await env.DB.prepare("SELECT c.id,c.assistant_tier,c.title,c.created_at,c.updated_at,d.status FROM assistant_conversations c LEFT JOIN ai_order_drafts d ON d.id=c.source_draft_id WHERE c.telegram_id=? AND c.assistant_kind=? ORDER BY c.updated_at DESC").bind(telegramId,kind).all();
+        return json({ok:true,vip:!!vip,limit:vip?5:3,conversations:rows.results||[]},200,origin);
+      }
+      if (path === "/api/assistant/conversations" && method === "POST") {
+        const b=await readJson(request),kind=String(b.kind||"support");
+        if(!["support","workshop"].includes(kind))return json({error:"Неизвестный тип чата."},400,origin);
+        const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_conversations WHERE telegram_id=? AND assistant_kind=?").bind(telegramId,kind).first();
+        const limit=vip?5:3;
+        if(Number(count?.n||0)>=limit)return json({error:"Достигнут лимит чатов. Удалите ненужный диалог, чтобы создать новый.",limit},409,origin);
+        const id=makeId(),title=String(b.title||"Новый диалог").trim().slice(0,80)||"Новый диалог";
+        await env.DB.prepare("INSERT INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id) VALUES(?,?,?,?,?,?)").bind(id,String(telegramId),kind,vip?"vip":"standard",title,kind==="workshop"?id:null).run();
+        return json({ok:true,id,assistant_tier:vip?"vip":"standard"},201,origin);
+      }
+      if (path === "/api/assistant/conversations" && method === "DELETE") {
+        const b=await readJson(request),id=String(b.id||"").slice(0,80);
+        const row=await env.DB.prepare("SELECT assistant_kind,source_draft_id FROM assistant_conversations WHERE id=? AND telegram_id=?").bind(id,String(telegramId)).first();
+        if(!row)return json({error:"Диалог не найден."},404,origin);
+        if(row.assistant_kind==="workshop"){
+          const draft=await env.DB.prepare("SELECT status FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(row.source_draft_id,String(telegramId)).first();
+          if(draft&&["review","approved","paid"].includes(draft.status))return json({error:"Этот диалог уже связан с заказом и не может быть удалён из истории."},409,origin);
+          if(draft)await env.DB.prepare("DELETE FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status='collecting'").bind(row.source_draft_id,String(telegramId)).run();
+        }
+        await env.DB.prepare("DELETE FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(id,String(telegramId)).run();
+        await env.DB.prepare("DELETE FROM assistant_conversations WHERE id=? AND telegram_id=?").bind(id,String(telegramId)).run();
+        return json({ok:true},200,origin);
+      }
+      if (path === "/api/assistant/conversation" && method === "GET") {
+        const id=String(url.searchParams.get("id")||"").slice(0,80);
+        const row=await env.DB.prepare("SELECT id,assistant_kind,assistant_tier,title,source_draft_id FROM assistant_conversations WHERE id=? AND telegram_id=?").bind(id,String(telegramId)).first();
+        if(!row)return json({error:"Диалог не найден."},404,origin);
+        const rows=await env.DB.prepare("SELECT role,content,actions_json,created_at FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=? ORDER BY id DESC LIMIT 100").bind(id,String(telegramId)).all();
+        return json({ok:true,conversation:row,messages:(rows.results||[]).reverse().map(m=>({...m,actions:(()=>{try{return JSON.parse(m.actions_json||"[]")}catch{return []}})()}))},200,origin);
+      }
+
       if (path === "/api/support/chat" && method === "GET") {
-        const rows = await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 30")
-          .bind(telegramId).all();
-        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
-          .bind(telegramId).first();
-        return json({ messages: (rows.results || []).reverse(), vip: !!vip }, 200, origin);
+        const id=String(url.searchParams.get("conversation_id")||"").slice(0,80);
+        const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const rows=await env.DB.prepare("SELECT role,content,actions_json,created_at FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=? ORDER BY id DESC LIMIT 100").bind(id,String(telegramId)).all();
+        return json({messages:(rows.results||[]).reverse().map(m=>({...m,actions:(()=>{try{return JSON.parse(m.actions_json||"[]")}catch{return []}})()})),vip:!!vip},200,origin);
       }
 
       if (path === "/api/support/chat" && method === "POST") {
-        const body = await readJson(request);
-        const message = typeof body.message === "string" ? body.message.trim() : "";
-        if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов" }, 400, origin);
-        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
-          .bind(telegramId).first();
-        const conversationControl = await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'user',?,'buyer')")
-          .bind(telegramId, message).run();
-        if (conversationControl?.mode === "human") {
-          await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
-          return json({ ok: true, reply: "Сообщение передано владельцу. ИИ-помощник временно приостановлен.", vip: !!vip, saved: true, handoff: true }, 200, origin);
+        const body=await readJson(request),message=typeof body.message==="string"?body.message.trim():"";
+        if(!message||message.length>2000)return json({error:"Сообщение должно содержать от 1 до 2000 символов."},400,origin);
+        const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const tier=vip?"vip":"standard",limit=vip?100:50;
+        let conversationId=String(body.conversation_id||"").slice(0,80);
+        if(!conversationId){
+          const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='support'").bind(telegramId).first();
+          if(Number(count?.n||0)>=(vip?5:3))return json({error:"Достигнут лимит чатов. Удалите ненужный диалог, чтобы создать новый."},409,origin);
+          conversationId=makeId();
+          await env.DB.prepare("INSERT INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title) VALUES(?,?,'support',?,'Новый диалог')").bind(conversationId,String(telegramId),tier).run();
         }
-        if (!env.OPENAI_API_KEY) return json({ error: "ИИ-помощник ещё не подключён. Владелец должен добавить OPENAI_API_KEY в Cloudflare Worker Secrets." }, 503, origin);
-        const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 34")
-          .bind(telegramId).all();
-        const history = (rows.results || []).reverse();
-        let reply;
-        try {
-          reply = await createSupportAnswer(env, history, !!vip);
-        } catch (error) {
-          console.error("Support assistant failed:", String(error));
-          await writeSystemError(env, error?.diagnostic || error, "/api/support/chat");
-          return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
+        const conversation=await env.DB.prepare("SELECT id,assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='support'").bind(conversationId,String(telegramId)).first();
+        if(!conversation)return json({error:"Диалог не найден."},404,origin);
+        const messageCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(conversationId,String(telegramId)).first();
+        if(Number(messageCount?.n||0)>limit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit},409,origin);
+        const conversationControl=await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
+        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(conversationId,String(telegramId),message).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'user',?,'buyer')").bind(String(telegramId),message).run();
+        await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='Новый диалог' THEN ? ELSE title END WHERE id=? AND telegram_id=?").bind(message.slice(0,60),conversationId,String(telegramId)).run();
+        if(conversationControl?.mode==="human"){
+          await notifyOwner(env,"💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: "+telegramId+"\n\n"+message);
+          await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'assistant',?,'human')").bind(String(telegramId),"Сообщение передано владельцу. ИИ-помощник временно приостановлен.").run();
+          await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'assistant',?)").bind(conversationId,String(telegramId),"Сообщение передано владельцу. ИИ-помощник временно приостановлен.").run();
+          return json({ok:true,conversation_id:conversationId,handoff:true},200,origin);
         }
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'ai')")
-          .bind(telegramId, reply).run();
-        const ownerRequested = /(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message);
-        if (ownerRequested) {
-          await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
-          await notifyOwner(env, "💬 Запрос на помощь владельца\nTelegram ID: " + telegramId + "\n\n" + message);
+        const rows=await env.DB.prepare("SELECT role,content FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(conversationId,String(telegramId)).all();
+        const history=(rows.results||[]).reverse();
+        let answer;
+        try{answer=await createSupportAnswer(env,history,!!vip,await getProducts(env));}
+        catch(error){console.error("Support assistant failed:",String(error));await writeSystemError(env,error?.diagnostic||error,"/api/support/chat");return json({error:error.message||"Не удалось получить ответ помощника."},503,origin);}
+        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content,actions_json) VALUES(?,?,'assistant',?,?)").bind(conversationId,String(telegramId),answer.reply,JSON.stringify(answer.actions||[])).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,role,content,sender_type) VALUES(?,'assistant',?,'ai')").bind(String(telegramId),answer.reply).run();
+        if(/(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message)){
+          await env.DB.prepare("INSERT INTO support_messages(telegram_id,message) VALUES(?,?)").bind(telegramId,message).run();
+          await notifyOwner(env,"💬 Запрос на помощь владельца\nTelegram ID: "+telegramId+"\n\n"+message);
         }
-        return json({ ok: true, reply, vip: !!vip, saved: true }, 200, origin);
+        return json({ok:true,reply:answer.reply,actions:answer.actions||[],conversation_id:conversationId,vip:!!vip,saved:true},200,origin);
       }
-
       return json({ error: "Маршрут не найден" }, 404, origin);
     } catch (error) {
       console.error("Worker request failed:", String(error));
