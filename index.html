@@ -3952,8 +3952,8 @@ async function loadMe() {
     const actions='<div class="order-actions">'+(payable?'<button type="button" class="primary order-action-btn" data-order-action="pay" data-order-id="'+id+'">Оплатить</button>':'')+cancelButton+chatButton+'</div>';
     return '<div class="order-card"><div class="lineitem"><span><b>'+orderTitle+'</b><br><small>'+(o.order_type==='custom'?'Индивидуальный заказ':'Заказ из каталога')+' · '+formatDate(o.created_at)+'</small></span><b>'+money(o.amount)+'<br><small>'+escapeOrderText(state)+'</small></b></div>'+actions+'</div>';
    };
-   const paidOrders=orders.filter(o=>String(o.payment_status||o.status||'').toLowerCase()==='paid');
-   const cancelledOrders=orders.filter(o=>['cancelled','canceled'].includes(String(o.payment_status||o.status||'').toLowerCase()));
+   const cancelledOrders=orders.filter(o=>['cancelled','canceled'].includes(String(o.status||'').toLowerCase())||['cancelled','canceled'].includes(String(o.payment_status||'').toLowerCase()));
+   const paidOrders=orders.filter(o=>!cancelledOrders.includes(o)&&(String(o.status||'').toLowerCase()==='paid'||String(o.payment_status||'').toLowerCase()==='paid'));
    const activeOrders=orders.filter(o=>!paidOrders.includes(o)&&!cancelledOrders.includes(o));
    const collapsedGroup=(key,title,items)=>items.length?'<details class="orders-collapsible" data-orders-group="'+key+'"><summary><span>'+title+'</span><small>'+items.length+'</small></summary>'+items.map(renderOrder).join('')+'</details>':'';
    root.innerHTML=orders.length
