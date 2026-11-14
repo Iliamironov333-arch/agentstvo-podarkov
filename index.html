@@ -3723,6 +3723,7 @@ let supportPendingActions = [];
 
 function openSupportDestination(view) {
  if (view === 'owner') { openOwnerChat(); return; }
+ if (view === 'customWizardView') { openCustomWizard(); return; }
  const allowed = ['catalogView','cartView','ordersView','balanceView','aiWorkshopView','profileView','vipView','supportView'];
  if (!allowed.includes(view)) return;
  showView(view);
