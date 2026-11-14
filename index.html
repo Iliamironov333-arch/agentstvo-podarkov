@@ -1469,10 +1469,10 @@ html body>#seasonDecorations .festive-firework{
  </div>
  <div class="panel">
    <h3>📦 Заказы</h3>
-   <div class="admin-search"><input id="adminOrderSearch" type="search" maxlength="80" placeholder="Номер заказа или Telegram ID"><button class="secondary" type="button" onclick="loadAdminOrders()">Найти</button></div>
+   <div class="admin-search"><input id="adminOrderSearch" type="search" maxlength="80" placeholder="Номер заказа или Telegram ID"><button class="secondary" type="button" onclick="loadAdminOrders();loadAiOrders()">Найти</button></div>
    <div class="admin-search">
-    <select id="adminOrderType" aria-label="Тип заказа" onchange="loadAdminOrders()"><option value="all">Все типы</option><option value="product">Товары каталога</option><option value="custom">Индивидуальные</option></select>
-    <select id="adminOrderStatus" aria-label="Статус заказа" onchange="loadAdminOrders()"><option value="all">Все статусы</option><option value="unpaid">Не оплачен</option><option value="new">Новый</option><option value="in_progress">В работе</option><option value="ready">Готов</option><option value="cancelled">Отменён</option></select>
+    <select id="adminOrderType" aria-label="Тип заказа" onchange="loadAdminOrders();loadAiOrders()"><option value="all">Все типы</option><option value="product">Товары каталога</option><option value="custom">Индивидуальные</option></select>
+    <select id="adminOrderStatus" aria-label="Статус заказа" onchange="loadAdminOrders();loadAiOrders()"><option value="all">Все статусы</option><option value="unpaid">Не оплачен</option><option value="new">Новый</option><option value="in_progress">В работе</option><option value="ready">Готов</option><option value="cancelled">Отменён</option></select>
    </div>
    <p id="adminOrdersStatus" class="notice" aria-live="polite">Заказы загружаются…</p>
    <div id="adminOrdersList"></div>
@@ -4176,7 +4176,21 @@ async function loadAiOrders(){
  status.textContent='Загрузка ИИ-заказов…';
  try{
   const [data,noticeData]=await Promise.all([apiFetch('/api/admin/ai-orders'),apiFetch('/api/admin/notifications').catch(()=>({notifications:[]}))]);
-  const orders=Array.isArray(data.orders)?data.orders:[];adminAiOrdersCache=orders;
+  const allOrders=Array.isArray(data.orders)?data.orders:[];adminAiOrdersCache=allOrders;
+  const searchTerm=document.getElementById('adminOrderSearch')?.value.trim().toLowerCase()||'';
+  const selectedType=document.getElementById('adminOrderType')?.value||'all';
+  const selectedStatus=document.getElementById('adminOrderStatus')?.value||'all';
+  const orders=allOrders.filter(o=>{
+   if(selectedType==='product'&&o.record_type!=='gift_bundle')return false;
+   if(selectedType==='custom'&&o.record_type==='gift_bundle')return false;
+   if(searchTerm&&!([o.id,o.order_id,o.telegram_id,o.first_name,o.username,o.subject,o.details_json].join(' ').toLowerCase().includes(searchTerm)))return false;
+   const bucket=adminOrderBucket(o);
+   if(selectedStatus==='unpaid'&&bucket!=='active')return false;
+   if(selectedStatus==='cancelled'&&bucket!=='cancelled')return false;
+   if(selectedStatus==='new'&&!['collecting','review','approved','ordered'].includes(String(o.status||'')))return false;
+   if(['in_progress','ready'].includes(selectedStatus))return false;
+   return true;
+  });
   const unfinished=orders.filter(o=>o.record_type==='ai_draft'&&o.status==='collecting');
   status.textContent='ИИ-заказов и заявок: '+orders.length+'. Незавершённых: '+unfinished.length+'.';
   const noticeRoot=document.getElementById('aiOwnerNotifications');
