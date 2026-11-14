@@ -429,6 +429,8 @@ async function createSupportAnswer(env, history, isVip) {
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
     "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
+    "Ты не знаешь местоположение клиента и не имеешь доступа к его геолокации. Не угадывай и не называй город, адрес или регион клиента. Если местоположение действительно важно, сначала прямо спроси клиента.",
+    "Если клиент прямо просит открыть, показать или найти раздел либо конкретную работу, интерфейс добавит подходящую кнопку перехода. Не утверждай, что кнопка уже отправлена, если запрос не содержит явной просьбы о переходе.",
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
@@ -482,6 +484,47 @@ async function createSupportAnswer(env, history, isVip) {
     throw failure;
   }
   return answer.trim().slice(0, 4000);
+}
+
+
+function normalizeSupportNavigationText(value) {
+  return String(value || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/gi, " ").trim();
+}
+
+async function buildSupportNavigationActions(env, message) {
+  const text = normalizeSupportNavigationText(message);
+  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|хочу посмотреть|можно посмотреть|дай.{0,20}(?:кнопк|ссылк)|покажите)/i.test(text);
+  if (!asksToNavigate) return [];
+
+  const actions = [];
+  const add = (action) => {
+    if (actions.length < 4 && !actions.some(item => item.view === action.view && item.product_id === action.product_id)) actions.push(action);
+  };
+
+  try {
+    const catalog = await getProducts(env);
+    const normalized = normalizeSupportNavigationText(message);
+    const product = catalog.find(item => {
+      const title = normalizeSupportNavigationText(item.title);
+      return title.length >= 4 && normalized.includes(title);
+    });
+    if (product) {
+      add({ label: "🎁 Открыть работу: " + String(product.title).slice(0, 48), view: "product", product_id: String(product.id) });
+    }
+  } catch (error) {
+    console.error("Support navigation catalog lookup failed:", String(error).slice(0, 250));
+  }
+
+  if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
+  if (/(корзин|оформить заказ|перейти к оплате)/i.test(text)) add({ label: "🛒 Перейти в корзину", view: "cartView" });
+  if (/(мои заказы|список заказов|истори[яю] заказов)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
+  if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
+  if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
+  if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
+  if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
+  if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "💬 Поддержка", view: "supportView" });
+  if (/(о проекте|информаци[яю] о проекте|правила)/i.test(text)) add({ label: "ℹ️ О проекте", view: "aboutView" });
+  return actions;
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
@@ -2981,7 +3024,8 @@ export default {
           await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
           await notifyOwner(env, "💬 Запрос на помощь владельца\nTelegram ID: " + telegramId + "\n\n" + message);
         }
-        return json({ ok: true, reply, vip: !!vip, saved: true }, 200, origin);
+        const actions = await buildSupportNavigationActions(env, message);
+        return json({ ok: true, reply, vip: !!vip, saved: true, actions }, 200, origin);
       }
 
       return json({ error: "Маршрут не найден" }, 404, origin);
