@@ -2987,7 +2987,7 @@ export default {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
           return json({ ok: true, reply: "Сообщение передано владельцу. ИИ-помощник временно приостановлен.", vip: !!vip, saved: true, handoff: true }, 200, origin);
         }
-        const certificateMatch=message.match(/сертификат(?:а)?(?:\\s+(?:код|номер))?\\s*[:#-]?\\s*([A-Z0-9_-]{8,32})/i);
+        const certificateMatch=message.match(/сертификат(?:а)?(?:\s+(?:код|номер))?\s*[:#-]?\s*([A-Z0-9_-]{8,32})/i);
         if(certificateMatch){
           if(!(await tableExists(env,"gift_certificates"))||!(await tableExists(env,"gift_certificate_attempts"))){
             return json({error:"Активация сертификатов ещё не настроена. Попробуйте позже или обратитесь к владельцу."},503,origin);
