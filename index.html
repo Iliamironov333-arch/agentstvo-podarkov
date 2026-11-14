@@ -1630,7 +1630,7 @@ let giftBuilderSelection={};
 let giftBuilderLayoutOrder=[];
 let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
-try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;}
+try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
 const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
 
