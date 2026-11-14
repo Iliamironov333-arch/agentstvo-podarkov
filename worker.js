@@ -505,7 +505,7 @@ async function getGlobalAiToneInstruction(env){
   return map[tone]||map.respectful;
  }catch{return "Общий тон Агентства: уважительный, спокойный и ясный.";}
 }
-async function createCraftAnswer(env,messages){
+async function createCraftAnswer(env,messages,isVip=false){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
  const questionsUsed=Math.max(0,assistantTurns-1);
@@ -527,7 +527,7 @@ async function createCraftAnswer(env,messages){
   "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ уже принят или оплачен."
  ].filter(Boolean).join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
+ const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:isVip?(env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini"):(env.OPENAI_MODEL||"gpt-4o-mini"),instructions,input,max_output_tokens:isVip?1900:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула ответ.");
  a=a.trim();let ready=a.startsWith("[READY]");a=a.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,7000);
@@ -2855,7 +2855,7 @@ export default {
         if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
-          const result=await createCraftAnswer(env,messages);
+          const result=await createCraftAnswer(env,messages,!!vip);
           const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
           const tier=vip?"vip":"standard",chatLimit=vip?100:50;
           let draftId=String(b.conversation_id||"");
@@ -2868,7 +2868,7 @@ export default {
             chat={id:draftId,assistant_tier:tier};
           }
           const storedCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
-          if(Number(storedCount?.n||0)>=chatLimit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
+          if(Number(storedCount?.n||0)>chatLimit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
                     const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
           const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
@@ -2925,6 +2925,8 @@ export default {
         details.conversation=details.conversation.slice(-16);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-8):[];
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
+        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
+        await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
         await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
         return json({ok:true,conversation:details.conversation},200,origin);
       }
@@ -3000,7 +3002,7 @@ export default {
         const conversation=await env.DB.prepare("SELECT id,assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='support'").bind(conversationId,String(telegramId)).first();
         if(!conversation)return json({error:"Диалог не найден."},404,origin);
         const messageCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(conversationId,String(telegramId)).first();
-        if(Number(messageCount?.n||0)>=limit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit},409,origin);
+        if(Number(messageCount?.n||0)>limit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit},409,origin);
         const conversationControl=await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
         await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(conversationId,String(telegramId),message).run();
         await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='Новый диалог' THEN ? ELSE title END WHERE id=? AND telegram_id=?").bind(message.slice(0,60),conversationId,String(telegramId)).run();
