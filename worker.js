@@ -3069,20 +3069,20 @@ export default {
         }
         const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
           .bind(telegramId, chatLimit).all();
-        const lowerMessage=message.toLowerCase();
+        const actionText=(message+"\n"+reply).toLowerCase();
         const actions=[];
-        if(/каталог|товар|посмотреть подар|выбрать подар|купить|покупк/.test(lowerMessage))actions.push({label:"🎁 Открыть каталог",view:"catalogView"});
-        if(/корзин|оформить заказ|оплатить заказ/.test(lowerMessage))actions.push({label:"🛒 Перейти в корзину",view:"cartView"});
-        if(/заказ/.test(lowerMessage) && !actions.some(item=>item.view==="ordersView"))actions.push({label:"📦 Мои заказы",view:"ordersView"});
-        if(/баланс|баллы|пополн/.test(lowerMessage))actions.push({label:"⭐ Мой баланс",view:"balanceView"});
-        if(/индивидуальн|на заказ|создать заказ|сделать заказ|нарисова|изготов/.test(lowerMessage)){
+        if(/каталог|товар|подар|купить|покупк/.test(actionText))actions.push({label:"🎁 Открыть каталог",view:"catalogView"});
+        if(/корзин|оформить заказ|оплатить заказ/.test(actionText))actions.push({label:"🛒 Перейти в корзину",view:"cartView"});
+        if(/заказ/.test(actionText) && !actions.some(item=>item.view==="ordersView"))actions.push({label:"📦 Мои заказы",view:"ordersView"});
+        if(/баланс|баллы|пополн/.test(actionText))actions.push({label:"⭐ Мой баланс",view:"balanceView"});
+        if(/индивидуальн|на заказ|создать заказ|сделать заказ|нарисова|изготов/.test(actionText)){
           actions.push({label:"🧵 Обсудить идею",view:"aiWorkshopView"});
           actions.push({label:"🎨 Создать индивидуальный заказ",view:"customWizardView"});
         }
-        if(/профил/.test(lowerMessage))actions.push({label:"👤 Мой профиль",view:"profileView"});
-        if(/vip|вип-подпис|подписк/.test(lowerMessage))actions.push({label:"👑 VIP",view:"vipView"});
-        if(/помощник|поддержк/.test(lowerMessage))actions.push({label:"🤖 Помощники",view:"supportView"});
-        if(/владелец|контакт|оператор|позови|позвать|человек/.test(lowerMessage))actions.push({label:"✉️ Связаться с владельцем",view:"owner"});
+        if(/профил/.test(actionText))actions.push({label:"👤 Мой профиль",view:"profileView"});
+        if(/vip|вип-подпис|подписк/.test(actionText))actions.push({label:"👑 VIP",view:"vipView"});
+        if(/помощник|поддержк/.test(actionText))actions.push({label:"🤖 Помощники",view:"supportView"});
+        if(/владелец|контакт|оператор|позови|позвать|человек/.test(actionText))actions.push({label:"✉️ Связаться с владельцем",view:"owner"});
         return json({ ok: true, reply, vip: !!vip, saved: true, conversation_id: conversationId, conversations: refreshed.results || [], chat_limit: chatLimit, actions }, 200, origin);
       }
 
