@@ -392,6 +392,27 @@ async function createOrderChatAnswer(env, history, orderContext) {
   return { reply: output.trim().slice(0,4000), change_summary: "", proposed_changes: {} };
 }
 
+async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allowItemChanges=true){
+  if(!env.OPENAI_API_KEY)throw new Error("ИИ-помощник временно недоступен.");
+  const instructions=[
+    await getGlobalAiToneInstruction(env),
+    "Ты — ИИ-помощник конструктора подарка Агентства подарков. Общайся на русском, доброжелательно и конкретно.",
+    "Твоя задача — консультировать и по прямой просьбе клиента изменять только черновик набора, который ещё не оформлен.",
+    "Верни строго JSON: {\"reply\":\"короткий ответ клиенту\",\"updates\":null ИЛИ объект с полями postcard_text,postcard_tone,postcard_detail,postcard_wishes,box_request,filler_level,seasonal_extras,sticker_qty,items}.",
+    "Меняй поля только если клиент прямо попросил изменить их. Если клиент просто спрашивает совет, updates=null.",
+    (allowItemChanges?"items можно менять только из списка каталога, используя точные id и qty 1..10. Не добавляй несуществующие товары. Не меняй цены, оплату и VIP-статус.":"После оформления заказа НЕ меняй товары и их количество, цену, оплату или доставку. Изменять можно только пожелание, оформление открытки, коробку и дополнительные детали."),
+    "postcard_tone: warm/funny/formal/festive/gentle; postcard_detail: simple/medium/premium; filler_level: many/medium/none; sticker_qty: 0..10; seasonal_extras допускает только secret_seasonal.",
+    vipActive?"VIP активен. Можно выставить postcard_detail=premium только если пользователь прямо просит.":"VIP не активен. Не предлагай включать premium или priority_order.",
+    "Текущий черновик: "+JSON.stringify(bundle).slice(0,5000),
+    "Каталог: "+JSON.stringify(catalog.map(p=>({id:String(p.id),title:p.title}))).slice(0,3000)
+  ].join("\n");
+  const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:history.slice(-24).map(x=>({role:x.role,content:x.content})),max_output_tokens:850})});
+  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error("ИИ-помощник не смог ответить. Попробуйте позже.");
+  let output=typeof data.output_text==="string"?data.output_text:"";if(!output&&Array.isArray(data.output))output=data.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
+  const match=output.match(/\{[\s\S]*\}/);if(!match)throw new Error("ИИ-помощник вернул некорректный ответ.");
+  const parsed=JSON.parse(match[0]);return {reply:String(parsed.reply||"Готово.").slice(0,3000),updates:parsed.updates&&typeof parsed.updates==="object"?parsed.updates:null};
+}
+
 async function createSupportAnswer(env, history, isVip) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\\?/g) || []).length : 0), 0);
@@ -1578,6 +1599,7 @@ export default {
             statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_comment', ?)").bind(telegramId, String(order.telegram_id), JSON.stringify({ order_type: orderType, order_id: orderId, comment })));
           }
           await env.DB.batch(statements);
+          if(hasStatus&&status!=="cancelled"&&await tableExists(env,"gift_bundles"))await env.DB.prepare("UPDATE gift_bundles SET owner_confirmed_at=COALESCE(owner_confirmed_at,CURRENT_TIMESTAMP) WHERE order_id=? AND status='ordered'").bind(orderId).run();
           let notification = { attempted: false, sent: false };
           if (hasStatus) {
             notification.attempted = true;
@@ -1765,14 +1787,14 @@ export default {
           const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status='superseded' THEN 'superseded' WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery,COALESCE(o.priority_order,0) AS priority_order FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all(),
             type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
               "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE admin_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all()
           ]);
           const rows = [...(products.results || []), ...(custom.results || [])]
-            .sort((a,b)=>Number(b.priority_delivery||0)-Number(a.priority_delivery||0)||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
+            .sort((a,b)=>(Number(b.priority_order||0)-Number(a.priority_order||0))||(Number(b.priority_delivery||0)-Number(a.priority_delivery||0))||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
           return json({ ok: true, orders: rows, filters: { q: term, type, status }, updated_at: new Date().toISOString() }, 200, origin);
         }
         if (path === "/api/admin/dashboard" && method === "GET") {
@@ -2306,6 +2328,7 @@ export default {
         const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
+        const bundleLock=product?await env.DB.prepare("SELECT owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
         const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
         const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
         const current=product||custom;
@@ -2316,7 +2339,7 @@ export default {
         const chatCreatedAt=String(current.created_at||"").trim().replace(" ","T");
         const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
-        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000;
+        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000&&!bundleLock?.owner_confirmed_at;
         return json({ok:true,order:current,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
       }
       if (path === "/api/order-chat" && method === "POST") {
@@ -2334,6 +2357,31 @@ export default {
         const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
         if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
+        const linkedBundle=product?await env.DB.prepare("SELECT id,bundle_json,owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
+        if(linkedBundle?.owner_confirmed_at)return json({error:"Владелец уже подтвердил заказ и выставил счёт. Изменения через ИИ больше недоступны."},409,origin);
+        if(linkedBundle){
+          let bundle={};try{bundle=JSON.parse(linkedBundle.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать детали набора."},409,origin);}
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
+          const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(orderId,telegramId).all();
+          const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+          const catalog=await getProducts(env),vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+          let answer;try{answer=await createGiftBuilderAnswer(env,history,bundle,catalog,!!vip,false);}catch(error){return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
+          let updated=false;
+          if(answer.updates){const u=answer.updates,next={...bundle};
+            for(const key of ["postcard_text","postcard_wishes","box_request"])if(typeof u[key]==="string")next[key]=u[key].trim().slice(0,key==="box_request"?350:700);
+            if(["warm","funny","formal","festive","gentle"].includes(u.postcard_tone))next.postcard_tone=u.postcard_tone;
+            if(["simple","medium","premium"].includes(u.postcard_detail)&&(u.postcard_detail!=="premium"||vip))next.postcard_detail=u.postcard_detail;
+            if(["many","medium","none"].includes(u.filler_level))next.filler_level=u.filler_level;
+            if(Array.isArray(u.seasonal_extras))next.seasonal_extras=[...new Set(u.seasonal_extras.filter(x=>x==="secret_seasonal"))];
+            if(Number.isInteger(Number(u.sticker_qty)))next.sticker_qty=Math.max(0,Math.min(10,Number(u.sticker_qty)));
+            await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=? AND status='ordered'").bind(JSON.stringify({...next,updated_at:new Date().toISOString()}),linkedBundle.id,orderId).run();
+            updated=true;
+          }
+          const reply=answer.reply+(updated?"\\n\\nИзменения в пожеланиях и оформлении сохранены в заказе. Владелец увидит обновлённые детали.":"");
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(orderId,telegramId,reply).run();
+          try{await notifyOwner(env,"🎁 ИИ-чат набора\\nЗаказ: "+orderId+"\\nПокупатель: "+telegramId+"\\nСообщение: "+message+(updated?"\\nОбновлены детали набора.":""));}catch{}
+          return json({ok:true,reply,updated},200,origin);
+        }
         await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
         const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 30").bind(orderId,telegramId).all();
         const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
@@ -2467,20 +2515,27 @@ export default {
         }
         const items=[...quantities].map(([id,qty])=>({id,qty}));
         const seasonal=Array.isArray(body.seasonal_extras)?[...new Set(body.seasonal_extras.filter(x=>["sticker","drawing"].includes(x)))]:[];
-        const postcard=body.postcard===true;
-        const certificate=body.certificate===true;
-        const filler=body.filler===true;
+        const postcard=true;
         const postcardText=typeof body.postcard_text==="string"?body.postcard_text.trim().slice(0,700):"";
-        if(postcard&&postcardText.length<2)return json({error:"Напишите текст для открытки или отключите открытку."},400,origin);
+        if(postcardText.length<2)return json({error:"Напишите пожелание для открытки."},400,origin);
+        const postcardTone=["warm","funny","formal","festive","gentle"].includes(body.postcard_tone)?body.postcard_tone:"warm";
+        const postcardDetail=["simple","medium","premium"].includes(body.postcard_detail)?body.postcard_detail:"medium";
+        const fillerLevel=["many","medium","none"].includes(body.filler_level)?body.filler_level:"medium";
+        const stickerQty=Math.max(0,Math.min(10,Math.floor(Number(body.sticker_qty)||0)));
+        const boxRequest=typeof body.box_request==="string"?body.box_request.trim().slice(0,350):"";
+        const postcardWishes=typeof body.postcard_wishes==="string"?body.postcard_wishes.trim().slice(0,700):"";
+        const priorityOrder=body.priority_order===true;
+        const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        if((postcardDetail==="premium"||priorityOrder)&&!vip)return json({error:"Премиальное оформление и приоритетный заказ доступны только с действующей VIP-подпиской."},403,origin);
         const layout=Array.isArray(body.layout)?body.layout.map(String).filter(id=>quantities.has(id)).slice(0,20):items.map(x=>x.id);
-        const bundle={items,postcard,postcard_text:postcardText,certificate,filler,seasonal_extras:seasonal,layout,updated_at:new Date().toISOString()};
+        const bundle={items,postcard,postcard_text:postcardText,postcard_tone:postcardTone,postcard_detail:postcardDetail,postcard_wishes:postcardWishes,box_request:boxRequest,filler_level:fillerLevel,seasonal_extras:seasonal,sticker_qty:stickerQty,priority_order:priorityOrder,layout,updated_at:new Date().toISOString()};
         const id=String(body.draft_id||"").trim().slice(0,80)||makeId();
         const existing=await env.DB.prepare("SELECT id,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(id,telegramId).first();
         if(existing&&existing.status!=="draft")return json({error:"Этот набор уже оформлен и больше не редактируется."},409,origin);
         if(existing)await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(JSON.stringify(bundle),id,telegramId).run();
         else await env.DB.prepare("INSERT INTO gift_bundles(id,telegram_id,bundle_json,status) VALUES(?,?,?,'draft')").bind(id,telegramId,JSON.stringify(bundle)).run();
         const productTotal=items.reduce((sum,item)=>sum+Number(catalog.find(p=>String(p.id)===item.id)?.price_stars||0)*item.qty,0);
-        const extras={postcard:postcard?35:0,certificate:certificate?25:0,filler:filler?40:0,sticker:seasonal.includes("sticker")?20:0,drawing:seasonal.includes("drawing")?70:0};
+        const extras={postcard:35,filler:fillerLevel==="none"?0:40,secret_seasonal:seasonal.includes("secret_seasonal")?70:0,stickers:stickerQty>0?20:0};
         return json({ok:true,draft_id:id,bundle,product_total:productTotal,extras_total:Object.values(extras).reduce((a,b)=>a+b,0),extras},200,origin);
       }
 
@@ -2489,16 +2544,36 @@ export default {
         if(!draftId||!message)return json({error:"Напишите вопрос ИИ-консультанту."},400,origin);
         const draft=await env.DB.prepare("SELECT bundle_json,status FROM gift_bundles WHERE id=? AND telegram_id=?").bind(draftId,telegramId).first();
         if(!draft||draft.status!=="draft")return json({error:"Черновик подарка не найден или уже оформлен."},404,origin);
+        let currentBundle={};try{currentBundle=JSON.parse(draft.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать набор."},409,origin);}
         await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(draftId,telegramId,message).run();
         const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(draftId,telegramId).all();
         const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+        const catalog=await getProducts(env),vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
         let answer;
-        try{answer=await createOrderChatAnswer(env,history,{order_type:"gift_builder_draft_not_yet_ordered",status:"draft",bundle_json:draft.bundle_json});}
-        catch(error){try{await notifyOwner(env,"💬 Вопрос по собираемому подарку\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n"+message);}catch{}return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
-        if(!answer.reply)return json({error:"ИИ-консультант не подготовил ответ."},503,origin);
-        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(draftId,telegramId,answer.reply).run();
-        try{await notifyOwner(env,"🎁 Вопрос в конструкторе подарка\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message);}catch(error){console.error("Gift builder notification failed:",String(error).slice(0,200));}
-        return json({ok:true,reply:answer.reply},200,origin);
+        try{answer=await createGiftBuilderAnswer(env,history,currentBundle,catalog,!!vip);}
+        catch(error){try{await notifyOwner(env,"💬 Вопрос в конструкторе подарка\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n"+message);}catch{}return json({error:error.message||"ИИ-помощник временно недоступен."},503,origin);}
+        let updated=false;
+        if(answer.updates){
+          const u=answer.updates;
+          const next={...currentBundle};
+          for(const key of ["postcard_text","postcard_wishes","box_request"])if(typeof u[key]==="string")next[key]=u[key].trim().slice(0,key==="box_request"?350:700);
+          if(["warm","funny","formal","festive","gentle"].includes(u.postcard_tone))next.postcard_tone=u.postcard_tone;
+          if(["simple","medium","premium"].includes(u.postcard_detail)&& (u.postcard_detail!=="premium"||vip))next.postcard_detail=u.postcard_detail;
+          if(["many","medium","none"].includes(u.filler_level))next.filler_level=u.filler_level;
+          if(Array.isArray(u.seasonal_extras))next.seasonal_extras=[...new Set(u.seasonal_extras.filter(x=>x==="secret_seasonal"))];
+          if(Number.isInteger(Number(u.sticker_qty)))next.sticker_qty=Math.max(0,Math.min(10,Number(u.sticker_qty)));
+          if(allowItemChanges&&Array.isArray(u.items)){
+            const counts=new Map();for(const item of u.items){const id=String(item.id||""),qty=Number(item.qty);if(catalog.some(p=>String(p.id)===id)&&Number.isInteger(qty)&&qty>=1&&qty<=10)counts.set(id,qty);}
+            if(counts.size)next.items=[...counts].map(([id,qty])=>({id,qty}));
+          }
+          if(next.postcard_detail==="premium"&&!vip)next.postcard_detail="medium";
+          await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='draft'").bind(JSON.stringify({...next,updated_at:new Date().toISOString()}),draftId,telegramId).run();
+          currentBundle=next;updated=true;
+        }
+        const reply=answer.reply+(updated?"\n\nИзменения внесены в черновик набора. Проверь его перед оформлением.":"");
+        await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'ai',?)").bind(draftId,telegramId,reply).run();
+        try{await notifyOwner(env,"🎁 Сообщение в ИИ-чате конструктора\nЧерновик: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+(updated?"\nИИ предложил изменения в черновике.":""));}catch(error){console.error("Gift builder notification failed:",String(error).slice(0,200));}
+        return json({ok:true,reply,updated,bundle:currentBundle},200,origin);
       }
 
       if (path === "/api/orders" && method === "POST") {
@@ -2509,6 +2584,11 @@ export default {
         const deliveryDetails = typeof body.delivery_details === "string" ? body.delivery_details.trim().slice(0,180) : "";
         const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
         const priorityDelivery = deliveryMethod === "courier" && body.priority_delivery === true;
+        const priorityOrder = body.priority_order === true;
+        const activeVipForOrder = priorityOrder
+          ? await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first()
+          : null;
+        if (priorityOrder && !activeVipForOrder) return json({error:"Приоритетный заказ доступен только участникам с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
@@ -2535,12 +2615,12 @@ export default {
             if(!matching||matching.qty<Number(selectedItem.qty))return json({error:"Состав корзины не совпадает с сохранённым набором. Вернитесь в конструктор и добавьте набор заново."},409,origin);
           }
           const seasonal=Array.isArray(giftBundle.seasonal_extras)?giftBundle.seasonal_extras:[];
+          if((giftBundle.postcard_detail==="premium"||giftBundle.priority_order)&&!activeVipForOrder)return json({error:"Для выбранных VIP-опций нужна действующая подписка."},403,origin);
           const extras=[
             ["Индивидуальная открытка",giftBundle.postcard?35:0],
-            ["Подарочный сертификат",giftBundle.certificate?25:0],
-            ["Наполнитель",giftBundle.filler?40:0],
-            ["Сезонные стикеры",seasonal.includes("sticker")?20:0],
-            ["Маленький сезонный рисунок",seasonal.includes("drawing")?70:0]
+            ["Наполнитель",giftBundle.filler_level==="none"?0:40],
+            ["Секретный сезонный подарок",seasonal.includes("secret_seasonal")?70:0],
+            ["Стикеры × "+Math.max(0,Math.min(10,Number(giftBundle.sticker_qty)||0)),Number(giftBundle.sticker_qty)>0?20:0]
           ];
           builderExtraLines=extras.filter(x=>x[1]>0);
           builderExtraTotal=builderExtraLines.reduce((sum,x)=>sum+x[1],0);
@@ -2592,8 +2672,8 @@ export default {
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
         const title = items.map(item => item.title + " × " + item.qty).join("; ")+(builderExtraLines.length?" · Дополнения: "+builderExtraLines.map(x=>x[0]).join(", "):"");
-        const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?)")
-          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse);
+        const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars,priority_order) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?,?)")
+          .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse,priorityOrder?1:0);
         const orderStatements = [
           orderInsert,
           ...items.map(item => env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status) VALUES (?,?,?,?,?,'pending')")
