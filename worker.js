@@ -1599,6 +1599,7 @@ export default {
             statements.push(env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?, 'order_comment', ?)").bind(telegramId, String(order.telegram_id), JSON.stringify({ order_type: orderType, order_id: orderId, comment })));
           }
           await env.DB.batch(statements);
+          if(hasStatus&&status!=="cancelled"&&await tableExists(env,"gift_bundles"))await env.DB.prepare("UPDATE gift_bundles SET owner_confirmed_at=COALESCE(owner_confirmed_at,CURRENT_TIMESTAMP) WHERE order_id=? AND status='ordered'").bind(orderId).run();
           let notification = { attempted: false, sent: false };
           if (hasStatus) {
             notification.attempted = true;
@@ -2327,6 +2328,7 @@ export default {
         const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
+        const bundleLock=product?await env.DB.prepare("SELECT owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
         const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
         const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
         const current=product||custom;
@@ -2337,7 +2339,7 @@ export default {
         const chatCreatedAt=String(current.created_at||"").trim().replace(" ","T");
         const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
-        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000;
+        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000&&!bundleLock?.owner_confirmed_at;
         return json({ok:true,order:current,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
       }
       if (path === "/api/order-chat" && method === "POST") {
@@ -2355,7 +2357,8 @@ export default {
         const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
         if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
-        const linkedBundle=product?await env.DB.prepare("SELECT id,bundle_json FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
+        const linkedBundle=product?await env.DB.prepare("SELECT id,bundle_json,owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
+        if(linkedBundle?.owner_confirmed_at)return json({error:"Владелец уже подтвердил заказ и выставил счёт. Изменения через ИИ больше недоступны."},409,origin);
         if(linkedBundle){
           let bundle={};try{bundle=JSON.parse(linkedBundle.bundle_json||"{}");}catch{return json({error:"Не удалось прочитать детали набора."},409,origin);}
           await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
