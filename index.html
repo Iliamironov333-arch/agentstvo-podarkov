@@ -1187,6 +1187,41 @@ body.event-halloween .bottom button.active,body.dark-theme.event-halloween .bott
  .season-particles span,.leaf-layer .leaf,#seasonDecorations span{animation:none!important}
 }
 
+
+/* Same restrained treatment for New Year and Easter: no stacked outlines or decorative strips */
+body.event-newyear header:before,body.event-newyear header:after,
+body.dark-theme.event-newyear header:before,body.dark-theme.event-newyear header:after,
+body.event-easter header:before,body.event-easter header:after,
+body.dark-theme.event-easter header:before,body.dark-theme.event-easter header:after,
+body.event-newyear .brand:before,body.event-newyear .brand:after,
+body.dark-theme.event-newyear .brand:before,body.dark-theme.event-newyear .brand:after,
+body.event-easter .brand:before,body.event-easter .brand:after,
+body.dark-theme.event-easter .brand:before,body.dark-theme.event-easter .brand:after,
+body.event-newyear .promo-line:before,body.event-newyear .promo-line:after,
+body.dark-theme.event-newyear .promo-line:before,body.dark-theme.event-newyear .promo-line:after,
+body.event-easter .promo-line:before,body.event-easter .promo-line:after,
+body.dark-theme.event-easter .promo-line:before,body.dark-theme.event-easter .promo-line:after{
+ content:none!important;display:none!important
+}
+body.event-newyear .hero,body.dark-theme.event-newyear .hero,
+body.event-easter .hero,body.dark-theme.event-easter .hero{
+ border-width:1px!important;outline:none!important;box-shadow:0 5px 18px #0002!important
+}
+body.event-newyear .product,body.event-newyear .menu-card,body.dark-theme.event-newyear .product,body.dark-theme.event-newyear .menu-card,
+body.event-easter .product,body.event-easter .menu-card,body.dark-theme.event-easter .product,body.dark-theme.event-easter .menu-card{
+ outline:none!important;box-shadow:0 3px 12px #0002!important
+}
+body.event-newyear .secondary,body.dark-theme.event-newyear .secondary,
+body.event-easter .secondary,body.dark-theme.event-easter .secondary,
+body.event-newyear nav button,body.dark-theme.event-newyear nav button,
+body.event-easter nav button,body.dark-theme.event-easter nav button{
+ outline:none!important;box-shadow:none!important
+}
+body.event-newyear .bottom,body.dark-theme.event-newyear .bottom,
+body.event-easter .bottom,body.dark-theme.event-easter .bottom{
+ border-top-width:1px!important;box-shadow:0 -3px 14px #0002!important
+}
+
 </style>
 </head>
 <body>
