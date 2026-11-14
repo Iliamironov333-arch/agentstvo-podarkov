@@ -1230,7 +1230,7 @@ export default {
         if(path==="/api/admin/gift-certificates"&&method==="POST"){
           if(!(await tableExists(env,"gift_certificates")))return json({error:"Требуется миграция 0025_gift_certificates.sql."},503,origin);
           const body=await readJson(request),code=String(body.code||"").trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32),points=Number(body.points);
-          if(!/^[A-Z0-9_-]{4,32}$/.test(code)||!Number.isSafeInteger(points)||points<1||points>1000000)return json({error:"Укажите код из 4–32 латинских букв/цифр и количество баллов от 1 до 1 000 000."},400,origin);
+          if(!/^[A-Z0-9_-]{8,32}$/.test(code)||!Number.isSafeInteger(points)||points<1||points>1000000)return json({error:"Укажите код из 8–32 латинских букв/цифр и количество баллов от 1 до 1 000 000."},400,origin);
           try{
             await env.DB.prepare("INSERT INTO gift_certificates(code,points,created_by) VALUES(?,?,?)").bind(code,points,telegramId).run();
           }catch(error){
@@ -3005,7 +3005,7 @@ export default {
         const assistantType = conversation.assistant_type === "vip" ? "vip" : "standard";
         if (assistantType === "vip" && !vip) return json({ error: "Для продолжения VIP-диалога нужна действующая VIP-подписка." }, 403, origin);
 
-        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй\s+сертификат|активировать\s+сертификат|код\s+сертификата)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
+        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй\s+сертификат|активировать\s+сертификат|код\s+сертификата)\s*[:№-]?\s*([A-Z0-9_-]{8,32})/i);
         if(certificateMatch){
           if(!(await tableExists(env,"gift_certificates")))return json({error:"Активация сертификатов ещё не включена: требуется миграция базы данных."},503,origin);
           await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'user',?,'buyer')")
@@ -3013,6 +3013,14 @@ export default {
           await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
             .bind(message.slice(0,42),conversationId,telegramId).run();
           const code=certificateMatch[1].toUpperCase();
+          const recentAttempts=await env.DB.prepare("SELECT COUNT(*) AS total FROM gift_certificate_attempts WHERE telegram_id=? AND attempted_at>datetime('now','-10 minutes')").bind(telegramId).first();
+          if(Number(recentAttempts?.total||0)>=5){
+            const reply="⏳ Слишком много попыток активации. Попробуйте снова через 10 минут.";
+            await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')").bind(telegramId,conversationId,assistantType,reply).run();
+            return json({ok:true,reply,certificate_activated:false,points:0,conversation_id:conversationId},200,origin);
+          }
+          await env.DB.prepare("INSERT INTO gift_certificate_attempts(telegram_id) VALUES(?)").bind(telegramId).run();
+          await env.DB.prepare("DELETE FROM gift_certificate_attempts WHERE attempted_at<datetime('now','-1 day')").run();
           const redemption=await env.DB.batch([
             env.DB.prepare("UPDATE gift_certificates SET redeemed_by=?,redeemed_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND redeemed_by IS NULL AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(telegramId,code),
             env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,points,'gift_certificate',?,? FROM gift_certificates WHERE code=? AND redeemed_by=? AND redeemed_at>=datetime('now','-1 minute') AND changes()=1")
