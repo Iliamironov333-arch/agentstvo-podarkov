@@ -2948,8 +2948,18 @@ export default {
         if(!["support","workshop"].includes(kind))return json({error:"Неизвестный тип чата."},400,origin);
         const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
         if(kind==="workshop"){
-          const legacy=await env.DB.prepare("SELECT id,subject,created_at,updated_at FROM ai_order_drafts WHERE telegram_id=? AND status IN ('collecting','review','approved','paid') AND details_json LIKE '%miniapp_workshop%'").bind(String(telegramId)).all();
-          for(const d of legacy.results||[])await env.DB.prepare("INSERT OR IGNORE INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id,created_at,updated_at) VALUES(?,?,'workshop','standard',?,?,?,?)").bind(String(d.id),String(telegramId),String(d.subject||'Диалог мастерской').slice(0,80),String(d.id),d.created_at||new Date().toISOString(),d.updated_at||d.created_at||new Date().toISOString()).run();
+          const legacy=await env.DB.prepare("SELECT id,subject,created_at,updated_at,details_json FROM ai_order_drafts WHERE telegram_id=? AND status IN ('collecting','review','approved','paid') AND details_json LIKE '%miniapp_workshop%'").bind(String(telegramId)).all();
+          for(const d of legacy.results||[]){
+            await env.DB.prepare("INSERT OR IGNORE INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id,created_at,updated_at) VALUES(?,?,'workshop','standard',?,?,?,?)").bind(String(d.id),String(telegramId),String(d.subject||'Диалог мастерской').slice(0,80),String(d.id),d.created_at||new Date().toISOString(),d.updated_at||d.created_at||new Date().toISOString()).run();
+            const stored=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(String(d.id),String(telegramId)).first();
+            if(!Number(stored?.n||0)){
+              let details={};try{details=JSON.parse(d.details_json||"{}");}catch{}
+              for(const m of (Array.isArray(details.conversation)?details.conversation:[]).slice(-100)){
+                if(!m||!["user","assistant","owner"].includes(m.role)||typeof m.content!=="string"||!m.content.trim())continue;
+                await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,?,?)").bind(String(d.id),String(telegramId),m.role,m.content.slice(0,7000)).run();
+              }
+            }
+          }
         }
         const rows=await env.DB.prepare("SELECT c.id,c.assistant_tier,c.title,c.created_at,c.updated_at,d.status FROM assistant_conversations c LEFT JOIN ai_order_drafts d ON d.id=c.source_draft_id WHERE c.telegram_id=? AND c.assistant_kind=? ORDER BY c.updated_at DESC").bind(telegramId,kind).all();
         return json({ok:true,vip:!!vip,limit:vip?5:3,conversations:rows.results||[]},200,origin);
@@ -2974,6 +2984,7 @@ export default {
           if(draft&&["review","approved","paid"].includes(draft.status))return json({error:"Этот диалог уже связан с заказом и не может быть удалён из истории."},409,origin);
           if(draft)await env.DB.prepare("DELETE FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status='collecting'").bind(row.source_draft_id,String(telegramId)).run();
         }
+        await env.DB.prepare("DELETE FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(id,String(telegramId)).run();
         await env.DB.prepare("DELETE FROM assistant_conversations WHERE id=? AND telegram_id=?").bind(id,String(telegramId)).run();
         return json({ok:true},200,origin);
       }
