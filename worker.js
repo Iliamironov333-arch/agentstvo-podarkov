@@ -1978,7 +1978,10 @@ export default {
           await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'human')")
             .bind(targetId,message).run();
           const latestChat=await env.DB.prepare("SELECT id FROM assistant_conversations WHERE telegram_id=? AND assistant_kind='support' ORDER BY updated_at DESC LIMIT 1").bind(targetId).first();
-          if(latestChat)await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'owner',?)").bind(latestChat.id,targetId,message).run();
+          if(latestChat){
+            await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'owner',?)").bind(latestChat.id,targetId,message).run();
+            await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(latestChat.id).run();
+          }
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
               .bind(telegramId,targetId,"support_human_reply",JSON.stringify({length:message.length})).run();
