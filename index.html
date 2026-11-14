@@ -3530,7 +3530,7 @@ const adminPermissionLabels = {
  orders_manage:'Изменение заказов и уведомления',catalog_view:'Просмотр каталога',
  catalog_manage:'Управление товарами',support_view:'Просмотр переписок и обращений',
  support_reply:'Ответы и управление поддержкой',campaigns_manage:'Рассылки',
- announcements_manage:'Объявления',promos_manage:'Промокоды',analytics_view:'Аналитика',
+ announcements_manage:'Объявления',promos_manage:'Промокоды',certificates_manage:'Подарочные сертификаты',analytics_view:'Аналитика',
  backup_manage:'Резервные копии',system_manage:'Технический центр и настройки',ai_bot_manage:'Настройки ИИ-модератора',ai_bot_logs:'Журнал, жалобы и наблюдение',ai_watch_end:'Завершение наблюдения',ai_orders_view:'Просмотр ИИ-заказов',ai_orders_manage:'Редактирование ИИ-заказов',reports_view:'Просмотр отчётов'
 };
 function adminHasPermission(key){
@@ -3547,6 +3547,7 @@ function applyAdminPermissionVisibility(){
  showPanel('#adminOrderSearch',adminHasPermission('orders_view')||adminHasPermission('orders_manage'));
  showPanel('#adminBackupPanel',adminHasPermission('backup_manage'));
  showPanel('#adminPromosPanel',adminHasPermission('promos_manage'));
+ showPanel('#adminGiftCertificatesPanel',adminHasPermission('certificates_manage'));
  showPanel('#adminCatalogPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
  showPanel('#adminPhotoStudioPanel',adminHasPermission('catalog_view')||adminHasPermission('catalog_manage'));
  showPanel('#adminSystemControlsPanel',adminHasPermission('system_manage'));
