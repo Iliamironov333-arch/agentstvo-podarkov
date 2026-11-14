@@ -2904,7 +2904,11 @@ export default {
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
-        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        if(!draft){
+          const emptyChat=await env.DB.prepare("SELECT id FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
+          if(emptyChat)return json({ok:true,messages:[],conversation:[],status:"collecting",subject:"Новый диалог",estimated_stars:0},200,origin);
+          return json({error:"Диалог мастерской не найден."},404,origin);
+        }
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
@@ -2936,7 +2940,11 @@ export default {
         const kind=String(url.searchParams.get("kind")||"support");
         if(!["support","workshop"].includes(kind))return json({error:"Неизвестный тип чата."},400,origin);
         const vip=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
-        const rows=await env.DB.prepare("SELECT id,assistant_tier,title,created_at,updated_at FROM assistant_conversations WHERE telegram_id=? AND assistant_kind=? ORDER BY updated_at DESC").bind(telegramId,kind).all();
+        if(kind==="workshop"){
+          const legacy=await env.DB.prepare("SELECT id,subject,created_at,updated_at FROM ai_order_drafts WHERE telegram_id=? AND status IN ('collecting','review','approved','paid') AND details_json LIKE '%miniapp_workshop%'").bind(String(telegramId)).all();
+          for(const d of legacy.results||[])await env.DB.prepare("INSERT OR IGNORE INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id,created_at,updated_at) VALUES(?,?,'workshop','standard',?,?,?,?)").bind(String(d.id),String(telegramId),String(d.subject||'Диалог мастерской').slice(0,80),String(d.id),d.created_at||new Date().toISOString(),d.updated_at||d.created_at||new Date().toISOString()).run();
+        }
+        const rows=await env.DB.prepare("SELECT c.id,c.assistant_tier,c.title,c.created_at,c.updated_at,d.status FROM assistant_conversations c LEFT JOIN ai_order_drafts d ON d.id=c.source_draft_id WHERE c.telegram_id=? AND c.assistant_kind=? ORDER BY c.updated_at DESC").bind(telegramId,kind).all();
         return json({ok:true,vip:!!vip,limit:vip?5:3,conversations:rows.results||[]},200,origin);
       }
       if (path === "/api/assistant/conversations" && method === "POST") {
