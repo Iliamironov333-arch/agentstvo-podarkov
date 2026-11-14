@@ -2045,7 +2045,8 @@ function drawCart() {
  if (!entries.length) {
   root.innerHTML = '<p class="muted">Корзина пока пустая. Выбери подарок в каталоге 🎁</p>';
  } else {
-  root.innerHTML = entries.map(p => `<div class="lineitem"><span>${p[3]} ${p[1]} × ${cart[p[0]]}<br><button class="secondary" onclick="changeQty(${p[0]},-1)">−</button> <button class="secondary" onclick="changeQty(${p[0]},1)">＋</button></span><b>${money(p[2]*cart[p[0]])}</b></div>`).join('');
+  const bundleBanner=window.pendingGiftBundleId?'<div class="admin-detail-line" style="margin-bottom:10px;border:1px solid var(--gold2);border-radius:12px;padding:12px"><strong>🎁 Подарочный набор</strong><p class="muted" style="margin:5px 0 0">Состав, открытка и дополнительные пожелания будут сохранены как единый заказ набора.</p></div>':'';
+  root.innerHTML = bundleBanner + entries.map(p => `<div class="lineitem"><span>${p[3]} ${p[1]} × ${cart[p[0]]}<br><button class="secondary" onclick="changeQty(${p[0]},-1)">−</button> <button class="secondary" onclick="changeQty(${p[0]},1)">＋</button></span><b>${money(p[2]*cart[p[0]])}</b></div>`).join('');
  }
 
  const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
