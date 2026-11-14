@@ -2917,7 +2917,9 @@ export default {
         }
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
-        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
+        const saved=await env.DB.prepare("SELECT role,content,created_at FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=? ORDER BY id ASC LIMIT 100").bind(draftId,String(telegramId)).all();
+        const conversation=(saved.results||[]).length?(saved.results||[]):(Array.isArray(details.conversation)?details.conversation:[]);
+        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation,status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
