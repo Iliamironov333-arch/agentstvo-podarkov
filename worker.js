@@ -431,7 +431,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}) {
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
     "Проверенные сервером данные текущего покупателя (используй их для ответов о балансе и заказах; не показывай Telegram ID): " + JSON.stringify(customerContext).slice(0,5000),
     "Если покупатель просит найти раздел, кратко объясни путь; интерфейс также покажет подходящую кнопку перехода.",
-    "Если спрашивают о заказе, ориентируйся только на переданный серверный список заказов и его реальные статусы. Для оформления покупки направляй в каталог и корзину; индивидуальные идеи — в ИИ-мастерскую.",
+    "Если спрашивают о заказе, ориентируйся только на переданный серверный список заказов и его реальные статусы. Флаг priority_order=1 означает, что для конкретного заказа включён приоритетный режим; не обещай приоритет только из-за наличия VIP-подписки. Для оформления покупки направляй в каталог и корзину; индивидуальные идеи — в ИИ-мастерскую.",
     isVip ? "Пользователь VIP: ты старший помощник. Отвечай подробнее и структурированнее, раскрывай полезные детали, сравнивай варианты, объясняй условия и помогай разобраться глубже. Не выдумывай факты, не меняй правила оплаты и не обещай приоритет доставки вне существующих правил VIP-заказа." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
@@ -3006,7 +3006,12 @@ export default {
         if (assistantType === "vip" && !vip) return json({ error: "Для продолжения VIP-диалога нужна действующая VIP-подписка." }, 403, origin);
 
         const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй\s+сертификат|активировать\s+сертификат|код\s+сертификата)\s*[:№-]?\s*([A-Z0-9_-]{4,32})/i);
-        if(certificateMatch && await tableExists(env,"gift_certificates")){
+        if(certificateMatch){
+          if(!(await tableExists(env,"gift_certificates")))return json({error:"Активация сертификатов ещё не включена: требуется миграция базы данных."},503,origin);
+          await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'user',?,'buyer')")
+            .bind(telegramId,conversationId,assistantType,message).run();
+          await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+            .bind(message.slice(0,42),conversationId,telegramId).run();
           const code=certificateMatch[1].toUpperCase();
           const redemption=await env.DB.batch([
             env.DB.prepare("UPDATE gift_certificates SET redeemed_by=?,redeemed_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND redeemed_by IS NULL AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(telegramId,code),
