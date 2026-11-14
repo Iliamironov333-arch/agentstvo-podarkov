@@ -1845,7 +1845,7 @@ function money(n) {
 }
 
 function updateThemeMeta(){const m=document.querySelector('meta[name="theme-color"]');if(!m)return;if(document.body.classList.contains('event-newyear')){m.content='#071b2b';return}const dark=document.body.classList.contains('dark-theme');const season=['winter','spring','summer'].find(x=>document.body.classList.contains('season-'+x))||'autumn';const colors={autumn:dark?'#211810':'#fff8ed',winter:dark?'#101f2b':'#edf7ff',spring:dark?'#172319':'#f4f8ee',summer:dark?'#2b2111':'#fff9e9'};m.content=colors[season]}
-const SEASON_EVENTS={autumn:{id:'halloween',label:'Хэллоуин',icon:'🎃',description:'Тыквы, фонарики, осенние огоньки и летучие мыши.'},winter:{id:'newyear',label:'Новый год',icon:'🎄',description:'Ночная зимняя тема, снег, звёзды, салюты, мишура и ёлочные шары.'},spring:{id:'easter',label:'Пасха',icon:'🐣',description:'Пастельные краски, весенние цветы и праздничные яйца.'},summer:null};
+const SEASON_EVENTS={autumn:{id:'halloween',label:'Хэллоуин',icon:'🎃',description:'Тыквы, фонарики, осенние огоньки и падающие листья.'},winter:{id:'newyear',label:'Новый год',icon:'🎄',description:'Ночная зимняя тема, снег, звёзды, салюты, мишура и ёлочные шары.'},spring:{id:'easter',label:'Пасха',icon:'🐣',description:'Пастельные краски, весенние цветы и праздничные яйца.'},summer:null};
 function getSeasonEvent(){try{return localStorage.getItem('gift-season-event')||''}catch(e){return ''}}
 function eventSeason(eventId){return Object.keys(SEASON_EVENTS).find(k=>SEASON_EVENTS[k]?.id===eventId)||''}
 function renderSeasonDecorations(eventId){
