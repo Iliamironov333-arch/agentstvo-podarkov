@@ -344,7 +344,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
     await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
     await aiGroupReply(env,chatId,user.id,"Хорошо, давайте начнём описание заново. Что именно хотите заказать?",replyToMessageId);return true;
   }
-  details.conversation=details.conversation.slice(-16);
+  details.conversation=details.conversation.slice(-100);
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
   return true;
 }
