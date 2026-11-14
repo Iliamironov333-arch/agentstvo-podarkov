@@ -2936,8 +2936,6 @@ export default {
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
         await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
         await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
-        await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'user',?)").bind(draftId,String(telegramId),message).run();
-        await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).run();
         await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
         return json({ok:true,conversation:details.conversation},200,origin);
       }
