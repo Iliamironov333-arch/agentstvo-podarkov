@@ -2585,10 +2585,10 @@ export default {
         const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
         const priorityDelivery = deliveryMethod === "courier" && body.priority_delivery === true;
         const priorityOrder = body.priority_order === true;
-        const activeVipForOrder = priorityOrder || body.priority_delivery === true
+        const activeVipForOrder = priorityOrder
           ? await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first()
           : null;
-        if ((priorityOrder || body.priority_delivery === true) && !activeVipForOrder) return json({error:"Приоритетный заказ доступен только участникам с действующей VIP-подпиской."},403,origin);
+        if (priorityOrder && !activeVipForOrder) return json({error:"Приоритетный заказ доступен только участникам с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
