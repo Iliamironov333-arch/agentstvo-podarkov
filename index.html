@@ -2828,9 +2828,14 @@ async function openAdminOrder(orderId,orderType) {
    if(data.gift_bundle){
     const bundle=data.gift_bundle;
     addLine('Индивидуальная открытка',bundle.postcard?'Да · '+(bundle.postcard_text||'Текст не указан'):'Нет');
-    addLine('Сертификат',bundle.certificate?'Да':'Нет');
-    addLine('Наполнитель',bundle.filler?'Да':'Нет');
-    addLine('Сезонные дополнения',(bundle.seasonal_extras||[]).join(', ')||'Нет');
+    addLine('Тон открытки',bundle.postcard_tone||'—');
+    addLine('Детальность открытки',bundle.postcard_detail||'—');
+    addLine('Дополнительные пожелания',bundle.postcard_wishes||'—');
+    addLine('Подарочная коробка',bundle.box_request||'Не указана');
+    addLine('Наполнитель',bundle.filler_level==='many'?'Много':bundle.filler_level==='medium'?'Среднее количество':bundle.filler_level==='none'?'Без наполнителя':bundle.filler?'Да':'Не указан');
+    addLine('Секретный сезонный подарок',(bundle.seasonal_extras||[]).includes('secret_seasonal')?'Да':'Нет');
+    addLine('Количество стикеров',String(bundle.sticker_qty||0));
+    addLine('Приоритетный заказ',data.order?.priority_order?'Да · VIP':'Нет');
     addLine('Порядок расположения',Array.isArray(bundle.layout)?bundle.layout.join(' → '):'—');
     if(bundle.owner_approved_change?.summary)addLine('Согласованное изменение',bundle.owner_approved_change.summary);
    }
