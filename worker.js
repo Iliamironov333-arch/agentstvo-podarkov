@@ -871,6 +871,10 @@ export default {
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
+    ctx.waitUntil(Promise.all([
+      env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run(),
+      env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run()
+    ]).catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
@@ -2671,7 +2675,9 @@ export default {
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
         const orderId = makeId();
-        const title = items.map(item => item.title + " × " + item.qty).join("; ")+(builderExtraLines.length?" · Дополнения: "+builderExtraLines.map(x=>x[0]).join(", "):"");
+        const title = giftBundleId
+          ? "🎁 Подарочный набор · " + items.map(item => item.title + " × " + item.qty).join("; ") + (builderExtraLines.length ? " · Дополнения: " + builderExtraLines.map(x=>x[0]).join(", ") : "")
+          : items.map(item => item.title + " × " + item.qty).join("; ") + (builderExtraLines.length ? " · Дополнения: " + builderExtraLines.map(x=>x[0]).join(", ") : "");
         const orderInsert = env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars,balance_applied_stars,priority_order) VALUES (?,?,?,?,?,?,?,?, 'pending','awaiting_payment',?,?,?,?)")
           .bind(orderId,telegramId,items.length===1?items[0].id:null,title,items.reduce((sum,item)=>sum+item.qty,0),subtotal+builderExtraTotal,discountPercent,total,promoCode,discount,requestedBalanceUse,priorityOrder?1:0);
         const orderStatements = [
@@ -2836,25 +2842,31 @@ export default {
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           const result=await createCraftAnswer(env,messages);
-          let draftId=null,estimatedStars=0;
+          let draftId=String(b.conversation_id||"");
+          if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
+          const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+          if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
+          const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
+          const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
+          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
+          let estimatedStars=Number(existing?.estimated_stars||0);
           if(result.ready){
-            draftId=String(b.conversation_id||"");
-            if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
-            const existing=await env.DB.prepare("SELECT id,telegram_id,status FROM ai_order_drafts WHERE id=?").bind(draftId).first();
-            if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
-            if(!existing){
-              const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
-              estimatedStars=estimate.price_stars;
-              const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
-              const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-              const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-16).map(m=>({role:m.role,content:String(m.content||"").slice(0,350)})),owner_messages:[],estimate_note:String(estimate.note||"").slice(0,180)};
+            const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
+            estimatedStars=estimate.price_stars;
+            details.estimate_note=String(estimate.note||"").slice(0,180);
+            if(existing){
+              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(subject,JSON.stringify(details),estimatedStars,draftId,String(telegramId)).run();
+            }else{
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'review')")
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
-              await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-МАСТЕРСКОЙ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
-            } else {
-              draftId=existing.id;
-              const row=await env.DB.prepare("SELECT estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
-              estimatedStars=Number(row?.estimated_stars||0);
+            }
+            if(!existing||existing.status==="collecting")await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-МАСТЕРСКОЙ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
+          }else{
+            if(existing){
+              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status IN ('collecting','review')").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
+            }else{
+              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,0,'collecting')")
+                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
             }
           }
           return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
@@ -2862,7 +2874,7 @@ export default {
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
