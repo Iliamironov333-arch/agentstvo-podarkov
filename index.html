@@ -3763,7 +3763,7 @@ async function runAssistantAction(action){
  if(!action||typeof action!=='object')return;
  if(action.type==='navigate'){const allowed=['menuView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','balanceView','profileView','dealsView','aboutView'];if(allowed.includes(action.view))showView(action.view);return;}
  if(action.type==='product'){if(!catalogLoaded)await loadProducts();const product=products.find(p=>String(p[0])===String(action.product_id));if(!product){toast('Эта работа больше не найдена в каталоге.');return;}showView('catalogView');openProductDetail(product);return;}
- if(action.type==='workshop_template'&&typeof action.template==='string'){craftTemplatePending=action.template.slice(0,2500);showView('aiWorkshopView');await createCraftChat();const input=document.getElementById('craftChatInput');if(input){input.value=craftTemplatePending;input.focus();}const status=document.getElementById('craftResultStatus');if(status)status.textContent='Шаблон перенесён. Проверь описание и отправь его мастеру, чтобы начать обсуждение.';}
+ if(action.type==='workshop_template'&&typeof action.template==='string'){craftTemplatePending=action.template.slice(0,2500);const created=await createCraftChat();if(!created)return;showView('aiWorkshopView');const input=document.getElementById('craftChatInput');if(input){input.value=craftTemplatePending;input.focus();}const status=document.getElementById('craftResultStatus');if(status)status.textContent='Шаблон перенесён. Проверь описание и отправь его мастеру, чтобы начать обсуждение.';}
 }
 
 function openOwnerChat(){const url='https://t.me/Iliya_Mironov_33';if(window.Telegram?.WebApp?.openTelegramLink)window.Telegram.WebApp.openTelegramLink(url);else window.open(url,'_blank','noopener');}
@@ -3819,8 +3819,8 @@ async function loadCraftConversations(loadActive=true){
 }
 async function selectCraftChat(id){craftDraftId=id;try{localStorage.setItem('agentstvo-craft-draft-id',id);}catch{}await restoreCraftConversation();await loadCraftConversations(false);}
 async function createCraftChat(){
- try{const d=await apiFetch('/api/assistant/conversations',{method:'POST',body:JSON.stringify({kind:'workshop'})});resetCraftConversation(d.id);await loadCraftConversations(false);document.getElementById('craftChatInput')?.focus();}
- catch(e){const status=document.getElementById('craftResultStatus');if(status)status.textContent=e.message||'Не удалось создать чат.';}
+ try{const d=await apiFetch('/api/assistant/conversations',{method:'POST',body:JSON.stringify({kind:'workshop'})});resetCraftConversation(d.id);await loadCraftConversations(false);document.getElementById('craftChatInput')?.focus();return true;}
+ catch(e){const status=document.getElementById('craftResultStatus');if(status)status.textContent=e.message||'Не удалось создать чат.';return false;}
 }
 async function deleteCraftChat(id){
  if(!confirm('Удалить незавершённый диалог мастерской?'))return;
