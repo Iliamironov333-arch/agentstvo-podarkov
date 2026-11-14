@@ -1765,14 +1765,14 @@ export default {
           const customStatus = "COALESCE(" + customOverride + ",CASE WHEN c.status='superseded' THEN 'superseded' WHEN c.status IN ('cancelled','canceled') THEN 'cancelled' WHEN c.status='pending' THEN 'unpaid' WHEN c.status IN ('ready','completed','done') THEN 'ready' WHEN c.status IN ('in_progress','processing','work') THEN 'in_progress' ELSE 'new' END)";
           const [products, custom] = await Promise.all([
             type === "custom" ? Promise.resolve({ results: [] }) : env.DB.prepare(
-              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
+              "SELECT * FROM (SELECT o.id,o.telegram_id,u.first_name,u.username,'product' AS order_type,o.product_title AS title,o.quantity,o.total_stars,o.payment_status,o.fulfillment_status,o.created_at," + productStatus + " AS admin_status,COALESCE((SELECT d.priority_delivery FROM order_delivery d WHERE d.order_id=o.id),0) AS priority_delivery,COALESCE(o.priority_order,0) AS priority_order FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id) WHERE fulfillment_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all(),
             type === "product" ? Promise.resolve({ results: [] }) : env.DB.prepare(
               "SELECT * FROM (SELECT c.id,c.telegram_id,c.first_name,c.username,'custom' AS order_type,'Индивидуальный заказ: ' || c.subject AS title,1 AS quantity,c.total_stars,NULL AS payment_status,NULL AS fulfillment_status,c.created_at," + customStatus + " AS admin_status,0 AS priority_delivery FROM custom_orders c) WHERE admin_status<>'superseded' AND (?='' OR id LIKE ? OR telegram_id LIKE ? OR title LIKE ?) AND (?='all' OR admin_status=?) ORDER BY created_at DESC LIMIT ?"
             ).bind(term,like,like,like,status,status,limit).all()
           ]);
           const rows = [...(products.results || []), ...(custom.results || [])]
-            .sort((a,b)=>Number(b.priority_delivery||0)-Number(a.priority_delivery||0)||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
+            .sort((a,b)=>(Number(b.priority_order||0)-Number(a.priority_order||0))||(Number(b.priority_delivery||0)-Number(a.priority_delivery||0))||String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,limit);
           return json({ ok: true, orders: rows, filters: { q: term, type, status }, updated_at: new Date().toISOString() }, 200, origin);
         }
         if (path === "/api/admin/dashboard" && method === "GET") {
