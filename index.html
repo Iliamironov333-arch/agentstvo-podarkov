@@ -1960,7 +1960,7 @@ function renderGiftBuilder(){
   });
  }
  const extras=giftBuilderExtras(),productTotal=giftBuilderSelectedItems().reduce((sum,item)=>sum+Number(products.find(p=>String(p[0])===item.id)?.[2]||0)*item.qty,0);
- const extraTotal=(extras.postcard_text?35:0)+(extras.filler_level==='many'?65:extras.filler_level==='medium'?35:0)+(extras.seasonal_extras.includes('secret_seasonal')?45:0)+(Number(extras.sticker_qty||0)*10);
+ const extraTotal=(extras.postcard_text?35:0)+(extras.filler_level==='none'?0:40)+(extras.seasonal_extras.includes('secret_seasonal')?70:0)+(Number(extras.sticker_qty||0)>0?20:0);
  const selected=giftBuilderSelectedItems();
  const productLabel=document.getElementById('giftBuilderProductsTotal'),extrasLabel=document.getElementById('giftBuilderExtrasTotal'),totalLabel=document.getElementById('giftBuilderTotal'),add=document.getElementById('giftBuilderAdd');
  if(productLabel)productLabel.textContent=money(productTotal);if(extrasLabel)extrasLabel.textContent=money(extraTotal);if(totalLabel)totalLabel.textContent=money(productTotal+extraTotal);if(add)add.disabled=!selected.length||!catalogLoaded;
