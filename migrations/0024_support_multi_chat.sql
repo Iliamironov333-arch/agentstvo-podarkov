@@ -30,3 +30,5 @@ SELECT 'legacy-' || telegram_id, telegram_id, 'standard', 'Старый диал
        MIN(created_at), MAX(created_at)
 FROM support_chat_messages
 GROUP BY telegram_id;
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES('0024_support_multi_chat');
