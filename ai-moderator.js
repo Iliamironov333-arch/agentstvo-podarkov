@@ -974,6 +974,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       details.conversation=details.conversation.slice(-16);
       details.summary=String(details.summary||"").slice(0,2000);
       await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),id).run();
+      await env.DB.prepare("INSERT INTO assistant_chat_messages(conversation_id,telegram_id,role,content) VALUES(?,?,'owner',?)").bind(id,String(draft.telegram_id),ownerMessage.content).run();
+      await env.DB.prepare("UPDATE assistant_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(id,String(draft.telegram_id)).run();
       await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_workshop_owner_reply",details:{draft_id:id,characters:reply.length}});
       return aiJson({ok:true});
     }
