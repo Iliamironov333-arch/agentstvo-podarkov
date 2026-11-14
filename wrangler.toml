@@ -9,3 +9,9 @@ database_id = "077f0476-4ec0-4ddb-8236-be3575182b0a"
 
 [triggers]
 crons = ["*/1 * * * *"]
+
+# Cloudflare Workers Preview must use an isolated D1 database.
+# Never point Preview at the production DB configured above.
+[[previews.d1_databases]]
+binding = "DB"
+database_id = "bb26ba92-bc62-43dc-ab4d-57cb1d399bbc"
