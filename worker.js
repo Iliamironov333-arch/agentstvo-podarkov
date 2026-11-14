@@ -2871,6 +2871,7 @@ export default {
             await env.DB.prepare("INSERT INTO assistant_conversations(id,telegram_id,assistant_kind,assistant_tier,title,source_draft_id) VALUES(?,?,'workshop',?,'Новый диалог',?)").bind(draftId,String(telegramId),tier,draftId).run();
             chat={id:draftId,assistant_tier:tier};
           }
+          await env.DB.prepare("UPDATE assistant_conversations SET assistant_tier=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(tier,draftId,String(telegramId)).run();
           const storedCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
           if(Number(storedCount?.n||0)>chatLimit-2)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
           const result=await createCraftAnswer(env,messages,!!vip);
@@ -2923,8 +2924,9 @@ export default {
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
-        const chatMeta=await env.DB.prepare("SELECT assistant_tier FROM assistant_conversations WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(draftId,String(telegramId)).first();
-        const chatLimit=chatMeta?.assistant_tier==="vip"?100:50;
+        const vipNow=await env.DB.prepare("SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const chatLimit=vipNow?100:50;
+        await env.DB.prepare("UPDATE assistant_conversations SET assistant_tier=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND assistant_kind='workshop'").bind(vipNow?"vip":"standard",draftId,String(telegramId)).run();
         const chatCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM assistant_chat_messages WHERE conversation_id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
         if(Number(chatCount?.n||0)>=chatLimit)return json({error:"В этом чате достигнут лимит сообщений. Создайте новый диалог.",limit:chatLimit},409,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
