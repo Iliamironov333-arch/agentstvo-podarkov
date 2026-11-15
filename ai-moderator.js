@@ -280,7 +280,7 @@ async function aiGroupReply(env,chatId,userId,text,replyToMessageId=null){
   const sent=await aiTelegram(env,"sendMessage",payload);
   await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?,?,?)")
     .bind(String(chatId),Number(sent?.message_id)||null,String(userId||""),"assistant",String(text).slice(0,3500)).run();
-  return true;
+  return Number(sent?.message_id)||true;
 }
 function aiToneInstruction(tone){
   const tones={
@@ -292,13 +292,16 @@ function aiToneInstruction(tone){
   return tones[tone]||tones.respectful;
 }
 async function aiGroupOrderReply(env,chatId,userId,draftId,details,text,replyToMessageId){
+  const sent=await aiGroupReply(env,chatId,userId,text,replyToMessageId);
+  if(!sent)return false;
   details.conversation=Array.isArray(details.conversation)?details.conversation:[];
   details.conversation.push({role:"assistant",content:String(text).slice(0,1200)});
   details.conversation=details.conversation.slice(-24);
+  if(typeof sent==="number"){details.thread_message_ids=Array.isArray(details.thread_message_ids)?details.thread_message_ids:[];details.thread_message_ids.push(sent);details.thread_message_ids=details.thread_message_ids.slice(-30);}
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
-  await aiGroupReply(env,chatId,userId,text,replyToMessageId);
+  return true;
 }
-async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
+async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId=null){
   const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' AND last_activity_at>=datetime('now','-30 minutes') ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
   const lower=String(text||"").toLowerCase().trim();
   const orientationQuestion=/^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower)&&/[?？]/.test(text);
@@ -307,6 +310,29 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_paused_topic_change",details:{draft_id:active.id}});
     return false;
+  }
+  if(!active&&replyToOriginalId){
+    const candidates=await env.DB.prepare("SELECT id,chat_id,telegram_id,group_message_id,subject,details_json,status,estimated_stars,approved_stars FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('review','approved','paid') ORDER BY updated_at DESC LIMIT 20").bind(String(chatId),String(user.id)).all();
+    let linked=null,linkedDetails={};
+    for(const candidate of candidates.results||[]){let parsed={};try{parsed=JSON.parse(candidate.details_json||"{}");}catch{}const ids=Array.isArray(parsed.thread_message_ids)?parsed.thread_message_ids:[];if(Number(candidate.group_message_id)===Number(replyToOriginalId)||ids.some(id=>Number(id)===Number(replyToOriginalId))){linked=candidate;linkedDetails=parsed;break;}}
+    if(linked){
+      linkedDetails.conversation=Array.isArray(linkedDetails.conversation)?linkedDetails.conversation:[];linkedDetails.conversation.push({role:"user",content:String(text).slice(0,1000)});
+      if(linkedDetails.ai_enabled===false){
+        linkedDetails.conversation=linkedDetails.conversation.slice(-24);
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(linkedDetails),linked.id).run();
+        await aiNotifyOwner(env,"💬 Сообщение по групповому заказу (ИИ выключен)\nЗаказ: "+linked.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\n"+String(text).slice(0,700)+"\n\nОтветьте вручную в чате этого заказа.");
+        return true;
+      }
+      try{
+        const history=linkedDetails.conversation.filter(item=>item&&["user","assistant","owner"].includes(item.role)).slice(-24).map(item=>({role:item.role==="owner"?"assistant":item.role,content:item.content}));
+        const context={order_chat:true,order_subject:linked.subject||"Заказ из группы",order_status:linked.status,order_summary:linkedDetails.summary||"",ai_estimate_stars:linked.estimated_stars||null,owner_confirmed_price_stars:linked.approved_stars||null,order_chat_instruction:"Это отдельная переписка только по одному заказу. Не используй и не добавляй сообщения других участников группы. Не меняй цену, статус, оплату или заказ."};
+        const answer=await createSupportAnswer(env,history,false,context,[]);
+        const sent=await aiGroupReply(env,chatId,user.id,answer,replyToMessageId);
+        if(sent){linkedDetails.conversation.push({role:"assistant",content:answer});linkedDetails.conversation=linkedDetails.conversation.slice(-24);if(typeof sent==="number"){linkedDetails.thread_message_ids=Array.isArray(linkedDetails.thread_message_ids)?linkedDetails.thread_message_ids:[];linkedDetails.thread_message_ids.push(sent);linkedDetails.thread_message_ids=linkedDetails.thread_message_ids.slice(-30);}}
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(linkedDetails),linked.id).run();
+      }catch(error){await aiNotifyOwner(env,"⚠️ ИИ не смог ответить в чате группового заказа "+linked.id+"\n"+String(error).slice(0,180));}
+      return true;
+    }
   }
   if(!active&&!explicit)return false;
   if(!settings.ai_orders){
@@ -363,8 +389,8 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
   return true;
 }
-async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=null){
-  if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId))return;
+async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=null,replyToOriginalId=null){
+  if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId))return;
   const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
   const context=(recent.results||[]).slice(0,16).reverse();
   const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
@@ -727,7 +753,7 @@ async function handleAiTelegramUpdate(update, env) {
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
-      try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id); }
+      try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id,message.reply_to_message?.message_id||null); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.",message.message_id);
           let questionId=null;
