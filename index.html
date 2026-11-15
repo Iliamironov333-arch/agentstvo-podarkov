@@ -3937,6 +3937,7 @@ async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!
 
 let supportConversations = [];
 let activeSupportConversationId = null;
+let activeSupportConversationClosed = false;
 let activeSupportAssistant = 'standard';
 let supportChatLimit = 3;
 let supportPendingActions = [];
@@ -4002,30 +4003,25 @@ function renderSupportConversations() {
   empty.textContent = 'Пока нет диалогов. Нажми «Новый диалог», чтобы начать.';
   root.appendChild(empty);
  } else {
-  supportConversations.forEach(chat => {
-   const row = document.createElement('div');
-   row.style.cssText = 'display:flex;align-items:stretch;gap:8px;min-width:0';
-   const button = document.createElement('button');
-   button.type = 'button'; button.className = 'secondary';
-   button.style.cssText = 'flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
-   if (chat.id === activeSupportConversationId) button.style.borderColor = 'var(--gold)';
-   const label = document.createElement('span');
-   label.textContent = chat.title || 'Новый диалог';
-   label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-   const tag = document.createElement('small');
-   tag.textContent = chat.assistant_type === 'vip' ? 'Расширенный режим' : 'ИИ помощник';
-   tag.style.cssText = 'color:var(--muted);flex-shrink:0';
-   button.append(label,tag);
-   button.addEventListener('click', () => openSupportConversation(chat.id));
-   const remove = document.createElement('button');
-   remove.type = 'button'; remove.className = 'secondary';
-   remove.textContent = 'Удалить';
-   remove.style.cssText = 'flex-shrink:0;padding:10px 12px;color:var(--muted)';
-   remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));
-   remove.addEventListener('click', () => deleteSupportConversation(chat.id));
-   row.append(button,remove);
-   root.appendChild(row);
-  });
+  const makeFolder=(title,items)=>{
+   if(!items.length)return;
+   const folder=document.createElement('details');folder.className='admin-detail-line';folder.open=false;
+   const summary=document.createElement('summary');summary.textContent=title+' · '+items.length;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+   const list=document.createElement('div');list.style.cssText='display:grid;gap:8px;margin-top:8px';
+   items.forEach(chat=>{
+    const row=document.createElement('div');row.style.cssText='display:flex;align-items:stretch;gap:8px;min-width:0';
+    const button=document.createElement('button');button.type='button';button.className='secondary';button.style.cssText='flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
+    if(chat.id===activeSupportConversationId)button.style.borderColor='var(--gold)';
+    const label=document.createElement('span');label.textContent=chat.title||'Новый диалог';label.style.cssText='overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const tag=document.createElement('small');tag.textContent=chat.closed?'🔒 Только просмотр':(chat.assistant_type==='vip'?'Расширенный режим':'ИИ помощник');tag.style.cssText='color:var(--muted);flex-shrink:0';
+    button.append(label,tag);button.addEventListener('click',()=>openSupportConversation(chat.id));
+    const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.style.cssText='flex-shrink:0;padding:10px 12px;color:var(--muted)';remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));remove.addEventListener('click',()=>deleteSupportConversation(chat.id));
+    row.append(button,remove);list.append(row);
+   });
+   folder.append(summary,list);root.append(folder);
+  };
+  makeFolder('🆕 Новые диалоги · за последние 3 дня',supportConversations.filter(chat=>!chat.closed));
+  makeFolder('🗂️ Старые диалоги · более 3 дней',supportConversations.filter(chat=>chat.closed));
  }
  const counter = document.getElementById('supportChatCounter');
  if (counter) counter.textContent = supportConversations.length + ' / ' + supportChatLimit + ' диалогов';
@@ -4057,11 +4053,15 @@ function updateSupportAssistantUi() {
  const title = document.getElementById('supportActiveChatTitle');
  const label = document.getElementById('supportActiveAssistantLabel');
  const current = supportConversations.find(x => x.id === activeSupportConversationId);
- if (title) title.textContent = current?.title || 'Новый диалог';
+ if (title) title.textContent = (current?.title || 'Новый диалог')+(activeSupportConversationClosed?' · только просмотр':'');
  if (label) label.textContent = activeSupportAssistant === 'vip' ? '🤖 Расширенный режим' : '🤖 ИИ помощник';
- if (info) info.textContent = activeSupportAssistant === 'vip'
+ if (info) info.textContent = activeSupportConversationClosed
+  ? '🔒 Диалог закрыт после трёх дней без активности. История доступна только для чтения. Нажмите «Новый диалог», чтобы продолжить общение.'
+  : (activeSupportAssistant === 'vip'
   ? 'VIP-подписка подтверждена сервером: расширенный режим включён автоматически.'
-  : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включается автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.');
+  : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включится автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.'));
+ const input=document.getElementById('supportMessage');if(input)input.disabled=activeSupportConversationClosed;
+ const send=document.getElementById('supportSendBtn');if(send)send.disabled=activeSupportConversationClosed;
 }
 
 async function loadSupportHistory(conversationId, actions = null) {
@@ -4076,6 +4076,7 @@ async function loadSupportHistory(conversationId, actions = null) {
   supportChatLimit = Number(data.chat_limit || (data.vip ? 5 : 3));
   if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip,true); }
   activeSupportConversationId = data.conversation_id || null;
+  activeSupportConversationClosed = data.conversation_closed===true;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
   if (!Array.isArray(actions)) supportPendingActions = Array.isArray(data.actions) ? data.actions : [];
   renderSupportConversations();
@@ -4100,6 +4101,7 @@ async function createSupportConversation() {
  try {
   const data = await apiFetch('/api/support/chat', {method:'POST',body:JSON.stringify({action:'create'})});
   activeSupportConversationId = data.conversation_id || null;
+  activeSupportConversationClosed = false;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
   await loadSupportHistory(activeSupportConversationId);
   const result = document.getElementById('supportResult');
@@ -4135,6 +4137,7 @@ async function sendSupport() {
  const result = document.getElementById('supportResult');
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
+ if(activeSupportConversationClosed){result.textContent='Этот диалог закрыт. Создайте новый, чтобы отправить сообщение.';return;}
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
