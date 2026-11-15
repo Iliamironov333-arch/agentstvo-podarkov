@@ -3,15 +3,20 @@ name: Validate application JavaScript
 on:
   pull_request:
     branches: [main]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 jobs:
   syntax:
+    if: github.event_name != 'issue_comment' || contains(github.event.comment.body, '/validate')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
