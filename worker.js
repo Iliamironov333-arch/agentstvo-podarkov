@@ -952,7 +952,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/products") return "catalog_view";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
   if (path.startsWith("/api/admin/support/")) {
-    if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes"].includes(path)) return "support_reply";
+    if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes","/api/admin/support/conversation-delete"].includes(path)) return "support_reply";
     return "support_view";
   }
   if (path.startsWith("/api/admin/campaign")) return "campaigns_manage";
@@ -1988,6 +1988,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           return json({ ok: true, conversations: rows.results || [] }, 200, origin);
+        }
+        if (path === "/api/admin/support/conversation-delete" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim().slice(0,80) : "";
+          if (!targetId || !conversationId) return json({ error: "Укажите покупателя и диалог." }, 400, origin);
+          const conversation = await env.DB.prepare("SELECT id FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId).first();
+          if (!conversation) return json({ error: "Диалог не найден или уже удалён." }, 404, origin);
+          await env.DB.batch([
+            env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(targetId,conversationId),
+            env.DB.prepare("DELETE FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId)
+          ]);
+          if (await tableExists(env,"admin_action_log")) await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)").bind(telegramId,targetId,"support_conversation_deleted",JSON.stringify({conversation_id:conversationId})).run();
+          return json({ok:true,deleted:true},200,origin);
         }
         if (path === "/api/admin/support/conversation" && method === "GET") {
           const url = new URL(request.url);
