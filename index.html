@@ -4022,8 +4022,8 @@ function renderSupportConversations() {
    });
    folder.append(summary,list);root.append(folder);
   };
-  makeFolder('🆕 Новые диалоги · за последние 3 дня',supportConversations.filter(chat=>!chat.closed));
-  makeFolder('🗂️ Старые диалоги · более 3 дней',supportConversations.filter(chat=>chat.closed));
+  makeFolder('📁 Мои диалоги · за последние 3 дня',supportConversations.filter(chat=>!chat.closed));
+  makeFolder('🗂️ Архив диалогов · более 3 дней',supportConversations.filter(chat=>chat.closed));
  }
  const counter = document.getElementById('supportChatCounter');
  if (counter) counter.textContent = supportConversations.length + ' / ' + supportChatLimit + ' диалогов';
