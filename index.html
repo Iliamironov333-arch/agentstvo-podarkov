@@ -3661,16 +3661,17 @@ function applyAdminPermissionVisibility(){
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card) return;
- // Keep the entry visible; every administrative API request remains server-authorized.
- card.classList.remove('hidden');
+ // Hide the owner entry by default. Only a server-verified root owner can reveal it.
+ card.classList.add('hidden');
  if (!initData) {
-  console.warn('Telegram initData is unavailable; admin API access will require opening the app inside Telegram.');
+  console.warn('Telegram initData is unavailable; owner access requires opening the app inside Telegram.');
   return;
  }
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
-  if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
+  if (result && result.admin_access === true && result.root_owner === true && result.role === 'owner') {
+   card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
    const heroTitle=document.querySelector('#adminPanelView .hero h2');
