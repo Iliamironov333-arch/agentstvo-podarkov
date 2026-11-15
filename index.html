@@ -19,6 +19,7 @@ header{padding:22px 17px 16px;position:sticky;top:0;background:#17130ff2;backdro
 .balancebar{margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(100deg,#392a18,#251c14);border:1px solid #6a4b27;border-radius:15px;padding:12px 14px}
 .balancebar b{color:var(--gold2)}
 .pill{background:#5a3d1c;color:var(--gold2);padding:6px 9px;border-radius:99px;font-size:12px;white-space:nowrap}
+.profile-vip-pill{background:linear-gradient(135deg,#65451f,#493016);color:#fff0cf;border:1px solid #b78b4c;font-weight:750;letter-spacing:.025em;padding:7px 11px;flex-shrink:0;text-shadow:0 1px 1px #39240f}
 nav{display:none;gap:8px;overflow:auto;padding:14px 33px 4px;scrollbar-width:none}
 nav button{white-space:nowrap;background:#2a2118;border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:9px 13px;font-size:13px}
 nav button.active{background:var(--gold);color:#21170c;border-color:var(--gold);font-weight:700}
@@ -1731,7 +1732,7 @@ html body>#seasonDecorations .festive-firework{
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 <section id="profileView" class="hidden">
  <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
- <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill hidden">👑 VIP УЧАСТНИК</span></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Баллы репутации</span><b id="profileReputation" style="display:inline-flex;align-items:center;gap:7px"><span style="display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:linear-gradient(145deg,#9b5cff,#5925b7);color:#fff;font-size:15px;box-shadow:0 2px 9px #7838d855">ϟ</span><span>—</span></b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">За каждую оплаченную Telegram Star начисляется 1 балл репутации. Пополнения внутреннего баланса учитываются; повторное списание внутреннего баланса баллы не добавляет.</p><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
+ <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill profile-vip-pill hidden" aria-label="VIP-участник">👑 VIP-УЧАСТНИК</span></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Баллы репутации</span><b id="profileReputation" style="display:inline-flex;align-items:center;gap:7px"><span style="display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:linear-gradient(145deg,#9b5cff,#5925b7);color:#fff;font-size:15px;box-shadow:0 2px 9px #7838d855">ϟ</span><span>—</span></b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">За каждую оплаченную Telegram Star начисляется 1 балл репутации. Пополнения внутреннего баланса учитываются; повторное списание внутреннего баланса баллы не добавляет.</p><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
 </section>
 <section id="vipView" class="hidden">
  <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка включает расширенный режим ИИ помощника и дополнительные возможности Агентства.</p></div>
@@ -1885,7 +1886,7 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','💬 Единый центр','Все переписки, обращения и ИИ-заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','🤖 ИИ-заказы','Переписки, обращения и заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
@@ -1967,7 +1968,7 @@ function initAdminCategories(){
  <div class="sectionhead"><h4>Вопросы владельцу</h4></div><div id="aiQuestionsList" class="notice">Загрузка вопросов…</div>
  <div class="sectionhead"><h4>Журнал модерации</h4></div><div id="aiLogsList" class="notice">Загрузка журнала…</div>`;
  sections.ai.appendChild(aiPanel);
- const ordersPanel=document.createElement('div');ordersPanel.id='adminAiOrdersPanel';ordersPanel.innerHTML='<div class="panel" id="aiOrderChatGuide"><h3>📖 Единый центр общения и заказов</h3><p class="muted">Все каналы общения собраны в одном разделе панели владельца. Контекст заказа, покупателя или группы сохраняется в карточке обращения, чтобы сообщения не теряли привязку.</p><ol class="muted"><li><b>Открыть чат заказа</b> — раскройте переписку внутри нужной карточки, чтобы увидеть сообщения именно по этому заказу.</li><li><b>Автоответы ИИ</b> — переключатель в карточке включает или выключает ИИ только для этого заказа. При выключении покупатель по-прежнему может писать: сообщения сохраняются, а владелец отвечает вручную.</li><li><b>Ответ владельца</b> — введите текст в поле под перепиской и нажмите кнопку отправки. Ответ добавляется в историю этого заказа и отправляется покупателю.</li><li><b>Пожелания и цена</b> — редактируйте описание, название и цену в карточке. Цена и подтверждение остаются за владельцем.</li><li><b>Подтвердить и отправить счёт</b> — используйте только после проверки пожеланий и окончательной цены. Счёт отправляется покупателю в Telegram.</li><li><b>Отклонить заказ</b> — отменяет заявку; не используйте для обычного отключения ИИ.</li></ol><p class="notice">Все папки ИИ-заказов по умолчанию закрыты. Откройте нужную папку вручную. Для ручной переписки выключение ИИ не требуется — владелец может ответить и при включённом ИИ.</p></div><p id="aiOrdersStatus" class="notice" aria-live="polite">Загрузка ИИ-заказов…</p><details class="admin-detail-line" id="aiMessagesDisclosure"><summary style="cursor:pointer;font-weight:700;padding:10px 0">💬 Сообщения и уведомления владельца · хранение 7 дней</summary><div class="sectionhead"><span class="muted">Открывайте, чтобы просмотреть сообщения. Старые записи удаляются автоматически через неделю.</span><button class="secondary" type="button" onclick="loadAiOrders()">↻ Обновить</button></div><div id="aiOwnerNotifications" class="notice">Загрузка сообщений…</div><button class="secondary" id="aiDeleteAllMessages" type="button" style="margin-top:8px">Удалить все сообщения</button></details>';const allOrdersPanel=root.querySelector('#adminOrdersList')?.closest('.panel');if(allOrdersPanel){const heading=allOrdersPanel.querySelector('h3');if(heading)heading.textContent='📦 Все заказы';const aiStatus=ordersPanel.querySelector('#aiOrdersStatus');const adminStatus=allOrdersPanel.querySelector('#adminOrdersStatus');if(aiStatus)allOrdersPanel.insertBefore(aiStatus,adminStatus?.nextSibling||allOrdersPanel.querySelector('#adminOrdersList'));const messagesDisclosure=ordersPanel.querySelector('#aiMessagesDisclosure');if(messagesDisclosure)sections.aiorders.appendChild(messagesDisclosure);sections.aiorders.appendChild(allOrdersPanel);}
+ const ordersPanel=document.createElement('div');ordersPanel.id='adminAiOrdersPanel';ordersPanel.innerHTML='<div class="panel" id="aiOrderChatGuide"><h3>🤖 ИИ-заказы</h3><p class="muted">Переписки, обращения и ИИ-заказы собраны в одном разделе панели владельца. Контекст заказа, покупателя или группы сохраняется в карточке обращения, чтобы сообщения не теряли привязку.</p><ol class="muted"><li><b>Открыть чат заказа</b> — раскройте переписку внутри нужной карточки, чтобы увидеть сообщения именно по этому заказу.</li><li><b>Автоответы ИИ</b> — переключатель в карточке включает или выключает ИИ только для этого заказа. При выключении покупатель по-прежнему может писать: сообщения сохраняются, а владелец отвечает вручную.</li><li><b>Ответ владельца</b> — введите текст под перепиской. Ответ сохраняется в истории чата Mini App; личные сообщения Telegram не отправляются.</li><li><b>Пожелания и цена</b> — редактируйте описание, название и цену в карточке. Цена и подтверждение остаются за владельцем.</li><li><b>Подтвердить и отправить счёт</b> — используйте только после проверки пожеланий и окончательной цены. Счёт отправляется покупателю в Telegram.</li><li><b>Отклонить заказ</b> — отменяет заявку; не используйте для обычного отключения ИИ.</li></ol><p class="notice">Все папки ИИ-заказов по умолчанию закрыты. Откройте нужную папку вручную. Для ручной переписки выключение ИИ не требуется — владелец может ответить и при включённом ИИ.</p></div><p id="aiOrdersStatus" class="notice" aria-live="polite">Загрузка ИИ-заказов…</p><details class="admin-detail-line" id="aiMessagesDisclosure"><summary style="cursor:pointer;font-weight:700;padding:10px 0">💬 Сообщения и уведомления владельца · хранение 7 дней</summary><div class="sectionhead"><span class="muted">Открывайте, чтобы просмотреть сообщения. Старые записи удаляются автоматически через неделю.</span><button class="secondary" type="button" onclick="loadAiOrders()">↻ Обновить</button></div><div id="aiOwnerNotifications" class="notice">Загрузка сообщений…</div><button class="secondary" id="aiDeleteAllMessages" type="button" style="margin-top:8px">Удалить все сообщения</button></details>';const allOrdersPanel=root.querySelector('#adminOrdersList')?.closest('.panel');if(allOrdersPanel){const heading=allOrdersPanel.querySelector('h3');if(heading)heading.textContent='📦 Все заказы';const aiStatus=ordersPanel.querySelector('#aiOrdersStatus');const adminStatus=allOrdersPanel.querySelector('#adminOrdersStatus');if(aiStatus)allOrdersPanel.insertBefore(aiStatus,adminStatus?.nextSibling||allOrdersPanel.querySelector('#adminOrdersList'));const messagesDisclosure=ordersPanel.querySelector('#aiMessagesDisclosure');if(messagesDisclosure)sections.aiorders.appendChild(messagesDisclosure);sections.aiorders.appendChild(allOrdersPanel);}
  const reportsPanel=document.createElement('div');reportsPanel.className='panel';reportsPanel.id='adminAiReportsPanel';reportsPanel.innerHTML='<h3>📊 Еженедельные отчёты</h3><p class="muted">Отчёт отправляется каждую субботу в 08:00 по Екатеринбургу и сохраняется здесь.</p><div id="aiReportsStatus" class="notice">Загрузка отчётов…</div><div id="aiReportsList"></div>';sections.reports.appendChild(reportsPanel);
  if(returnButton)root.appendChild(returnButton);
  root.dataset.categoriesReady='1';showAdminCategory('operations');applyAdminPermissionVisibility();
@@ -2397,7 +2398,7 @@ async function openAdminUser(telegramId,box) {
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
-  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(telegramId,'',crmDetail));box.append(crmButton,crmDetail);
   const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
   const historySummary=document.createElement('summary');historySummary.textContent='📚 История покупок и действий · журнал 90 дней';historySummary.style.cssText='cursor:pointer;font-weight:800;padding:10px 0';
   const historyContent=document.createElement('div');historyContent.style.cssText='padding:4px 0 10px';
@@ -2783,6 +2784,8 @@ async function loadAdminSupport() {
   const data=await apiFetch('/api/admin/support/conversations?q='+encodeURIComponent(q));
   const rows=Array.isArray(data.conversations)?data.conversations:[];
   status.textContent=rows.length?'Диалогов: '+rows.length:'Сохранённых диалогов пока нет.';
+  const makeFolder=(title)=>{const folder=document.createElement('details');folder.className='admin-detail-line';folder.open=false;const summary=document.createElement('summary');summary.textContent=title;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';const list=document.createElement('div');list.style.cssText='display:grid;gap:8px';folder.append(summary,list);root.append(folder);return {folder,summary,list};};
+  const fresh=makeFolder('🆕 Новые диалоги · за последние 3 дня'),old=makeFolder('🗂️ Старые диалоги · более 3 дней / закрытые');
   rows.forEach(item=>{
    const row=document.createElement('div');row.className='admin-user-row';
    const info=document.createElement('div');
@@ -2790,46 +2793,45 @@ async function loadAdminSupport() {
    const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
    const chatTitle=document.createElement('small');chatTitle.textContent='Диалог: '+(item.conversation_title||'Старый диалог');
    const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+(item.assistant_type==='vip'?'VIP-режим':'ИИ помощник')+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
-   info.append(name,username,chatTitle);
-   if(item.deleted){
-    const deleted= document.createElement('p');deleted.className='notice';deleted.textContent='🔒 Чат удалён владельцем · '+(item.deleted_at||'');info.append(deleted);
-    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Посмотреть статус';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-    row.append(info,button);root.append(row);return;
-   }
-   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
-   const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
-   info.append(meta,activity,preview);
-   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
-   row.append(info,button,removeChat);root.append(row);
+   info.append(name,username,chatTitle,meta);
+   if(item.deleted){const note=document.createElement('p');note.className='notice';note.textContent='🔒 Чат удалён покупателем или владельцем · '+(item.deleted_at||'');info.append(note);}
+   else{const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);info.append(activity,preview);}
+   const detail=document.createElement('div');detail.className='admin-user-detail hidden';detail.style.marginTop='10px';
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=item.deleted?'Статус переписки':'Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id,detail));
+   row.append(info,button);
+   if(!item.deleted){const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить чат';remove.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;remove.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');remove.disabled=false;}});row.append(remove);}
+   row.append(detail);(item.closed||item.deleted?old.list:fresh.list).append(row);
   });
-  await loadAdminSupportTickets();
-  await loadAdminAnalytics();
+  fresh.summary.textContent='🆕 Новые диалоги · за последние 3 дня · '+fresh.list.children.length;
+  old.summary.textContent='🗂️ Старые диалоги · более 3 дней / закрытые · '+old.list.children.length;
+  fresh.folder.hidden=!fresh.list.children.length;old.folder.hidden=!old.list.children.length;
+  await loadAdminSupportTickets();await loadAdminAnalytics();
  }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
 }
-async function openAdminConversation(telegramId, conversationId) {
- const box=document.getElementById('adminConversationDetail');if(!box)return;
+async function openAdminConversation(telegramId, conversationId, targetBox=null) {
+ const box=targetBox||document.getElementById('adminConversationDetail');if(!box)return;
  box.classList.remove('hidden');box.textContent='Загружаем историю…';
  try{
   const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId)+'&conversation_id='+encodeURIComponent(conversationId||''));
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
   if(data.deleted){
-   const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён владельцем. Переписка очищена, отправка сообщений и управление чатом недоступны.';
+   const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён. Переписка очищена, новые сообщения и ответы заблокированы.';
    box.append(notice);
    const closeDeleted=document.createElement('button');closeDeleted.type='button';closeDeleted.className='secondary';closeDeleted.textContent='Закрыть';closeDeleted.addEventListener('click',()=>box.classList.add('hidden'));box.append(closeDeleted);
    return;
   }
+  if(data.closed){const closedNotice=document.createElement('p');closedNotice.className='notice';closedNotice.textContent='🔒 Диалог закрыт: прошло более трёх дней без активности. История доступна только для просмотра; ответы заблокированы.';box.append(closedNotice);}
   const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
-  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
-  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
+  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending||!!data.closed;
+  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId,box);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
   controls.append(modeButton);box.append(controls);
-  if(data.mode==='human'){
+  if(data.mode==='human'&&!data.closed){
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
    const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
-   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,conversation_id:conversationId,message})});toast('Ответ сохранён в переписке Mini App. Личное сообщение Telegram не отправлялось.');await openAdminConversation(telegramId,conversationId,box);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
    box.append(reply,send);
   }
   (data.messages||[]).forEach(message=>{
@@ -2867,17 +2869,16 @@ async function loadAdminSupportTickets() {
    const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at+' · Всего обращений покупателя: '+Number(ticket.customer_ticket_count||0);
    const message=document.createElement('p');message.textContent=ticket.message||'';
    const actions=document.createElement('div');actions.className='row-actions';
-   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>openAdminConversation(ticket.telegram_id));
+   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>{let detail=row.querySelector('.admin-user-detail');if(!detail){detail=document.createElement('div');detail.className='admin-user-detail hidden';row.append(detail);}openAdminConversation(ticket.telegram_id,'',detail);});
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответить покупателю в Telegram';reply.setAttribute('aria-label','Ответ на обращение №'+ticket.id);
    reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
-   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в Telegram';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в диалоге';
    send.addEventListener('click',async()=>{
     const text=reply.value.trim();if(!text){toast('Напишите ответ покупателю.');return;}
-    if(!confirm('Отправить этот ответ покупателю в Telegram?'))return;
-    send.disabled=true;send.textContent='Отправляем…';
-    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ отправлен. Обращение переведено в работу.');await loadAdminSupportTickets();}
+    send.disabled=true;send.textContent='Сохраняем…';
+    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ сохранён в активном диалоге Mini App.');await loadAdminSupportTickets();}
     catch(e){toast(e.message||'Не удалось отправить ответ.');}
-    finally{send.disabled=false;send.textContent='Ответить в Telegram';}
+    finally{send.disabled=false;send.textContent='Ответить в диалоге';}
    });
    const select=document.createElement('select');select.setAttribute('aria-label','Статус обращения');
    Object.entries(labels).forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);});
@@ -3107,7 +3108,7 @@ async function openAdminOrder(orderId,orderType,targetBox) {
   const statusLabels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
   addLine('Покупатель',order.first_name||order.username||order.telegram_id);
   addLine('Telegram ID',order.telegram_id);
-  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id));box.append(crmButton);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id,'',crmDetail));box.append(crmButton,crmDetail);
   addLine('Дата',order.created_at);
   addLine('Сумма',Number(order.total_stars||0)+' ⭐');
   if(orderType==='product'){
@@ -3200,15 +3201,14 @@ async function openAdminOrder(orderId,orderType,targetBox) {
    }catch(error){toast(error.message||'Не удалось сохранить изменения');save.disabled=false;save.textContent='Сохранить изменения';}
   });
   section.append(save);
-  const notify=document.createElement('button');notify.type='button';notify.className='secondary';notify.textContent='📨 Повторить уведомление покупателю';
+  const notify=document.createElement('button');notify.type='button';notify.className='secondary';notify.textContent='Добавить статус в чат';
   notify.addEventListener('click',async()=>{
-   if(!confirm('Отправить покупателю сообщение о текущем статусе заказа в Telegram?'))return;
-   notify.disabled=true;notify.textContent='Отправляем…';
+   notify.disabled=true;notify.textContent='Добавляем…';
    try{
     await apiFetch('/api/admin/order-notify',{method:'POST',body:JSON.stringify({order_id:String(order.id),order_type:orderType})});
-    toast('Уведомление отправлено');
+    toast('Статус добавлен в чат Mini App. Личное сообщение Telegram не отправлялось.');
    }catch(error){toast(error.message||'Не удалось отправить уведомление');}
-   finally{notify.disabled=false;notify.textContent='📨 Повторить уведомление покупателю';}
+   finally{notify.disabled=false;notify.textContent='Добавить статус в чат';}
   });
   section.append(notify);
   if(data.migrations_pending){
@@ -3252,6 +3252,7 @@ async function loadAdminOrderChat(orderId,root,orderType='product'){
    const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
    row.append(who,body,date);log.append(row);
   });
+  if(d.closed){const closed=document.createElement('p');closed.className='notice';closed.textContent='🔒 Чат заказа закрыт: нет активной переписки или прошло более трёх дней после оплаты/активности. Ответы отключены.';root.append(closed);}
   const pending=(d.changes||[]).filter(x=>x.status==='pending');
   if(pending.length){const h=document.createElement('h4');h.textContent='📝 Предложения изменений от ИИ';changes.append(h);}
   pending.forEach(change=>{
@@ -3278,8 +3279,9 @@ async function loadAdminOrderChat(orderId,root,orderType='product'){
   const mode=document.createElement('select');mode.style.marginTop='12px';
   [['owner','💬 От имени владельца'],['ai','🤖 От имени ИИ-консультанта']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;mode.append(option);});
   const input=document.createElement('textarea');input.rows=3;input.maxLength=2000;input.placeholder='Напишите сообщение покупателю…';input.style.cssText='width:100%;box-sizing:border-box;margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit';
-  const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить в чат заказа';send.style.marginTop='8px';
-  send.addEventListener('click',async()=>{const message=input.value.trim();if(!message)return;send.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:orderId,message,sender_type:mode.value})});input.value='';toast(result.notification?.sent?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAdminOrderChat(orderId,root);}catch(e){toast(e.message||'Не удалось отправить сообщение.');send.disabled=false;}});
+  const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Сохранить ответ в чате';send.style.marginTop='8px';
+  if(d.closed){mode.disabled=true;input.disabled=true;send.disabled=true;input.placeholder='Чат закрыт. Новые ответы заблокированы.';}
+  send.addEventListener('click',async()=>{const message=input.value.trim();if(!message)return;send.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:orderId,message,sender_type:mode.value})});input.value='';toast('Ответ сохранён в чате Mini App. Личное сообщение Telegram не отправлялось.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось сохранить ответ.');send.disabled=false;}});
   root.append(mode,input,send);
  }catch(e){const error=document.createElement('p');error.className='notice';error.textContent=e.message||'Не удалось загрузить чат заказа.';root.append(error);}
 }
@@ -3937,6 +3939,7 @@ async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!
 
 let supportConversations = [];
 let activeSupportConversationId = null;
+let activeSupportConversationClosed = false;
 let activeSupportAssistant = 'standard';
 let supportChatLimit = 3;
 let supportPendingActions = [];
@@ -4002,30 +4005,25 @@ function renderSupportConversations() {
   empty.textContent = 'Пока нет диалогов. Нажми «Новый диалог», чтобы начать.';
   root.appendChild(empty);
  } else {
-  supportConversations.forEach(chat => {
-   const row = document.createElement('div');
-   row.style.cssText = 'display:flex;align-items:stretch;gap:8px;min-width:0';
-   const button = document.createElement('button');
-   button.type = 'button'; button.className = 'secondary';
-   button.style.cssText = 'flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
-   if (chat.id === activeSupportConversationId) button.style.borderColor = 'var(--gold)';
-   const label = document.createElement('span');
-   label.textContent = chat.title || 'Новый диалог';
-   label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-   const tag = document.createElement('small');
-   tag.textContent = chat.assistant_type === 'vip' ? 'Расширенный режим' : 'ИИ помощник';
-   tag.style.cssText = 'color:var(--muted);flex-shrink:0';
-   button.append(label,tag);
-   button.addEventListener('click', () => openSupportConversation(chat.id));
-   const remove = document.createElement('button');
-   remove.type = 'button'; remove.className = 'secondary';
-   remove.textContent = 'Удалить';
-   remove.style.cssText = 'flex-shrink:0;padding:10px 12px;color:var(--muted)';
-   remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));
-   remove.addEventListener('click', () => deleteSupportConversation(chat.id));
-   row.append(button,remove);
-   root.appendChild(row);
-  });
+  const makeFolder=(title,items)=>{
+   if(!items.length)return;
+   const folder=document.createElement('details');folder.className='admin-detail-line';folder.open=false;
+   const summary=document.createElement('summary');summary.textContent=title+' · '+items.length;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+   const list=document.createElement('div');list.style.cssText='display:grid;gap:8px;margin-top:8px';
+   items.forEach(chat=>{
+    const row=document.createElement('div');row.style.cssText='display:flex;align-items:stretch;gap:8px;min-width:0';
+    const button=document.createElement('button');button.type='button';button.className='secondary';button.style.cssText='flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
+    if(chat.id===activeSupportConversationId)button.style.borderColor='var(--gold)';
+    const label=document.createElement('span');label.textContent=chat.title||'Новый диалог';label.style.cssText='overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const tag=document.createElement('small');tag.textContent=chat.closed?'🔒 Только просмотр':(chat.assistant_type==='vip'?'Расширенный режим':'ИИ помощник');tag.style.cssText='color:var(--muted);flex-shrink:0';
+    button.append(label,tag);button.addEventListener('click',()=>openSupportConversation(chat.id));
+    const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.style.cssText='flex-shrink:0;padding:10px 12px;color:var(--muted)';remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));remove.addEventListener('click',()=>deleteSupportConversation(chat.id));
+    row.append(button,remove);list.append(row);
+   });
+   folder.append(summary,list);root.append(folder);
+  };
+  makeFolder('🆕 Новые диалоги · за последние 3 дня',supportConversations.filter(chat=>!chat.closed));
+  makeFolder('🗂️ Старые диалоги · более 3 дней',supportConversations.filter(chat=>chat.closed));
  }
  const counter = document.getElementById('supportChatCounter');
  if (counter) counter.textContent = supportConversations.length + ' / ' + supportChatLimit + ' диалогов';
@@ -4057,11 +4055,15 @@ function updateSupportAssistantUi() {
  const title = document.getElementById('supportActiveChatTitle');
  const label = document.getElementById('supportActiveAssistantLabel');
  const current = supportConversations.find(x => x.id === activeSupportConversationId);
- if (title) title.textContent = current?.title || 'Новый диалог';
+ if (title) title.textContent = (current?.title || 'Новый диалог')+(activeSupportConversationClosed?' · только просмотр':'');
  if (label) label.textContent = activeSupportAssistant === 'vip' ? '🤖 Расширенный режим' : '🤖 ИИ помощник';
- if (info) info.textContent = activeSupportAssistant === 'vip'
+ if (info) info.textContent = activeSupportConversationClosed
+  ? '🔒 Диалог закрыт после трёх дней без активности. История доступна только для чтения. Нажмите «Новый диалог», чтобы продолжить общение.'
+  : (activeSupportAssistant === 'vip'
   ? 'VIP-подписка подтверждена сервером: расширенный режим включён автоматически.'
-  : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включается автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.');
+  : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включится автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.'));
+ const input=document.getElementById('supportMessage');if(input)input.disabled=activeSupportConversationClosed;
+ const send=document.getElementById('supportSendBtn');if(send)send.disabled=activeSupportConversationClosed;
 }
 
 async function loadSupportHistory(conversationId, actions = null) {
@@ -4076,6 +4078,7 @@ async function loadSupportHistory(conversationId, actions = null) {
   supportChatLimit = Number(data.chat_limit || (data.vip ? 5 : 3));
   if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip,true); }
   activeSupportConversationId = data.conversation_id || null;
+  activeSupportConversationClosed = data.conversation_closed===true;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
   if (!Array.isArray(actions)) supportPendingActions = Array.isArray(data.actions) ? data.actions : [];
   renderSupportConversations();
@@ -4100,6 +4103,7 @@ async function createSupportConversation() {
  try {
   const data = await apiFetch('/api/support/chat', {method:'POST',body:JSON.stringify({action:'create'})});
   activeSupportConversationId = data.conversation_id || null;
+  activeSupportConversationClosed = false;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
   await loadSupportHistory(activeSupportConversationId);
   const result = document.getElementById('supportResult');
@@ -4135,6 +4139,7 @@ async function sendSupport() {
  const result = document.getElementById('supportResult');
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
+ if(activeSupportConversationClosed){result.textContent='Этот диалог закрыт. Создайте новый, чтобы отправить сообщение.';return;}
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
@@ -4638,10 +4643,10 @@ async function loadAiOrders(){
     if(o.order_id){
      const disclosure=aiAdminNode('details');disclosure.className='admin-detail-line';const summary=aiAdminNode('summary','💬 ИИ-чат заказа · открыть переписку');summary.style.cssText='cursor:pointer;font-weight:700;padding:8px 0';disclosure.append(summary);
      const chatLog=aiAdminNode('div');chatLog.style.cssText='display:flex;flex-direction:column;gap:7px;max-height:260px;overflow:auto;padding:8px 0';
-     const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Напишите сообщение от имени ИИ-помощника покупателю…';
-     const send=aiAdminNode('button','Отправить сообщение от ИИ-помощника','primary');
-     send.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');send.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:o.order_id||o.id,message:value,sender_type:'ai'})});reply.value='';toast(result.notification?.sent?'Ответ ИИ отправлен клиенту в Telegram.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить ответ.');send.disabled=false;}});
-     disclosure.addEventListener('toggle',async()=>{if(!disclosure.open||disclosure.dataset.loaded==='1')return;disclosure.dataset.loaded='1';try{const d=await apiFetch('/api/admin/order-chat?order_id='+encodeURIComponent(o.order_id||o.id));(d.messages||[]).forEach(m=>{const row=aiAdminNode('div',undefined,'admin-detail-line');row.append(aiAdminNode('strong',m.sender_type==='buyer'?'Покупатель':m.sender_type==='ai'?'ИИ-помощник':m.sender_type==='owner'?'Владелец':'Система'));row.append(aiAdminNode('p',m.content||''));row.append(aiAdminNode('small',formatDate(m.created_at),'muted'));chatLog.append(row);});if(!d.messages?.length)chatLog.append(aiAdminNode('p','Пока нет сообщений. Переписка, начатая до оформления набора, появится здесь.','muted'));}catch(e){chatLog.append(aiAdminNode('p',e.message||'Не удалось загрузить переписку.','muted'));}});
+     const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Ответ владельца в истории чата Mini App…';
+     const send=aiAdminNode('button','Сохранить ответ в чате','primary');
+     send.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');send.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:o.order_id||o.id,message:value,sender_type:'ai'})});reply.value='';toast(result.notification?.saved?'Ответ сохранён в чате Mini App. Личное сообщение Telegram не отправлялось.':'Ответ не отправлен.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось сохранить ответ.');send.disabled=false;}});
+     disclosure.addEventListener('toggle',async()=>{if(!disclosure.open||disclosure.dataset.loaded==='1')return;disclosure.dataset.loaded='1';try{const d=await apiFetch('/api/admin/order-chat?order_id='+encodeURIComponent(o.order_id||o.id));(d.messages||[]).forEach(m=>{const row=aiAdminNode('div',undefined,'admin-detail-line');row.append(aiAdminNode('strong',m.sender_type==='buyer'?'Покупатель':m.sender_type==='ai'?'ИИ-помощник':m.sender_type==='owner'?'Владелец':'Система'));row.append(aiAdminNode('p',m.content||''));row.append(aiAdminNode('small',formatDate(m.created_at),'muted'));chatLog.append(row);});if(!d.messages?.length)chatLog.append(aiAdminNode('p','Пока нет сообщений. Переписка, начатая до оформления набора, появится здесь.','muted'));if(d.closed){const notice=aiAdminNode('p','🔒 Чат заказа закрыт: прошло более трёх дней после оплаты или оформления. Ответы отключены.','notice');chatLog.append(notice);reply.disabled=true;send.disabled=true;}}catch(e){chatLog.append(aiAdminNode('p',e.message||'Не удалось загрузить переписку.','muted'));}});
      disclosure.append(chatLog,reply,send);card.append(disclosure);
     }
     appendAdminOrderCard('bundle',o,card);return;
@@ -4657,18 +4662,18 @@ async function loadAiOrders(){
    const subject=aiAdminNode('input');subject.value=o.subject||'';subject.placeholder='Название заказа';card.append(subject);
    const price=aiAdminNode('input');price.type='number';price.min='1';price.max='100000';price.value=o.approved_stars||o.estimated_stars||'';price.placeholder='Итоговая цена в Stars';card.append(price);
    const aiToggle=aiAdminNode('label',undefined,'admin-detail-line');aiToggle.style.cssText='display:flex;align-items:center;gap:9px;margin:8px 0';
-   const aiCheck=document.createElement('input');aiCheck.type='checkbox';aiCheck.checked=details.ai_enabled!==false;aiCheck.setAttribute('aria-label','Автоматические ответы ИИ по этому заказу');
+   const aiCheck=document.createElement('input');aiCheck.type='checkbox';aiCheck.checked=details.ai_enabled!==false;aiCheck.disabled=!!o.chat_closed||details.chat_deleted===true;aiCheck.setAttribute('aria-label','Автоматические ответы ИИ по этому заказу');
    const aiText=aiAdminNode('span',aiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены');
    aiCheck.addEventListener('change',async()=>{aiCheck.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'set_ai',id:o.id,enabled:aiCheck.checked})});aiText.textContent=aiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены';toast(aiCheck.checked?'ИИ-ответы включены для этого заказа.':'ИИ-ответы выключены. Покупатель всё равно может писать, а вы — отвечать вручную.');}catch(e){aiCheck.checked=!aiCheck.checked;toast(e.message||'Не удалось изменить настройку ИИ.');}finally{aiCheck.disabled=false;}});
    aiToggle.append(aiCheck,aiText);card.append(aiToggle);
    const transcript=aiAdminNode('div',undefined,'muted');transcript.style.cssText='white-space:pre-wrap;max-height:280px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';
    transcript.textContent=(details.conversation||[]).map(m=>(m.role==='user'?'Покупатель':m.role==='owner'?(m.via==='ai'?'ИИ-помощник':'Владелец'):'ИИ-помощник')+': '+(m.content||'')).join('\n\n');
    if(transcript.textContent)card.append(transcript);
-   if(details.chat_deleted!==true){
+   if(details.chat_deleted!==true&&!o.chat_closed){
     const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Напишите сообщение от имени ИИ-помощника покупателю…';card.append(reply);
-    const sendReply=aiAdminNode('button','Отправить сообщение от ИИ-помощника','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{const result=await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_order',id:o.id,reply:value})});reply.value='';toast(result.delivered?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{sendReply.disabled=false;}});card.append(sendReply);
+    const sendReply=aiAdminNode('button','Сохранить ответ в чате','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{const result=await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_order',id:o.id,reply:value})});reply.value='';toast(result.delivery==='group_thread'?(result.delivered?'Ответ опубликован в групповом треде.':'Ответ сохранён, но Telegram не подтвердил отправку в группу.'):'Ответ сохранён в чате Mini App. Личное сообщение Telegram не отправлялось.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{sendReply.disabled=false;}});card.append(sendReply);
    }else{
-    card.append(aiAdminNode('p','🔒 Чат удалён владельцем. Переписка очищена. Поле ввода и отправка сообщений заблокированы.','notice'));
+    card.append(aiAdminNode('p',details.chat_deleted===true?'🔒 Чат удалён. Переписка очищена, ответы заблокированы.':'🔒 Чат заказа закрыт по сроку хранения (более трёх дней после завершения). История доступна только для просмотра.','notice'));
    }
    if(o.status==='review'){
     const save=aiAdminNode('button','Сохранить изменения','primary');save.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update',id:o.id,subject:subject.value,summary:summary.value,approved_stars:Number(price.value)})});toast('Заказ обновлён.');loadAiOrders();}catch(e){toast(e.message);}});card.append(save);
