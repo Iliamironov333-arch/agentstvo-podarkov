@@ -3082,14 +3082,14 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
-        const draft=await env.DB.prepare("SELECT d.telegram_id,d.details_json,d.status,d.subject,d.estimated_stars,d.approved_stars,d.updated_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.telegram_id=?").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT d.telegram_id,d.details_json,d.status,d.subject,d.estimated_stars,d.approved_stars,d.updated_at,d.last_activity_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.telegram_id=?").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог удалён и больше недоступен."},410,origin);
         if(!["collecting","review","approved","paid","cancelled"].includes(draft.status))return json({error:"Диалог больше недоступен."},410,origin);
-        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):(details.terminal_at||draft.updated_at);
-        const expired=["paid","cancelled"].includes(draft.status)&&!!(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first());
-        if(expired)return json({error:"Чат заказа закрыт: прошло более трёх дней после завершения заказа."},410,origin);
+        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
+        const expired=!!(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first());
+        if(expired)return json({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,closed:false,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
@@ -3099,8 +3099,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог удалён. Продолжить его нельзя."},410,origin);
-        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):(details.terminal_at||draft.updated_at);
-        if(["paid","cancelled"].includes(draft.status)&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first())return json({error:"Чат заказа закрыт: прошло более трёх дней после завершения заказа."},410,origin);
+        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
+        if(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first())return json({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410,origin);
         if(!["collecting","review","approved"].includes(draft.status))return json({error:"Заказ завершён. Новые сообщения больше не принимаются."},410,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
