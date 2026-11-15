@@ -2986,37 +2986,57 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
-          const result=await createCraftAnswer(env,messages);
           let draftId=String(b.conversation_id||"");
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
-          const existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars FROM ai_order_drafts WHERE id=?").bind(draftId).first();
+          let existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars,details_json FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
-          const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
+          if(existing?.status==="cancelled"){draftId=makeId();existing=null;}
+          if(existing&&existing.status!=="collecting")return json({error:"Этот диалог уже передан владельцу. Продолжите переписку в чате заказа."},409,origin);
+          let previous={};try{previous=JSON.parse(existing?.details_json||"{}");}catch{}
+          const latest=messages[messages.length-1];
+          let conversation=existing&&Array.isArray(previous.conversation)?[...previous.conversation]:messages.slice(-23).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)}));
+          const last=conversation[conversation.length-1];
+          if(!last||last.role!=="user"||last.content!==latest.content)conversation.push({role:"user",content:String(latest.content||"").slice(0,700)});
+          conversation=conversation.slice(-24);
+          const aiEnabled=!existing||previous.ai_enabled!==false;
+          const firstRequest=conversation.find(m=>m.role==="user")?.content||"Индивидуальная работа";
           const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-          const details={source:"miniapp_workshop",ai_enabled:true,summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
+          const ownerMessages=Array.isArray(previous.owner_messages)?previous.owner_messages:[];
           let estimatedStars=Number(existing?.estimated_stars||0);
+          if(!aiEnabled){
+            const handoff="Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную. 💬";
+            conversation.push({role:"system",content:handoff});conversation=conversation.slice(-24);
+            const details={...previous,source:"miniapp_workshop",ai_enabled:false,conversation,owner_messages};
+            await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
+            await notifyOwner(env,"💬 Новое сообщение в заказе ИИ-помощника (автоответы выключены)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+String(latest.content||"").slice(0,700)+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");
+            return json({ok:true,reply:handoff,ready:false,questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:false,handoff:true,conversation},200,origin);
+          }
+          const aiMessages=conversation.filter(m=>m&&["user","assistant","owner"].includes(m.role)).map(m=>({role:m.role==="owner"?"assistant":m.role,content:String(m.content||"").slice(0,700)})).slice(-24);
+          const result=await createCraftAnswer(env,aiMessages);
+          conversation.push({role:"assistant",content:String(result.reply||"").slice(0,1200)});conversation=conversation.slice(-24);
+          const details={...previous,source:"miniapp_workshop",ai_enabled:true,summary:String(result.reply||"").slice(0,2000),conversation,owner_messages:ownerMessages,estimate_note:String(previous.estimate_note||"").slice(0,180)};
           if(result.ready){
-            const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
+            const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:aiMessages,proposal:result.reply},250);
             estimatedStars=estimate.price_stars;
             details.estimate_note=String(estimate.note||"").slice(0,180);
             if(existing){
-              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(subject,JSON.stringify(details),estimatedStars,draftId,String(telegramId)).run();
+              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,draftId,String(telegramId)).run();
             }else{
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'review')")
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
             }
-            if(!existing||existing.status==="collecting")await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-МАСТЕРСКОЙ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
+            if(!existing||existing.status==="collecting")await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
           }else{
             if(existing){
-              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status IN ('collecting','review')").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
+              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
             }else{
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,0,'collecting')")
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
             }
           }
-          if(!existing)await notifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ИНДИВИДУАЛЬНОМУ ЗАКАЗУ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\n\nПокупатель начал диалог с ИИ. До завершения консультации и подтверждения владельцем счёт не отправляется.");
-          return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
-        }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
+          if(!existing)await notifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИИ-ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\n\nПокупатель начал диалог с ИИ. До завершения консультации и подтверждения владельцем счёт не отправляется.");
+          return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
+        }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог ИИ-помощника."},503,origin);}
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
