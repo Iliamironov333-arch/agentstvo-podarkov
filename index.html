@@ -3661,9 +3661,15 @@ function applyAdminPermissionVisibility(){
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card) return;
- // Hide the owner entry by default. Only a server-verified root owner can reveal it.
- card.classList.add('hidden');
+ const description = card.querySelector('span:last-child');
+ // The Telegram client-side ID only controls whether the entry is displayed.
+ // Every administrative API request is still authenticated and authorized by the Worker.
+ const isKnownOwner = String(tg?.initDataUnsafe?.user?.id || '') === '7822470060';
+ card.classList.toggle('hidden', !isKnownOwner);
+ if (isKnownOwner && description) description.textContent = 'Проверяем защищённый доступ к панели…';
  if (!initData) {
+  adminSession = null;
+  if (isKnownOwner && description) description.textContent = 'Кнопка восстановлена, но Telegram не передал initData. Откройте приложение через Telegram.';
   console.warn('Telegram initData is unavailable; owner access requires opening the app inside Telegram.');
   return;
  }
@@ -3678,14 +3684,19 @@ async function checkOwnerAccess() {
    if(heroTitle) heroTitle.textContent=result.role==='owner'?'Добро пожаловать, владелец':'Добро пожаловать, модератор';
    const cardTitle=card.querySelector('strong');
    if(cardTitle?.firstChild) cardTitle.firstChild.textContent=result.role==='owner'?'🔐 Панель владельца ':'🛡️ Панель модератора ';
+   if(description) description.textContent='Управление Агентством подарков';
    applyAdminPermissionVisibility();
    if(result.root_owner) loadAdminStaff();
   } else {
    adminSession = null;
-   console.warn('Admin session was not granted by the server.');
+   if (!isKnownOwner) card.classList.add('hidden');
+   if (isKnownOwner && description) description.textContent='Telegram отклонил доступ: ' + (result?.error || 'сервер не подтвердил роль владельца');
+   console.warn('Admin session was not granted by the server:', result);
   }
  } catch(e) {
   adminSession = null;
+  if (!isKnownOwner) card.classList.add('hidden');
+  if (isKnownOwner && description) description.textContent='Ошибка проверки доступа: ' + (e.message || String(e));
   console.error('Admin session check failed:', e);
  }
 }
