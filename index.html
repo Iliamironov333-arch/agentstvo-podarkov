@@ -1418,9 +1418,8 @@ html body>#seasonDecorations .festive-firework{
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
-  <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и помощь по приложению</span></button>
+  <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и авторские работы в одном месте</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
-  <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Подбор авторской работы, вариантов и бюджета</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
   <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Open admin panel"><span>ADMIN</span></button>
   <div id="ownerAccessDiagnostic" class="notice hidden" role="status" aria-live="polite"></div>
@@ -1745,6 +1744,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel">
   <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
   <p class="muted">🎟️ Для активации подарочного сертификата напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
+  <button class="secondary" type="button" style="width:100%;margin-top:8px" onclick="showView('aiWorkshopView')">🧵 Режим авторской работы</button>
  </div>
  <div class="panel">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -1765,7 +1765,7 @@ html body>#seasonDecorations .festive-firework{
  </div>
 </section>
 <section id="aiWorkshopView" class="hidden">
-  <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
+  <div class="hero"><small>ИИ-помощник · отдельный режим</small><h2>🧵 Авторская работа</h2><p>Обсудим задумку, бюджет и материалы. Помощник предложит подходящий проект и предварительную стоимость.</p><button class="secondary" type="button" onclick="showView('supportView')">← К ИИ-помощнику</button></div>
   <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник уточняет пожелания, подбирает готовую работу и рассчитывает предварительную цену.</p></div>
   <div class="panel hidden" id="craftResultPanel"><h3>Предложение мастерской</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
  </section>
@@ -1786,7 +1786,7 @@ html body>#seasonDecorations .festive-firework{
 <div class="bottom">
  <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
  <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
- <button data-view="aiWorkshopView"><strong>🧵</strong>ИИ-мастерская</button>
+ <button data-view="catalogView"><strong>🛍️</strong>Каталог</button>
  <button data-view="supportView"><strong>🤖</strong>ИИ помощник</button>
  <button data-view="ordersView"><strong>📦</strong>Заказы</button>
 </div>
