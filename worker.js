@@ -309,7 +309,7 @@ async function calculateDeliveryQuote(address, priority) {
   if (!routeData.routes?.length || !Number.isFinite(meters) || meters <= 0) throw new Error("Не удалось построить автомобильный маршрут до адреса. Проверьте номер дома.");
   const distanceKm = Math.round((meters / 1000) * 100) / 100;
   const deliveryStars = Math.min(450, Math.ceil(distanceKm * 23));
-  const priorityStars = priority ? 100 : 0;
+  const priorityStars = 0;
   return { address: clean, distance_km: distanceKm, delivery_stars: deliveryStars, priority_delivery: !!priority, priority_stars: priorityStars, total_delivery_stars: deliveryStars + priorityStars };
 }
 
@@ -767,7 +767,7 @@ async function handleWebhook(request, env) {
       const deliveryInfo=await env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(order.id).first();
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
         "\nИтого заказа: " + order.total_stars + " ⭐\nСписано с баланса: " + Number(order.balance_applied_stars||0) + " ⭐\nОплата Telegram: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title +
-        (deliveryInfo ? (String(deliveryInfo.address || "").startsWith("Самовывоз") ? "\n" + deliveryInfo.address + "\nДоставка: бесплатно" : "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритет: +100 ⭐" : "")) : ""));
+        (deliveryInfo ? (String(deliveryInfo.address || "").startsWith("Самовывоз") ? "\n" + deliveryInfo.address + "\nДоставка: бесплатно" : "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритетная доставка: включена в VIP" : "")) : ""));
     } else if (intent.status !== "paid" || String(intent.charge_id || "") !== chargeId || order.payment_status !== "paid") {
       return json({ ok: true });
     }
@@ -2705,10 +2705,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
         const priorityDelivery = deliveryMethod === "courier" && body.priority_delivery === true;
         const priorityOrder = body.priority_order === true;
-        const activeVipForOrder = priorityOrder
+        const activeVipForOrder = (priorityDelivery || priorityOrder)
           ? await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first()
           : null;
-        if (priorityOrder && !activeVipForOrder) return json({error:"Приоритетный заказ доступен только участникам с действующей VIP-подпиской."},403,origin);
+        if ((priorityDelivery || priorityOrder) && !activeVipForOrder) return json({error:"Приоритетная доставка и приоритетная обработка доступны только с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
