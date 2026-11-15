@@ -4062,7 +4062,7 @@ let craftModeActive=false;
 let craftInitialRestoreDone=false;
 function isCraftOrderIntent(message){
  const text=String(message||'').toLowerCase();
- return /(?:индивидуальн\w*\s+(?:авторск\w*\s+)?работ\w*|авторск\w*\s+(?:работ\w*|подар\w*|издел\w*)|(?:заказать|оформить)\s+(?:мне\s+)?(?:на\s+заказ\s+)?(?:рисунок|открытк\w*|поделк\w*|работ\w*|подар\w*|издел\w*)|(?:сделать|создать|изготовить)\s+(?:мне\s+)?(?:на\s+заказ|индивидуальн\w*|авторск\w*)|хочу\s+(?:заказать|создать|оформить)\s+(?:индивидуальн\w*|авторск\w*|на\s+заказ))/i.test(text);
+ return /(?:индивидуальн\w*\s+(?:авторск\w*\s+)?работ\w*|авторск\w*\s+(?:работ\w*|подар\w*|издел\w*)|(?:заказать|оформить)\s+(?:мне\s+)?(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ)|(?:сделать|создать|изготовить)\s+(?:мне\s+)?(?:на\s+заказ|индивидуальн\w*|авторск\w*)|хочу\s+(?:заказать|создать|оформить)\s+(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ|на\s+заказ))/i.test(text);
 }
 async function openCraftInAssistant(){
  craftModeActive=true;
@@ -4185,7 +4185,7 @@ async function sendCraftMessage(){
  const input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn'),status=document.getElementById('supportResult'),message=input.value.trim();
  if(!message){status.textContent='Напишите ответ, чтобы продолжить.';return;}
  if(!craftMessages.length)resetCraftConversation();
- input.value='';button.disabled=true;button.textContent=craftConversationReady?'Отправляем…':'Мастер думает…';status.textContent=(!craftAiEnabled||craftConversationReady)?'Передаём сообщение владельцу…':'Анализируем пожелания и подбираем варианты…';
+ input.value='';button.disabled=true;button.textContent=craftConversationReady?'Отправляем…':'ИИ-помощник думает…';status.textContent=(!craftAiEnabled||craftConversationReady)?'Передаём сообщение владельцу…':'Анализируем пожелания и подбираем варианты…';
  try{
   if(craftConversationReady){
    const d=await apiFetch('/api/craft/messages',{method:'POST',body:JSON.stringify({draft_id:craftDraftId,message})});
