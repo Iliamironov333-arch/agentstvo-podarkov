@@ -2737,22 +2737,23 @@ async function loadAdminSupport() {
    const info=document.createElement('div');
    const name=document.createElement('strong');name.textContent=item.first_name||'Покупатель';
    const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
-   const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
+   const chatTitle=document.createElement('small');chatTitle.textContent='Диалог: '+(item.conversation_title||'Старый диалог');
+   const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+(item.assistant_type==='vip'?'VIP-режим':'ИИ помощник')+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
    const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
    const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
-   info.append(name,username,meta,activity,preview);
-   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Карточка';button.addEventListener('click',()=>openAdminConversation(item.telegram_id));
+   info.append(name,username,chatTitle,meta,activity,preview);
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть диалог';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
    row.append(info,button);root.append(row);
   });
   await loadAdminSupportTickets();
   await loadAdminAnalytics();
  }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
 }
-async function openAdminConversation(telegramId) {
+async function openAdminConversation(telegramId, conversationId) {
  const box=document.getElementById('adminConversationDetail');if(!box)return;
  box.classList.remove('hidden');box.textContent='Загружаем историю…';
  try{
-  const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId));
+  const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId)+'&conversation_id='+encodeURIComponent(conversationId||''));
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
   const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
@@ -2771,7 +2772,7 @@ async function openAdminConversation(telegramId) {
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
   const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
-  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
+  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
   controls.append(modeButton);box.append(controls);
   if(data.mode==='human'){
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
@@ -2781,7 +2782,7 @@ async function openAdminConversation(telegramId) {
   }
   (data.messages||[]).forEach(message=>{
    const item=document.createElement('div');item.className='admin-detail-line';
-   const head=document.createElement('b');head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':'🤖 ИИ-помощник'):'👤 Покупатель')+' · '+(message.created_at||'');
+   const head=document.createElement('b');head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':(message.assistant_type==='vip'?'🤖 ИИ помощник · VIP':'🤖 ИИ помощник')):'👤 Покупатель')+' · '+(message.created_at||'');
    const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
    item.append(head,body);box.append(item);
   });
