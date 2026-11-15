@@ -438,37 +438,44 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   const primaryModel = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
   const fallbackModel = env.OPENAI_MODEL || "gpt-4o-mini";
   const requestModel = async (model) => {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, instructions,
-        input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
-    });
-    const data = await response.json().catch(() => ({}));
-    return { response, data };
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, instructions,
+          input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
+      });
+      const data = await response.json().catch(() => ({}));
+      return { response, data, networkError: null };
+    } catch (error) {
+      return { response: null, data: {}, networkError: String(error).slice(0, 300) };
+    }
   };
-  let { response, data } = await requestModel(primaryModel);
-  // If the configured VIP model is unavailable to this API key, retry with the standard model.
-  if (!response.ok && isVip && primaryModel !== fallbackModel && [400, 404, 422].includes(response.status)) {
-    const firstError = data?.error || {};
-    console.warn("VIP support model unavailable; retrying with standard model:", JSON.stringify({
-      model: primaryModel, http_status: response.status,
-      error_code: firstError.code || null, error_type: firstError.type || null
+  let attempt = await requestModel(primaryModel);
+  // VIP uses the same API key as standard mode. If the VIP model or its request fails,
+  // preserve VIP instructions and retry with the configured standard model.
+  if (isVip && primaryModel !== fallbackModel && (!attempt.response || !attempt.response.ok)) {
+    const firstError = attempt.data?.error || {};
+    console.warn("VIP support model failed; retrying with standard model:", JSON.stringify({
+      model: primaryModel, http_status: attempt.response?.status || null,
+      error_code: firstError.code || null, error_type: firstError.type || null,
+      network_error: attempt.networkError || null
     }));
-    ({ response, data } = await requestModel(fallbackModel));
+    attempt = await requestModel(fallbackModel);
   }
-  const model = response.ok ? (data?.model || primaryModel) : primaryModel;
-  if (!response.ok) {
+  const { response, data, networkError } = attempt;
+  const model = response?.ok ? (data?.model || primaryModel) : primaryModel;
+  if (!response?.ok) {
     const apiError = data?.error || {};
     const diagnostic = {
-      stage: "openai_request",
+      stage: networkError ? "openai_network" : "openai_request",
       model,
-      http_status: response.status,
+      http_status: response?.status || null,
       error_code: apiError.code || null,
       error_type: apiError.type || null,
       error_param: apiError.param || null,
-      error_message: String(apiError.message || "OpenAI returned a non-2xx response").slice(0, 350),
-      request_id: response.headers.get("x-request-id") || null,
+      error_message: String(apiError.message || networkError || "OpenAI returned a non-2xx response").slice(0, 350),
+      request_id: response?.headers?.get("x-request-id") || null,
       history_messages: history.length,
       question_count: questionsUsed
     };
