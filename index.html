@@ -3907,7 +3907,7 @@ function updateSupportAssistantUi() {
   : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включается автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.');
 }
 
-async function loadSupportHistory(conversationId, actions = []) {
+async function loadSupportHistory(conversationId, actions = null) {
  const root = document.getElementById('supportChatLog');
  if (!root) return;
  supportPendingActions = Array.isArray(actions) ? actions : [];
@@ -3920,6 +3920,7 @@ async function loadSupportHistory(conversationId, actions = []) {
   if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip,true); }
   activeSupportConversationId = data.conversation_id || null;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
+  if (!Array.isArray(actions)) supportPendingActions = Array.isArray(data.actions) ? data.actions : [];
   renderSupportConversations();
   updateSupportAssistantUi();
   renderSupportMessages(data.messages || [], supportPendingActions);
