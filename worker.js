@@ -2512,6 +2512,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'buyer',?)").bind(orderId,telegramId,message).run();
           const rows=await env.DB.prepare("SELECT sender_type,content FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(orderId,telegramId).all();
           const history=(rows.results||[]).reverse().map(row=>({role:row.sender_type==="buyer"?"user":"assistant",content:row.content}));
+          if(bundle.ai_enabled===false){try{await notifyOwner(env,"💬 Новое сообщение в чате ИИ-конструктора (автоответы выключены)\nЗаказ: "+orderId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");}catch{}return json({ok:true,reply:"Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную.",handoff:true},200,origin);}
           const catalog=await getProducts(env),vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
           let answer;try{answer=await createGiftBuilderAnswer(env,history,bundle,catalog,!!vip,false);}catch(error){return json({error:error.message||"ИИ-консультант временно недоступен."},503,origin);}
           let updated=false;
@@ -2992,7 +2993,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
           const firstRequest=messages.find(m=>m.role==="user")?.content||"Индивидуальная работа";
           const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
-          const details={source:"miniapp_workshop",summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
+          const details={source:"miniapp_workshop",ai_enabled:true,summary:String(result.reply||"").slice(0,2000),conversation:messages.slice(-24).map(m=>({role:m.role,content:String(m.content||"").slice(0,700)})),owner_messages:[],estimate_note:""};
           let estimatedStars=Number(existing?.estimated_stars||0);
           if(result.ready){
             const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:messages,proposal:result.reply},250);
@@ -3013,31 +3014,31 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
             }
           }
+          if(!existing)await notifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ИНДИВИДУАЛЬНОМУ ЗАКАЗУ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\n\nПокупатель начал диалог с ИИ. До завершения консультации и подтверждения владельцем счёт не отправляется.");
           return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars},200,origin);
         }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог мастерской."},503,origin);}
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
-        if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
-        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars},200,origin);
+        return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
-        if(details.source!=="miniapp_workshop")return json({error:"Это не диалог ИИ-мастерской."},404,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
-        details.conversation.push({role:"user",content:message});
-        details.conversation=details.conversation.slice(-16);
-        details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-8):[];
-        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
-        await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
-        return json({ok:true,conversation:details.conversation},200,origin);
+        details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
+        details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
+        let reply=null,handoff=false;
+        if(details.ai_enabled!==false){try{const answer=await createCraftAnswer(env,details.conversation.filter(x=>x&&["user","assistant"].includes(x.role)).slice(-24));reply=answer.reply;details.conversation.push({role:"assistant",content:reply});details.conversation=details.conversation.slice(-24);}catch(error){handoff=true;reply="Автоматический ответ сейчас недоступен. Сообщение сохранено — владелец сможет ответить вручную.";await notifyOwner(env,"⚠️ ИИ не смог ответить в чате заказа "+draftId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\nОшибка: "+String(error).slice(0,180));}}
+        else{handoff=true;reply="Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную.";await notifyOwner(env,"💬 Новое сообщение в заказе (ИИ выключен)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");}
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(JSON.stringify(details),draftId,String(telegramId)).run();
+        return json({ok:true,reply,conversation:details.conversation,handoff,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/vip/support" && method === "POST") {
         // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
@@ -3216,6 +3217,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           .bind(telegramId, conversationId, assistantType, reply).run();
         await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
           .bind(conversationId, telegramId).run();
+        if(actions.length)await notifyOwner(env,"🧭 Вопрос покупателя о навигации Mini App\nTelegram ID: "+telegramId+"\nДиалог: "+conversationId+"\nСообщение: "+message+"\n\nИИ отправил покупателю подходящие кнопки перехода. Это уведомление для владельца, не заказ.");
         const ownerRequested = /(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message);
         if (ownerRequested) {
           await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
