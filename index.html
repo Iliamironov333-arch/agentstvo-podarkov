@@ -1421,6 +1421,7 @@ html body>#seasonDecorations .festive-firework{
   <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Подбор авторской работы, вариантов и бюджета</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
   <button class="menu-card hidden" id="ownerAdminCard" onclick="showView('adminPanelView')"><strong>🔐 Панель владельца <span class="pill">ADMIN</span></strong><span>Управление Агентством подарков</span></button>
+  <div id="ownerAccessDiagnostic" class="notice hidden" role="status" aria-live="polite"></div>
  </div>
 </section>
 <section id="adminPanelView" class="hidden">
@@ -1989,7 +1990,12 @@ function buyProductNow(productId){
  toast('Работа добавлена к быстрому оформлению. Укажи адрес доставки.');
 }
 
-function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)restoreCraftConversation();
+function showView(id) {
+ if(id==='adminPanelView' && adminSession?.root_owner !== true) {
+  toast('Панель владельца закрыта: серверная проверка доступа не пройдена.');
+  return;
+ }
+ if(id==='aiWorkshopView'&&!craftMessages.length)restoreCraftConversation();
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
@@ -3658,46 +3664,84 @@ function applyAdminPermissionVisibility(){
  const staffPanel=document.getElementById('adminStaffPanel');
  if(staffPanel)staffPanel.hidden=!(adminSession?.root_owner===true);
 }
+function setOwnerAccessDiagnostic(code, title, detail, clientIdState) {
+ const box = document.getElementById('ownerAccessDiagnostic');
+ const message = `Диагностика доступа [${code}] — ${title}. ${detail}${clientIdState ? ' Проверка ID в интерфейсе: ' + clientIdState + '.' : ''}`;
+ console.error('[ADMIN ACCESS DIAGNOSTIC]', {code, title, detail, clientIdState, hasTelegramWebApp:!!tg, hasInitData:!!initData});
+ if (box) {
+  box.textContent = message;
+  box.classList.remove('hidden');
+ }
+}
+function clearOwnerAccessDiagnostic() {
+ const box = document.getElementById('ownerAccessDiagnostic');
+ if (box) { box.textContent = ''; box.classList.add('hidden'); }
+}
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
- if (!card) return;
- const description = card.querySelector('span:last-child');
- // The Telegram client-side ID only controls whether the entry is displayed.
- // Every administrative API request is still authenticated and authorized by the Worker.
- const isKnownOwner = String(tg?.initDataUnsafe?.user?.id || '').trim() === '7822470060';
- card.classList.toggle('hidden', !isKnownOwner);
- if (isKnownOwner && description) description.textContent = 'Проверяем защищённый доступ к панели…';
- if (!initData) {
-  adminSession = null;
-  if (isKnownOwner && description) description.textContent = 'Кнопка восстановлена, но Telegram не передал initData. Откройте приложение через Telegram.';
-  console.warn('Telegram initData is unavailable; owner access requires opening the app inside Telegram.');
+ if (!card) {
+  setOwnerAccessDiagnostic('A00', 'Не найдена кнопка панели', 'В загруженной версии приложения отсутствует элемент ownerAdminCard.');
   return;
  }
+ const description = card.querySelector('span:last-child');
+ const clientId = String(tg?.initDataUnsafe?.user?.id || '').trim();
+ const clientIdState = !clientId ? 'Telegram не передал user.id' : clientId === '7822470060' ? 'совпадает' : 'не совпадает';
+ // Never trust initDataUnsafe for authorization. It is diagnostic only.
+ // The Worker validates signed initData and decides whether this is the owner.
+ card.classList.add('hidden');
+ if (!tg) {
+  adminSession = null;
+  setOwnerAccessDiagnostic('A01', 'Telegram WebApp не загружен', 'Не найден window.Telegram.WebApp. Открой мини-приложение кнопкой внутри Telegram.', clientIdState);
+  return;
+ }
+ if (!initData) {
+  adminSession = null;
+  setOwnerAccessDiagnostic('A02', 'Нет подписанных initData', 'Telegram не передал данные авторизации. Открой мини-приложение непосредственно из бота, а не по обычной браузерной ссылке.', clientIdState);
+  return;
+ }
+ if (description) description.textContent = 'Проверяем владельца на сервере…';
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
-  if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
+  if (result?.root_owner === true && result?.admin_access === true && result?.role === 'owner') {
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
-   if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
+   if(title) title.textContent='🔐 Панель владельца';
    const heroTitle=document.querySelector('#adminPanelView .hero h2');
-   if(heroTitle) heroTitle.textContent=result.role==='owner'?'Добро пожаловать, владелец':'Добро пожаловать, модератор';
+   if(heroTitle) heroTitle.textContent='Добро пожаловать, владелец';
    const cardTitle=card.querySelector('strong');
-   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=result.role==='owner'?'🔐 Панель владельца ':'🛡️ Панель модератора ';
+   if(cardTitle?.firstChild) cardTitle.firstChild.textContent='🔐 Панель владельца ';
    if(description) description.textContent='Управление Агентством подарков';
+   clearOwnerAccessDiagnostic();
    applyAdminPermissionVisibility();
-   if(result.root_owner) loadAdminStaff();
+   loadAdminStaff();
+   console.info('[ADMIN ACCESS DIAGNOSTIC] A00: owner session confirmed by Worker.');
+   return;
+  }
+  adminSession = null;
+  if (result?.root_owner !== true) {
+   setOwnerAccessDiagnostic('A04', 'Сервер не распознал основной аккаунт владельца', 'Worker ответил, но root_owner не равен true. Проверь Telegram ID, BOT_TOKEN и соответствие аккаунта боту.', clientIdState);
+  } else if (result?.admin_access !== true) {
+   setOwnerAccessDiagnostic('A05', 'Сервер запретил административный доступ', 'root_owner подтверждён, но admin_access не равен true. Проверь формирование сессии /api/admin/session.', clientIdState);
   } else {
-   adminSession = null;
-   if (!isKnownOwner) card.classList.add('hidden');
-   if (isKnownOwner && description) description.textContent='Telegram отклонил доступ: ' + (result?.error || 'сервер не подтвердил роль владельца');
-   console.warn('Admin session was not granted by the server:', result);
+   setOwnerAccessDiagnostic('A06', 'Неожиданный формат ответа сервера', 'Ожидались root_owner=true, admin_access=true и role=owner. Получен другой набор полей.', clientIdState);
   }
  } catch(e) {
   adminSession = null;
-  if (!isKnownOwner) card.classList.add('hidden');
-  if (isKnownOwner && description) description.textContent='Ошибка проверки доступа: ' + (e.message || String(e));
-  console.error('Admin session check failed:', e);
+  const status = Number(e?.status || 0);
+  if (status === 401) {
+   setOwnerAccessDiagnostic('A03', 'Telegram-авторизация отклонена (HTTP 401)', 'Подпись initData не прошла проверку. Возможны неверный BOT_TOKEN у Worker, открытие старого Mini App или просроченные initData.', clientIdState);
+  } else if (status === 403) {
+   setOwnerAccessDiagnostic('A04', 'Сервер отказал в доступе (HTTP 403)', e.message || 'Telegram ID, подтверждённый сервером, не совпал с ID владельца.', clientIdState);
+  } else if (status === 404) {
+   setOwnerAccessDiagnostic('A07', 'Маршрут проверки не найден (HTTP 404)', 'Проверь API_BASE и наличие маршрута /api/admin/session в опубликованном Worker.', clientIdState);
+  } else if (status >= 500) {
+   setOwnerAccessDiagnostic('A08', 'Ошибка Worker или базы данных (HTTP ' + status + ')', e.message || 'Серверная ошибка при создании административной сессии.', clientIdState);
+  } else if (status > 0) {
+   setOwnerAccessDiagnostic('A09', 'Неожиданный HTTP-ответ (' + status + ')', e.message || 'Проверь ответ Worker.', clientIdState);
+  } else {
+   setOwnerAccessDiagnostic('A10', 'Сетевая ошибка или ошибка запроса', e?.message || String(e), clientIdState);
+  }
  }
 }
 async function loadAdminStaff(){
@@ -3771,7 +3815,13 @@ async function apiFetch(path,options={}) {
  });
 
  const data = await response.json().catch(() => ({detail:'Сервер вернул некорректный ответ'}));
- if (!response.ok) throw new Error((data.error || data.detail || data.message || 'Ошибка сервера') + ` (HTTP ${response.status})`);
+ if (!response.ok) {
+  const error = new Error((data.error || data.detail || data.message || 'Ошибка сервера') + ` (HTTP ${response.status})`);
+  error.status = response.status;
+  error.path = path;
+  error.payload = data;
+  throw error;
+ }
  return data;
 }
 
