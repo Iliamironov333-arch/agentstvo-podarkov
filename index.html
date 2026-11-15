@@ -2859,6 +2859,13 @@ async function loadAdminSupportTickets() {
   if(summary)summary.textContent='Всего: '+Number(s.total||0)+' · Покупателей: '+Number(s.buyers||0)+' · Новые: '+Number(s.open||0)+' · В работе: '+Number(s.in_progress||0)+' · Закрытые: '+Number(s.closed||0)+' · За 7 дней: '+Number(s.last_7_days||0);
   status.textContent=rows.length?'Показано обращений: '+rows.length+(q?' · Поиск: «'+q+'»':''):'По заданным условиям обращений нет.';
   const labels={open:'Новое',in_progress:'В работе',closed:'Закрыто'};
+  const activeFolder=document.createElement('details');activeFolder.className='admin-detail-line';activeFolder.open=true;
+  const activeSummary=document.createElement('summary');activeSummary.textContent='🟢 Активные обращения · '+rows.filter(t=>t.status!=='closed').length;activeSummary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+  const activeList=document.createElement('div');activeList.className='admin-ticket-active-list';activeFolder.append(activeSummary,activeList);
+  const closedFolder=document.createElement('details');closedFolder.className='admin-detail-line';
+  const closedSummary=document.createElement('summary');closedSummary.textContent='🔒 Закрытые обращения · '+rows.filter(t=>t.status==='closed').length;closedSummary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+  const closedList=document.createElement('div');closedList.className='admin-ticket-closed-list';closedFolder.append(closedSummary,closedList);
+  root.append(activeFolder,closedFolder);
   rows.forEach(ticket=>{
    const row=document.createElement('div');row.className='admin-order-actions';
    const heading=document.createElement('h4');heading.textContent=(ticket.first_name||'Покупатель')+(ticket.username?' · @'+ticket.username:'')+' · '+labels[ticket.status];
@@ -2882,7 +2889,7 @@ async function loadAdminSupportTickets() {
    select.value=ticket.status;
    const save=document.createElement('button');save.type='button';save.className='secondary';save.textContent='Сохранить статус';
    save.addEventListener('click',async()=>{save.disabled=true;try{await apiFetch('/api/admin/support/ticket-status',{method:'POST',body:JSON.stringify({id:ticket.id,status:select.value})});toast('Статус обращения обновлён.');await loadAdminSupportTickets();}catch(e){toast(e.message||'Не удалось обновить обращение.');}finally{save.disabled=false;}});
-   actions.append(profile,send,save);row.append(heading,meta,message,reply,actions,select);root.append(row);
+   actions.append(profile,send,save);row.append(heading,meta,message,reply,actions,select);(ticket.status==='closed'?closedList:activeList).append(row);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить обращения.';if(summary)summary.textContent='Не удалось загрузить сводку активности.';}
 }
@@ -3087,8 +3094,8 @@ async function loadAdminDashboard() {
  }
 }
 
-async function openAdminOrder(orderId,orderType) {
- const box=document.getElementById('adminOrderDetail');if(!box)return;
+async function openAdminOrder(orderId,orderType,targetBox) {
+ const box=targetBox||document.getElementById('adminOrderDetail');if(!box)return;
  box.classList.remove('hidden');box.textContent='Загружаем заказ…';
  try{
   const params=new URLSearchParams({order_id:String(orderId),order_type:String(orderType)});
@@ -3388,8 +3395,9 @@ async function loadAdminOrders() {
    meta.textContent='№ '+order.id+' · '+(order.first_name||'Покупатель')+' · ID '+order.telegram_id+' · '+Number(order.total_stars||0)+' ⭐ · '+paymentLabel+' · '+(order.created_at||'')+(Number(order.priority_delivery)===1?' · ⚡ ПРИОРИТЕТ':'');
    info.append(name,meta);
    const detail=document.createElement('button');detail.type='button';detail.className='secondary';detail.textContent='Подробнее';
-   detail.addEventListener('click',()=>openAdminOrder(order.id,order.order_type));
-   row.append(info,detail);
+   const detailBox=document.createElement('div');detailBox.className='admin-user-detail hidden';detailBox.style.marginTop='10px';
+   detail.addEventListener('click',async()=>{const willOpen=detailBox.classList.contains('hidden');detailBox.classList.toggle('hidden',!willOpen);detail.textContent=willOpen?'Скрыть подробности':'Подробнее';if(willOpen)await openAdminOrder(order.id,order.order_type,detailBox);});
+   row.append(info,detail);row.append(detailBox);
    appendAdminOrderCard(order.order_type==='custom'?'questionnaire':'store',order,row);
   });
   finishAdminOrderCategory('questionnaire');finishAdminOrderCategory('store');
