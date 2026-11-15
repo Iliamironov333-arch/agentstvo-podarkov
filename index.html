@@ -4025,11 +4025,8 @@ async function loadSupportHistory(conversationId, actions = null) {
   renderSupportConversations();
   updateSupportAssistantUi();
   renderSupportMessages(data.messages || [], supportPendingActions);
-  if(!craftInitialRestoreDone){
-   craftInitialRestoreDone=true;
-   let savedCraft='';try{savedCraft=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
-   if(savedCraft)await openCraftInAssistant();
-  }
+  // При запуске всегда открываем обычный чат помощника.
+  // Черновик индивидуального заказа не должен подменять главный экран.
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
