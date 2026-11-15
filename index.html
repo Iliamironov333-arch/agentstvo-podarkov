@@ -3339,6 +3339,10 @@ function resetAdminOrderCategory(key){
  section.querySelector('.admin-order-cancelled-list')?.replaceChildren();
  const paid=section.querySelector('.admin-order-paid');if(paid){paid.open=false;paid.hidden=true;}
  const cancelled=section.querySelector('.admin-order-cancelled');if(cancelled){cancelled.open=false;cancelled.hidden=true;}
+ if(key==='assistant'){
+  section._assistantFolderCounts={unfinished:0,recent:0,older:0,paid:0,cancelled:0};
+  section.querySelectorAll('[data-assistant-folder],.admin-assistant-empty').forEach(node=>node.remove());
+ }
  return section;
 }
 function appendAdminOrderCard(key,order,card){
