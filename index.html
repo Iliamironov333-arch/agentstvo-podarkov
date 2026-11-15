@@ -2000,7 +2000,7 @@ function showView(id) {
   if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
   loadMe();
  }
- if (id === 'supportView') { loadSupportHistory(); loadCraftConversation(); }
+ if (id === 'supportView') { if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
  
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
@@ -4107,6 +4107,7 @@ function renderCraftChat(){
  craftMessages.forEach(m=>{const bubble=document.createElement('div');bubble.style.cssText='max-width:94%;align-self:'+(m.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(m.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5';const label=document.createElement('b');label.textContent=m.role==='user'?'Вы':m.role==='owner'?(m.via==='ai'?'ИИ-помощник':'Владелец Агентства'):m.role==='system'?'Система':'ИИ-мастер';label.style.display='block';label.style.marginBottom='4px';const body=document.createElement('span');body.textContent=m.content;bubble.append(label,body);root.append(bubble);});
  root.scrollTop=root.scrollHeight;
  const count=document.getElementById('craftQuestionCount');if(count)count.textContent=craftQuestionCount+' / 16 вопросов';
+ const label=document.getElementById('supportActiveAssistantLabel');if(label&&craftModeActive)label.textContent='🎨 Заказ · '+craftQuestionCount+'/16';
 }
 function startCraftPolling(){
  if(craftPollTimer)clearInterval(craftPollTimer);
