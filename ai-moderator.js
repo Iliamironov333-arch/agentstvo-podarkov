@@ -325,7 +325,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
   let active=null;
   let matchedOrderThread=false;
   if(replyToOriginalId){
-    const candidates=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.group_message_id,d.subject,d.details_json,d.status,d.estimated_stars,d.approved_stars,d.updated_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.chat_id=? AND d.telegram_id=? AND d.status IN ('collecting','review','approved','paid') ORDER BY d.updated_at DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
+    const candidates=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.group_message_id,d.subject,d.details_json,d.status,d.estimated_stars,d.approved_stars,d.updated_at,d.last_activity_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.chat_id=? AND d.telegram_id=? AND d.status IN ('collecting','review','approved','paid') ORDER BY d.updated_at DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
     let linked=null,linkedDetails={};
     for(const candidate of candidates.results||[]){
       let parsed={};try{parsed=JSON.parse(candidate.details_json||"{}");}catch{}
@@ -338,7 +338,8 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
       // Владелец закрыл эту переписку: старый тред больше не обслуживается.
       return true;
     }
-    if(linked&&linked.status==="paid"&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(COALESCE(?,?))<=datetime('now','-3 days')").bind(linked.paid_at,linked.updated_at).first())return true;
+    const linkedExpiry=linked?.status==="paid"?(linked.paid_at||linked.updated_at):(linked?.last_activity_at||linked?.updated_at);
+    if(linked&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(linkedExpiry).first())return true;
     if(!linked){
       // Не прикрепляем ответ на чужое или постороннее сообщение к активному заказу.
       return false;
@@ -1059,7 +1060,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-orders" && method==="GET") {
     if(!has("ai_orders_view"))return aiJson({error:"Недостаточно прав."},403);
     const [draftRows,bundleRows]=await Promise.all([
-      env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at,CASE WHEN (d.status='paid' AND datetime(COALESCE(o.paid_at,d.updated_at))<=datetime('now','-3 days')) OR (d.status='cancelled' AND datetime(COALESCE(json_extract(d.details_json,'$.terminal_at'),d.updated_at))<=datetime('now','-3 days')) THEN 1 ELSE 0 END AS chat_closed,'ai_draft' AS record_type FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('collecting','review','approved','paid','cancelled') ORDER BY d.created_at DESC LIMIT 100").all(),
+      env.DB.prepare("SELECT d.*,o.payment_status,o.paid_at,CASE WHEN (d.status='paid' AND datetime(COALESCE(o.paid_at,d.updated_at))<=datetime('now','-3 days')) OR (d.status='cancelled' AND datetime(CASE WHEN json_valid(d.details_json) THEN COALESCE(json_extract(d.details_json,'$.terminal_at'),d.updated_at) ELSE d.updated_at END)<=datetime('now','-3 days')) OR (d.status IN ('collecting','review','approved') AND datetime(COALESCE(d.last_activity_at,d.updated_at))<=datetime('now','-3 days')) THEN 1 ELSE 0 END AS chat_closed,'ai_draft' AS record_type FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.status IN ('collecting','review','approved','paid','cancelled') ORDER BY d.created_at DESC LIMIT 100").all(),
       env.DB.prepare("SELECT COALESCE(o.id,b.order_id,b.id) AS id,o.id AS order_id,b.telegram_id,u.first_name,u.username,COALESCE(o.product_title,b.title,'Подарочный набор') AS subject,COALESCE(o.total_stars,0) AS approved_stars,COALESCE(o.total_stars,0) AS estimated_stars,o.payment_status,o.paid_at,COALESCE(o.created_at,b.updated_at,b.created_at) AS created_at,CASE WHEN b.status='cancelled' OR o.payment_status IN ('cancelled','refunded') THEN 'cancelled' WHEN o.payment_status='paid' THEN 'paid' ELSE 'ordered' END AS status,b.bundle_json AS details_json,'gift_bundle' AS record_type FROM gift_bundles b LEFT JOIN orders o ON o.id=b.order_id AND o.telegram_id=b.telegram_id LEFT JOIN users u ON u.telegram_id=b.telegram_id WHERE b.status IN ('ordered','cancelled') ORDER BY COALESCE(o.created_at,b.updated_at,b.created_at) DESC LIMIT 100").all()
     ]);
     const orders=[...(draftRows.results||[]),...(bundleRows.results||[])].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,150);
@@ -1104,13 +1105,14 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     if(body.action==="reply_order") {
       const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,2000);
       if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
-      const draft=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.group_message_id,d.details_json,d.status,d.updated_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('collecting','review','approved','paid','cancelled')").bind(id).first();
+      const draft=await env.DB.prepare("SELECT d.id,d.chat_id,d.telegram_id,d.group_message_id,d.details_json,d.status,d.updated_at,d.last_activity_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('collecting','review','approved','paid','cancelled')").bind(id).first();
       if(!draft)return aiJson({error:"Диалог заказа не найден."},404);
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
       if(details.chat_deleted===true)return aiJson({error:"Этот чат удалён. Отправка сообщений заблокирована."},410);
-      const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):(details.terminal_at||draft.updated_at);
-      if(["paid","cancelled"].includes(draft.status)&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first())return aiJson({error:"Чат заказа закрыт: прошло более трёх дней после завершения заказа."},410);
+      const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
+      if(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first())return aiJson({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410);
       if(draft.status==="cancelled"&&!details.terminal_at)details.terminal_at=draft.updated_at;
+      if(!Array.isArray(details.conversation)||!details.conversation.some(m=>m&&m.role==="user"))return aiJson({error:"В этом заказе ещё нет переписки. Ответ не отправлен."},409);
       details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
       details.owner_messages.push({content:reply,created_at:new Date().toISOString(),sender:"owner",via:"ai"});details.owner_messages=details.owner_messages.slice(-20);
       details.conversation=Array.isArray(details.conversation)?details.conversation:[];details.conversation.push({role:"owner",content:reply,via:"ai"});details.conversation=details.conversation.slice(-24);
@@ -1134,12 +1136,13 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     if(body.action==="reply_workshop") {
       const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,3000);
       if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
-      const draft=await env.DB.prepare("SELECT d.id,d.telegram_id,d.details_json,d.status,d.updated_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('review','approved','paid')").bind(id).first();
+      const draft=await env.DB.prepare("SELECT d.id,d.telegram_id,d.details_json,d.status,d.updated_at,d.last_activity_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.status IN ('review','approved','paid')").bind(id).first();
       if(!draft)return aiJson({error:"Диалог мастерской не найден."},404);
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
       if(details.source!=="miniapp_workshop")return aiJson({error:"Ответы через мастерскую доступны только для заказов из ИИ-мастерской."},400);
       if(details.chat_deleted===true)return aiJson({error:"Этот чат удалён. Ответ не отправлен."},410);
-      if(draft.status==="paid"&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(COALESCE(?,?))<=datetime('now','-3 days')").bind(draft.paid_at,draft.updated_at).first())return aiJson({error:"Чат заказа закрыт: прошло более трёх дней после оплаты."},410);
+      if(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(COALESCE(?,?))<=datetime('now','-3 days')").bind(draft.paid_at,draft.last_activity_at||draft.updated_at).first())return aiJson({error:"Чат заказа закрыт: прошло более трёх дней после оплаты или активности."},410);
+      if(!Array.isArray(details.conversation)||!details.conversation.some(m=>m&&m.role==="user"))return aiJson({error:"В этом заказе ещё нет переписки. Ответ не отправлен."},409);
       details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
       const ownerMessage={content:reply.slice(0,350),created_at:new Date().toISOString(),sender:"owner"};
       details.owner_messages.push(ownerMessage);
