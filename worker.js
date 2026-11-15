@@ -1776,13 +1776,13 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             const message=typeof body.message==="string"?body.message.trim().slice(0,2000):"";
             const senderType=body.sender_type==="ai"?"ai":"owner";
             if(!message)return json({error:"Введите сообщение покупателю."},400,origin);
+            const baseTime=(product?.payment_status==="paid"||custom?.payment_status==="paid")?(product?.paid_at||custom?.paid_at||product?.created_at||custom?.created_at):(product?.created_at||custom?.created_at);
+            const age=Date.now()-Date.parse(String(baseTime||"").replace(" ","T")+"Z");
+            if(!Number.isFinite(age)||age<0||age>72*60*60*1000)return json({error:"Чат заказа закрыт: прошло более трёх дней после оплаты или оформления."},410,origin);
+            const hasBuyerChat=await env.DB.prepare("SELECT 1 AS ok FROM order_chat_messages WHERE order_id=? AND telegram_id=? AND sender_type='buyer' LIMIT 1").bind(orderId,String(target.telegram_id)).first();
+            if(!hasBuyerChat)return json({error:"В этом заказе ещё нет переписки с покупателем. Ответ не отправлен."},409,origin);
             await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,?,?)").bind(orderId,String(target.telegram_id),senderType,message).run();
-            const bundle=await env.DB.prepare("SELECT title FROM gift_bundles WHERE order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first().catch(()=>null);
-            const orderLabel=String(bundle?.title||product?.product_title||custom?.subject||"заказ").replace(/[\\r\\n]+/g," ").trim().slice(0,120)||"заказ";
-            let notification={sent:false};
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(senderType==="ai"?"🤖 ИИ-помощник по заказу «"+orderLabel+"»":"💬 Сообщение по заказу «"+orderLabel+"»")+"\n\n"+message});notification.sent=true;}
-            catch(error){notification.error=String(error.message||error).slice(0,240);}
-            return json({ok:true,notification},200,origin);
+            return json({ok:true,notification:{sent:false,saved:true,delivery:"in_app_only"}},200,origin);
           }
           if(action==="accept_change"&&!rootOwner)return json({error:"Подтверждать изменения заказа может только основной владелец."},403,origin);
           if(action==="resolve_cancellation"&&!rootOwner)return json({error:"Обрабатывать возвраты и отмены может только основной владелец."},403,origin);
@@ -1833,7 +1833,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               env.DB.prepare("UPDATE order_chat_messages SET order_id=? WHERE order_id=? AND telegram_id=?").bind(newOrderId,orderId,String(target.telegram_id)),
               env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(newOrderId,String(target.telegram_id),"Владелец подтвердил изменение. Создана новая версия заказа № "+newOrderId+". "+summary+" "+note)
             ]);
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"✅ Владелец подтвердил изменение вашего заказа.\n\nСтарая версия № "+orderId+" закрыта. Новая версия заказа: № "+newOrderId+".\n\n"+summary+"\n"+note});}catch(error){console.error("Order revision notification failed:",String(error).slice(0,240));}
+            /* Telegram DM disabled: decision is recorded in the in-app order chat. */
             await notifyOwner(env,"✅ ИЗМЕНЕНИЕ ЗАКАЗА ПОДТВЕРЖДЕНО\nСтарая версия: "+orderId+"\nНовая версия: "+newOrderId+"\nПокупатель: "+target.telegram_id+"\n"+summary);
             return json({ok:true,status:"accepted",new_order_id:newOrderId,previous_order_id:orderId},200,origin);
           }
@@ -1871,7 +1871,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               env.DB.prepare("UPDATE order_cancellation_requests SET status=?,resolved_by=?,resolution_note=?,resolved_at=CURRENT_TIMESTAMP WHERE id=? AND status='requested'").bind(status,telegramId,note,requestId),
               env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),decision==="approve"?"Владелец подтвердил отмену заказа. "+note:"Владелец отклонил запрос на отмену. "+note)
             ]);
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:(decision==="approve"?"❌ Заказ № "+orderId+" отменён.":"ℹ️ Запрос на отмену заказа № "+orderId+" отклонён.")+"\n"+note});}catch(error){console.error("Order cancellation notification failed:",String(error).slice(0,240));}
+            /* Telegram DM disabled: decision is recorded in the in-app order chat. */
             return json({ok:true,status},200,origin);
           }
           if(action==="reject_change"){
@@ -1882,7 +1882,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             if(!result.meta?.changes)return json({error:"Запрос уже обработан или не найден."},409,origin);
             const note=String(body.note||"Владелец не подтвердил это изменение. Вы можете обсудить детали в чате.").slice(0,1000);
             await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(target.telegram_id),"Владелец рассмотрел предложение: "+note).run();
-            try{await telegram(env,"sendMessage",{chat_id:String(target.telegram_id),text:"📦 По вашему заказу № "+orderId+" есть ответ владельца:\n"+note});}catch(error){console.error("Order change decision notification failed:",String(error).slice(0,240));}
+            /* Telegram DM disabled: decision is recorded in the in-app order chat. */
             return json({ok:true,status:"rejected"},200,origin);
           }
           return json({error:"Неизвестное действие чата заказа."},400,origin);
@@ -2503,21 +2503,24 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       if (path === "/api/order-chat" && method === "GET") {
         const orderId=String(url.searchParams.get("order_id")||"").trim().slice(0,100);
         if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
-        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
+        const product=await env.DB.prepare("SELECT id,telegram_id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         if(!product&&!custom)return json({error:"Заказ не найден."},404,origin);
         const bundleLock=product?await env.DB.prepare("SELECT owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
         const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? AND telegram_id=? ORDER BY id LIMIT 150").bind(orderId,telegramId).all();
         const changes=await env.DB.prepare("SELECT id,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? AND telegram_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId,telegramId).all();
         const current=product||custom;
+        const paidMeta=await env.DB.prepare("SELECT payment_status,paid_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
           const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
           return json({ok:true,superseded:true,new_order_id:revision?.new_order_id||null,order:current,chat_available:false,messages:[],changes:[]},200,origin);
         }
-        const chatCreatedAt=String(current.created_at||"").trim().replace(" ","T");
+        const paidOrder=product?.payment_status==="paid"||paidMeta?.payment_status==="paid";
+        const chatCreatedAt=String(paidOrder?(product?.paid_at||paidMeta?.paid_at||current.created_at):current.created_at||"").trim().replace(" ","T");
         const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
-        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000&&!bundleLock?.owner_confirmed_at;
+        const terminalOrder=product?["cancelled","refunded","superseded"].includes(String(product.payment_status||""))||["cancelled","superseded"].includes(String(product.fulfillment_status||"")):["cancelled","canceled","superseded","completed","done"].includes(String(custom?.status||""));
+        const chatAvailable=Number.isFinite(chatAgeMs)&&chatAgeMs>=0&&chatAgeMs<=72*60*60*1000&&!terminalOrder&&!bundleLock?.owner_confirmed_at;
         return json({ok:true,order:current,order_type:product?"product":"custom",chat_available:chatAvailable,messages:rows.results||[],changes:changes.results||[]},200,origin);
       }
       if (path === "/api/order-chat" && method === "POST") {
@@ -2527,14 +2530,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const custom=await env.DB.prepare("SELECT id,telegram_id,subject,answers_json,total_stars,status,created_at FROM custom_orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         const order=product||custom;
         if(!order)return json({error:"Заказ не найден."},404,origin);
+        const paidMeta=await env.DB.prepare("SELECT payment_status,paid_at FROM orders WHERE id=? AND telegram_id=?").bind(orderId,telegramId).first();
         if(product?.fulfillment_status==="superseded"||product?.payment_status==="superseded"||custom?.status==="superseded"){
           const revision=await env.DB.prepare("SELECT new_order_id FROM order_revisions WHERE previous_order_id=? ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
           return json({error:"Создана новая версия заказа.",superseded:true,new_order_id:revision?.new_order_id||null},409,origin);
         }
-        const chatCreatedAt=String(order.created_at||"").trim().replace(" ","T");
-        const chatCreatedAtIso=/([zZ]|[+-]\d{2}:?\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
+        const paidOrder=product?.payment_status==="paid"||paidMeta?.payment_status==="paid";
+        const chatCreatedAt=String(paidOrder?(product?.paid_at||paidMeta?.paid_at||order.created_at):order.created_at||"").trim().replace(" ","T");
+        const chatCreatedAtIso=/([zZ]|[+-]\\d{2}:?\\d{2})$/.test(chatCreatedAt)?chatCreatedAt:chatCreatedAt+"Z";
         const chatAgeMs=Date.now()-Date.parse(chatCreatedAtIso);
-        if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000)return json({error:"ИИ-консультант по заказу доступен в течение первых 3 дней после оформления."},409,origin);
+        const terminalOrder=product?["cancelled","refunded","superseded"].includes(String(product.payment_status||""))||["cancelled","superseded"].includes(String(product.fulfillment_status||"")):["cancelled","canceled","superseded","completed","done"].includes(String(custom?.status||""));
+        if(!Number.isFinite(chatAgeMs)||chatAgeMs<0||chatAgeMs>72*60*60*1000||terminalOrder)return json({error:"Чат заказа закрыт: прошло более трёх дней после оплаты или оформления либо заказ завершён."},410,origin);
         const linkedBundle=product?await env.DB.prepare("SELECT id,bundle_json,owner_confirmed_at FROM gift_bundles WHERE order_id=? AND telegram_id=? AND status='ordered'").bind(orderId,telegramId).first():null;
         if(linkedBundle?.owner_confirmed_at)return json({error:"Владелец уже подтвердил заказ и выставил счёт. Изменения через ИИ больше недоступны."},409,origin);
         if(linkedBundle){
