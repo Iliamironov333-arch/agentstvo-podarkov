@@ -277,8 +277,9 @@ async function aiGroupReply(env,chatId,userId,text,replyToMessageId=null){
   if(last && (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000<Number(settings.answer_interval_seconds||5))return false;
   const payload={chat_id:chatId,text:String(text).slice(0,3500),allow_sending_without_reply:true};
   if(replyToMessageId)payload.reply_to_message_id=Number(replyToMessageId);
-  await aiTelegram(env,"sendMessage",payload);
-  await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?,?,?)").bind(String(chatId),String(userId||""),"assistant",String(text).slice(0,3500)).run();
+  const sent=await aiTelegram(env,"sendMessage",payload);
+  await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?,?,?)")
+    .bind(String(chatId),Number(sent?.message_id)||null,String(userId||""),"assistant",String(text).slice(0,3500)).run();
   return true;
 }
 function aiToneInstruction(tone){
@@ -682,11 +683,12 @@ async function handleAiTelegramUpdate(update, env) {
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
-    await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,telegram_id,role,content) VALUES(?,?, 'user', ?)")
-      .bind(chatId,String(user.id),text.slice(0,3500)).run();
-    if(settings.owner_suggestions && /(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение)/i.test(text)){
+    await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?, 'user', ?)")
+      .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500)).run();
+    const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
+    if(settings.owner_suggestions && suggestionPattern.test(text)){
       await aiNotifyOwner(env,"💡 Предложение участника по улучшению Агентства\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nСообщение: "+text.slice(0,900));
-      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"owner_suggestion",details:{message:text.slice(0,1000)}});
+      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"owner_suggestion",details:{message_id:Number(message.message_id)||null,message:text.slice(0,1000)}});
     }
     if(moderationActive && settings.complaints_enabled && /(хочу пожаловаться|жалуюсь на|жалоба на|пожаловаться на)/i.test(text)) {
       const match=text.match(/(?:пожаловаться на|жалоба на|жалуюсь на)\s+(.{2,100})/i);

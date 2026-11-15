@@ -1263,9 +1263,15 @@ export default {
         }
         if(path==="/api/admin/backup-status"&&method==="GET"){
           try{
-            const result=await cloudflareD1Api(env,"/time_travel/bookmark");
-            return json({ok:true,bookmark:result.bookmark||null,provider:"Cloudflare D1 Time Travel",automatic:true},200,origin);
-          }catch(error){return json({error:String(error.message||error).slice(0,500),configured:!!env.CLOUDFLARE_API_TOKEN},env.CLOUDFLARE_API_TOKEN?502:503,origin);}
+            // Use the D1 binding's native Time Travel bookmark API. This does not
+            // require a second Cloudflare API token stored inside the Worker.
+            const session=env.DB.withSession("first-primary");
+            await session.prepare("SELECT 1 AS ready").first();
+            const bookmark=session.getBookmark();
+            return json({ok:true,bookmark:bookmark||null,provider:"Cloudflare D1 Time Travel",automatic:true,time_travel_available:!!bookmark,checked_at:new Date().toISOString()},200,origin);
+          }catch(error){
+            return json({ok:false,error:String(error.message||error).slice(0,500),time_travel_available:false},503,origin);
+          }
         }
         if(path==="/api/admin/backup-export"&&method==="POST"){
           try{
