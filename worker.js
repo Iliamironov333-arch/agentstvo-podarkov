@@ -1934,7 +1934,7 @@ export default {
           const likeUsername = "%" + term.replace(/^@/, "") + "%";
           const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
           const rows = await env.DB.prepare(
-            "SELECT s.telegram_id,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id ORDER BY last_message_at DESC LIMIT ?"
+            "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           return json({ ok: true, conversations: rows.results || [] }, 200, origin);
         }
@@ -1942,13 +1942,17 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
-          const [controlsReady, senderTypeReady] = await Promise.all([
+          const conversationId = (url.searchParams.get("conversation_id") || "").trim().slice(0,80);
+          const [controlsReady, senderTypeReady, conversationColumnReady] = await Promise.all([
             tableExists(env, "support_conversation_controls"),
-            columnExists(env, "support_chat_messages", "sender_type")
+            columnExists(env, "support_chat_messages", "sender_type"),
+            columnExists(env, "support_chat_messages", "conversation_id")
           ]);
-          const messageQuery = senderTypeReady
-            ? env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId)
-            : env.DB.prepare("SELECT role,content,'ai' AS sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId);
+          const messageQuery = senderTypeReady && conversationColumnReady
+            ? (conversationId
+                ? env.DB.prepare("SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 200").bind(targetId,conversationId)
+                : env.DB.prepare("SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId))
+            : env.DB.prepare("SELECT role,content,'ai' AS sender_type,'standard' AS assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId);
           const controlQuery = controlsReady
             ? env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first()
             : Promise.resolve(null);
@@ -1969,7 +1973,8 @@ export default {
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
-            conversation_migration_pending: !controlsReady || !senderTypeReady,
+            conversation_id: conversationId || null,
+            conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
             messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
@@ -3027,13 +3032,8 @@ export default {
             "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at ASC"
           ).bind(telegramId, vip ? 1 : 0).all();
           const existing = conversationsResult.results || [];
-          const removeCount = Math.max(0, existing.length - chatLimit + 1);
-          if (removeCount > 0) {
-            const removals = existing.slice(0, removeCount).flatMap(item => [
-              env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(telegramId, item.id),
-              env.DB.prepare("DELETE FROM support_conversations WHERE telegram_id=? AND id=?").bind(telegramId, item.id)
-            ]);
-            await env.DB.batch(removals);
+          if (existing.length >= chatLimit) {
+            return json({ error: "Достигнут лимит диалогов (" + chatLimit + "). Старые переписки сохранены — продолжите один из существующих диалогов." }, 409, origin);
           }
           const conversationId = crypto.randomUUID();
           await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
