@@ -952,7 +952,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/products") return "catalog_view";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
   if (path.startsWith("/api/admin/support/")) {
-    if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes"].includes(path)) return "support_reply";
+    if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes","/api/admin/support/conversation-delete"].includes(path)) return "support_reply";
     return "support_view";
   }
   if (path.startsWith("/api/admin/campaign")) return "campaigns_manage";
@@ -1989,6 +1989,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           return json({ ok: true, conversations: rows.results || [] }, 200, origin);
         }
+        if (path === "/api/admin/support/conversation-delete" && method === "POST") {
+          const body = await readJson(request);
+          const targetId = typeof body.telegram_id === "string" ? body.telegram_id.trim().slice(0,64) : "";
+          const conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim().slice(0,80) : "";
+          if (!targetId || !conversationId) return json({ error: "Укажите покупателя и диалог." }, 400, origin);
+          const conversation = await env.DB.prepare("SELECT id FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId).first();
+          if (!conversation) return json({ error: "Диалог не найден или уже удалён." }, 404, origin);
+          await env.DB.batch([
+            env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(targetId,conversationId),
+            env.DB.prepare("DELETE FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId)
+          ]);
+          if (await tableExists(env,"admin_action_log")) await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)").bind(telegramId,targetId,"support_conversation_deleted",JSON.stringify({conversation_id:conversationId})).run();
+          return json({ok:true,deleted:true},200,origin);
+        }
         if (path === "/api/admin/support/conversation" && method === "GET") {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
@@ -2990,6 +3004,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
           let existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars,details_json FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
+          if(existing){let oldDetails={};try{oldDetails=JSON.parse(existing.details_json||"{}");}catch{}if(oldDetails.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем. Начните новый диалог."},410,origin);}
           if(existing?.status==="cancelled"){draftId=makeId();existing=null;}
           if(existing&&existing.status!=="collecting")return json({error:"Этот диалог уже передан владельцу. Продолжите переписку в чате заказа."},409,origin);
           let previous={};try{previous=JSON.parse(existing?.details_json||"{}");}catch{}
@@ -3040,17 +3055,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
-        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        if(!draft)return json({error:"Диалог не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.chat_deleted===true||draft.status==="cancelled")return json({error:"Этот диалог закрыт владельцем и больше недоступен."},410,origin);
+        if(!["collecting","review","approved","paid"].includes(draft.status))return json({error:"Диалог больше недоступен."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем. Продолжить его нельзя."},410,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];

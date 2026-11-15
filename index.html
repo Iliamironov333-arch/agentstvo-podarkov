@@ -1571,8 +1571,8 @@ html body>#seasonDecorations .festive-firework{
    <div id="adminAnalyticsDaily" class="admin-detail-line"></div>
   </div>
   <div class="panel" id="adminSupportPanel">
-   <div class="sectionhead"><h3>🤖 ИИ помощник и CRM</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
-   <p class="muted">История переписки с ИИ и обращения покупателей. Здесь можно отслеживать диалоги и менять статус заявок.</p>
+   <div class="sectionhead"><h3>💬 Переписки и обращения покупателей</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
+   <p class="muted">Общий раздел переписки: обращения покупателей, обычный ИИ-помощник и поддержка. Заказы и диалоги мастерской отображаются ниже в этом же центре.</p>
    <h4>Диалоги с помощником</h4>
    <div class="admin-search"><input id="adminSupportSearch" type="search" maxlength="64" placeholder="Имя, username или Telegram ID"><button class="secondary" type="button" onclick="loadAdminSupport()">Найти</button></div>
    <p id="adminConversationsStatus" class="notice" aria-live="polite">Диалоги загружаются…</p><div id="adminConversationsList"></div>
@@ -1726,7 +1726,7 @@ html body>#seasonDecorations .festive-firework{
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
  <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
- <div class="panel hidden" id="orderChatPanel"><div class="sectionhead"><h3 id="orderChatTitle">💬 Чат заказа</h3><button class="secondary" type="button" onclick="refreshOrderChat()">↻ Обновить</button></div><div id="orderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:45vh;overflow:auto;padding:4px 0 12px"></div><textarea id="orderChatInput" rows="3" maxlength="2000" placeholder="Напишите ИИ-консультанту по этому заказу…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="orderChatSend" type="button" onclick="sendOrderChatMessage()">Отправить</button><p class="notice" id="orderChatStatus">ИИ помогает обсудить изменения. Любое изменение заказа сначала проверяет владелец.</p></div>
+ 
 </section>
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 <section id="profileView" class="hidden">
@@ -1740,7 +1740,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 ИИ помощник отвечает на вопросы и помогает с заказами; при необходимости обращение можно передать владельцу. ✨ При активной VIP-подписке расширенный режим включается автоматически. Базовый режим остаётся доступным всем.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
- <div class="sectionhead"><h2>🤖 ИИ помощник</h2><span id="supportChatCounter">0 / 3 диалога</span></div>
+ <div class="sectionhead"><h2 id="supportMainHeading">🤖 ИИ помощник</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
  <div class="panel">
   <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
   <p class="muted">🎟️ Для активации подарочного сертификата напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
@@ -1756,7 +1756,7 @@ html body>#seasonDecorations .festive-firework{
   </div>
  </div>
  <div class="panel" id="supportMainChatPanel">
-  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><div style="display:flex;align-items:center;gap:7px"><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span><button class="secondary hidden" id="supportNewCraftOrderButton" type="button" onclick="resetCraftConversation()">＋ Новый заказ</button></div></div>
+  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
   <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
   <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
@@ -1885,7 +1885,7 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','📦 Управление','Пользователи и поддержка'],['ai','🤖 ИИ-бот','Модерация, жалобы и журнал'],['aiorders','🎁 ИИ-заказы','Заказы из Telegram-группы'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','💬 Единый центр','Все переписки, обращения и ИИ-заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
@@ -1900,6 +1900,7 @@ function initAdminCategories(){
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
   else if(id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
+  else if(id==='adminSupportPanel')key='aiorders';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
@@ -1966,7 +1967,7 @@ function initAdminCategories(){
  <div class="sectionhead"><h4>Вопросы владельцу</h4></div><div id="aiQuestionsList" class="notice">Загрузка вопросов…</div>
  <div class="sectionhead"><h4>Журнал модерации</h4></div><div id="aiLogsList" class="notice">Загрузка журнала…</div>`;
  sections.ai.appendChild(aiPanel);
- const ordersPanel=document.createElement('div');ordersPanel.id='adminAiOrdersPanel';ordersPanel.innerHTML='<div class="panel" id="aiOrderChatGuide"><h3>📖 Инструкция: чаты и управление ИИ-заказами</h3><p class="muted">Каждая карточка — отдельный заказ и отдельная переписка. Сообщения разных заказов одного покупателя не смешиваются.</p><ol class="muted"><li><b>Открыть чат заказа</b> — раскройте переписку внутри нужной карточки, чтобы увидеть сообщения именно по этому заказу.</li><li><b>Автоответы ИИ</b> — переключатель в карточке включает или выключает ИИ только для этого заказа. При выключении покупатель по-прежнему может писать: сообщения сохраняются, а владелец отвечает вручную.</li><li><b>Ответ владельца</b> — введите текст в поле под перепиской и нажмите кнопку отправки. Ответ добавляется в историю этого заказа и отправляется покупателю.</li><li><b>Пожелания и цена</b> — редактируйте описание, название и цену в карточке. Цена и подтверждение остаются за владельцем.</li><li><b>Подтвердить и отправить счёт</b> — используйте только после проверки пожеланий и окончательной цены. Счёт отправляется покупателю в Telegram.</li><li><b>Отклонить заказ</b> — отменяет заявку; не используйте для обычного отключения ИИ.</li></ol><p class="notice">Незавершённые заявки раскрыты по умолчанию. Оплаченные и отменённые находятся в сворачиваемых группах. Для ручной переписки выключение ИИ не требуется — владелец может ответить и при включённом ИИ.</p></div><p id="aiOrdersStatus" class="notice" aria-live="polite">Загрузка ИИ-заказов…</p><details class="admin-detail-line" id="aiMessagesDisclosure"><summary style="cursor:pointer;font-weight:700;padding:10px 0">💬 Сообщения и уведомления владельца · хранение 7 дней</summary><div class="sectionhead"><span class="muted">Открывайте, чтобы просмотреть сообщения. Старые записи удаляются автоматически через неделю.</span><button class="secondary" type="button" onclick="loadAiOrders()">↻ Обновить</button></div><div id="aiOwnerNotifications" class="notice">Загрузка сообщений…</div><button class="secondary" id="aiDeleteAllMessages" type="button" style="margin-top:8px">Удалить все сообщения</button></details>';const allOrdersPanel=root.querySelector('#adminOrdersList')?.closest('.panel');if(allOrdersPanel){const heading=allOrdersPanel.querySelector('h3');if(heading)heading.textContent='📦 Все заказы';const aiStatus=ordersPanel.querySelector('#aiOrdersStatus');const adminStatus=allOrdersPanel.querySelector('#adminOrdersStatus');if(aiStatus)allOrdersPanel.insertBefore(aiStatus,adminStatus?.nextSibling||allOrdersPanel.querySelector('#adminOrdersList'));const messagesDisclosure=ordersPanel.querySelector('#aiMessagesDisclosure');if(messagesDisclosure)sections.aiorders.appendChild(messagesDisclosure);sections.aiorders.appendChild(allOrdersPanel);}
+ const ordersPanel=document.createElement('div');ordersPanel.id='adminAiOrdersPanel';ordersPanel.innerHTML='<div class="panel" id="aiOrderChatGuide"><h3>📖 Единый центр общения и заказов</h3><p class="muted">Все каналы общения собраны в одном разделе панели владельца. Контекст заказа, покупателя или группы сохраняется в карточке обращения, чтобы сообщения не теряли привязку.</p><ol class="muted"><li><b>Открыть чат заказа</b> — раскройте переписку внутри нужной карточки, чтобы увидеть сообщения именно по этому заказу.</li><li><b>Автоответы ИИ</b> — переключатель в карточке включает или выключает ИИ только для этого заказа. При выключении покупатель по-прежнему может писать: сообщения сохраняются, а владелец отвечает вручную.</li><li><b>Ответ владельца</b> — введите текст в поле под перепиской и нажмите кнопку отправки. Ответ добавляется в историю этого заказа и отправляется покупателю.</li><li><b>Пожелания и цена</b> — редактируйте описание, название и цену в карточке. Цена и подтверждение остаются за владельцем.</li><li><b>Подтвердить и отправить счёт</b> — используйте только после проверки пожеланий и окончательной цены. Счёт отправляется покупателю в Telegram.</li><li><b>Отклонить заказ</b> — отменяет заявку; не используйте для обычного отключения ИИ.</li></ol><p class="notice">Незавершённые заявки раскрыты по умолчанию. Оплаченные и отменённые находятся в сворачиваемых группах. Для ручной переписки выключение ИИ не требуется — владелец может ответить и при включённом ИИ.</p></div><p id="aiOrdersStatus" class="notice" aria-live="polite">Загрузка ИИ-заказов…</p><details class="admin-detail-line" id="aiMessagesDisclosure"><summary style="cursor:pointer;font-weight:700;padding:10px 0">💬 Сообщения и уведомления владельца · хранение 7 дней</summary><div class="sectionhead"><span class="muted">Открывайте, чтобы просмотреть сообщения. Старые записи удаляются автоматически через неделю.</span><button class="secondary" type="button" onclick="loadAiOrders()">↻ Обновить</button></div><div id="aiOwnerNotifications" class="notice">Загрузка сообщений…</div><button class="secondary" id="aiDeleteAllMessages" type="button" style="margin-top:8px">Удалить все сообщения</button></details>';const allOrdersPanel=root.querySelector('#adminOrdersList')?.closest('.panel');if(allOrdersPanel){const heading=allOrdersPanel.querySelector('h3');if(heading)heading.textContent='📦 Все заказы';const aiStatus=ordersPanel.querySelector('#aiOrdersStatus');const adminStatus=allOrdersPanel.querySelector('#adminOrdersStatus');if(aiStatus)allOrdersPanel.insertBefore(aiStatus,adminStatus?.nextSibling||allOrdersPanel.querySelector('#adminOrdersList'));const messagesDisclosure=ordersPanel.querySelector('#aiMessagesDisclosure');if(messagesDisclosure)sections.aiorders.appendChild(messagesDisclosure);sections.aiorders.appendChild(allOrdersPanel);}
  const reportsPanel=document.createElement('div');reportsPanel.className='panel';reportsPanel.id='adminAiReportsPanel';reportsPanel.innerHTML='<h3>📊 Еженедельные отчёты</h3><p class="muted">Отчёт отправляется каждую субботу в 08:00 по Екатеринбургу и сохраняется здесь.</p><div id="aiReportsStatus" class="notice">Загрузка отчётов…</div><div id="aiReportsList"></div>';sections.reports.appendChild(reportsPanel);
  if(returnButton)root.appendChild(returnButton);
  root.dataset.categoriesReady='1';showAdminCategory('operations');applyAdminPermissionVisibility();
@@ -2000,7 +2001,7 @@ function showView(id) {
   if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
   loadMe();
  }
- if (id === 'supportView') { if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
+ if (id === 'supportView') { if(activeOrderChatId)refreshOrderChat(); else if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
  
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
@@ -2790,7 +2791,8 @@ async function loadAdminSupport() {
    const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
    info.append(name,username,chatTitle,meta,activity,preview);
    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть диалог';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-   row.append(info,button);root.append(row);
+   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Старый диалог открыть больше нельзя.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
+   row.append(info,button,removeChat);root.append(row);
   });
   await loadAdminSupportTickets();
   await loadAdminAnalytics();
@@ -4024,22 +4026,19 @@ async function loadSupportHistory(conversationId, actions = null) {
   renderSupportConversations();
   updateSupportAssistantUi();
   renderSupportMessages(data.messages || [], supportPendingActions);
-  if(!craftInitialRestoreDone){
-   craftInitialRestoreDone=true;
-   let savedCraft='';try{savedCraft=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
-   if(savedCraft)await openCraftInAssistant();
-  }
+  // При запуске всегда открываем обычный чат помощника.
+  // Черновик индивидуального заказа не должен подменять главный экран.
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
 async function openSupportConversation(id) {
- craftModeActive=false;
+ activeOrderChatId='';craftModeActive=false;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
  await loadSupportHistory(id);
 }
 
 async function createSupportConversation() {
- craftModeActive=false;
+ activeOrderChatId='';craftModeActive=false;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
  const button = document.getElementById('supportNewChatButton');
  if (button) button.disabled = true;
@@ -4065,7 +4064,7 @@ function isCraftOrderIntent(message){
  return /(?:индивидуальн\w*\s+(?:авторск\w*\s+)?работ\w*|авторск\w*\s+(?:работ\w*|подар\w*|издел\w*)|(?:заказать|оформить)\s+(?:мне\s+)?(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ)|(?:сделать|создать|изготовить)\s+(?:мне\s+)?(?:на\s+заказ|индивидуальн\w*|авторск\w*)|хочу\s+(?:заказать|создать|оформить)\s+(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ|на\s+заказ))/i.test(text);
 }
 async function openCraftInAssistant(){
- craftModeActive=true;
+ activeOrderChatId='';craftModeActive=true;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.remove('hidden');
  const input=document.getElementById('supportMessage');if(input)input.placeholder='Напиши сообщение ИИ-помощнику…';
  const send=document.getElementById('supportSendBtn');if(send)send.textContent=craftConversationReady?'Отправить сообщение':'Отправить';
@@ -4082,12 +4081,8 @@ async function sendSupport() {
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
+ if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
- if(isCraftOrderIntent(message)){
-  await openCraftInAssistant();
-  await sendCraftMessage();
-  return;
- }
  button.disabled = true; result.textContent = 'ИИ помощник готовит ответ…';
  try {
   if (!activeSupportConversationId) {
@@ -4115,8 +4110,8 @@ function renderCraftChat(){
  const root=document.getElementById('supportChatLog');if(!root||!craftModeActive)return;root.replaceChildren();
  craftMessages.forEach(m=>{const bubble=document.createElement('div');bubble.style.cssText='max-width:94%;align-self:'+(m.role==='user'?'flex-end':'flex-start')+';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:'+(m.role==='user'?'var(--panel2)':'var(--panel)')+';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5';const label=document.createElement('b');label.textContent=m.role==='user'?'Вы':m.role==='owner'?(m.via==='ai'?'ИИ-помощник':'Владелец Агентства'):m.role==='system'?'Система':'ИИ-помощник';label.style.display='block';label.style.marginBottom='4px';const body=document.createElement('span');body.textContent=m.content;bubble.append(label,body);root.append(bubble);});
  root.scrollTop=root.scrollHeight;
- const count=document.getElementById('craftQuestionCount');if(count)count.textContent=craftQuestionCount+' / 16 вопросов';
- const label=document.getElementById('supportActiveAssistantLabel');if(label&&craftModeActive)label.textContent='🎨 Заказ · '+craftQuestionCount+'/16';
+ // Счётчик вопросов не показывается в интерфейсе.
+
 }
 function startCraftPolling(){
  if(craftPollTimer)clearInterval(craftPollTimer);
@@ -4134,7 +4129,7 @@ async function pollCraftMessages(){
    craftConversationReady=true;
     if(craftModeActive){const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение по этому заказу…';const button=document.getElementById('supportSendBtn');if(button)button.textContent='Отправить сообщение';}
   }
- }catch(e){console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
 }
 async function loadCraftConversation(){
  if(!craftDraftId){try{craftDraftId=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}}
@@ -4154,7 +4149,7 @@ async function loadCraftConversation(){
    }
    startCraftPolling();
   }
- }catch(e){console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
 }
 async function restoreCraftConversation(){
  let saved='';try{saved=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
@@ -4169,12 +4164,14 @@ async function restoreCraftConversation(){
   if(craftConversationReady){if(status)status.textContent='Предложение сохранено. Статус: '+d.status+'. Можно продолжить переписку по этому заказу.';if(input)input.placeholder='Напишите сообщение по этому заказу…';if(button)button.textContent='Отправить сообщение';}
   else{if(status)status.textContent=craftAiEnabled?'Незавершённый заказ восстановлен. Продолжайте диалог. 💬':'Автоответы ИИ выключены. Вы можете писать — владелец ответит вручную. 💬';}
   if(craftModeActive)renderCraftChat();startCraftPolling();
- }catch(error){resetCraftConversation();}
+ }catch(error){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent=error.status===410?'Этот диалог закрыт владельцем. Начните новый.':'Сохранённый диалог больше недоступен. Можно начать новый.';}
 }
-function resetCraftConversation(){
+function resetCraftConversation(persistDraftId=true){
  if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
- craftDraftId=newCraftId();craftOwnerMessages=[];try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
- craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
+ craftDraftId=persistDraftId?newCraftId():'';
+ craftOwnerMessages=[];
+ try{if(persistDraftId)localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);else localStorage.removeItem('agentstvo-craft-draft-id');}catch{}
+ craftMessages=[];
  craftQuestionCount=0;craftConversationReady=false;craftAiEnabled=true;
   const input=document.getElementById('supportMessage');if(input)input.value='';
  const button=document.getElementById('supportSendBtn');if(button){button.disabled=false;button.textContent='Отправить ответ';}
@@ -4297,38 +4294,61 @@ async function checkout() {
 async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
 async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 let activeOrderChatId='',activeOrderChatType='product';
+function setUnifiedChatContext(isOrder){
+ const list=document.getElementById('supportConversationPanel');
+ const back=document.getElementById('supportBackToInboxButton');
+ const heading=document.getElementById('supportMainHeading');
+ const refresh=document.getElementById('supportRefreshButton');
+ const input=document.getElementById('supportMessage');
+ const send=document.getElementById('supportSendBtn');
+ if(list)list.classList.toggle('hidden',isOrder);
+ if(back)back.classList.toggle('hidden',!isOrder);
+ if(refresh)refresh.hidden=!isOrder;
+ if(heading)heading.textContent=isOrder?'💬 Переписка по заказу № '+activeOrderChatId:'🤖 ИИ помощник';
+ if(input){input.placeholder=isOrder?'Напишите сообщение по этому заказу…':'Напиши сообщение ИИ помощнику…';input.disabled=false;}
+ if(send){send.textContent='Отправить';send.disabled=false;}
+}
 async function openOrderChat(id,type,title){
  activeOrderChatId=String(id);activeOrderChatType=type==='custom'?'custom':'product';
- const panel=document.getElementById('orderChatPanel');if(panel)panel.classList.remove('hidden');
- const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;
- const input=document.getElementById('orderChatInput');if(input)input.value='';
- await refreshOrderChat();panel?.scrollIntoView({behavior:'smooth',block:'start'});
+ craftModeActive=false;
+ const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
+ showView('supportView');
+ setUnifiedChatContext(true);
+ const input=document.getElementById('supportMessage');if(input)input.value='';
+ await refreshOrderChat();
+ document.getElementById('supportMainChatPanel')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function exitOrderChat(){
+ activeOrderChatId='';
+ setUnifiedChatContext(false);
+ loadSupportHistory(activeSupportConversationId);
 }
 async function refreshOrderChat(){
  if(!activeOrderChatId)return;
- const log=document.getElementById('orderChatLog'),status=document.getElementById('orderChatStatus');
+ const log=document.getElementById('supportChatLog'),status=document.getElementById('supportResult');
+ const input=document.getElementById('supportMessage'),send=document.getElementById('supportSendBtn');
  if(status)status.textContent='Загружаем переписку…';
  try{
   const d=await apiFetch('/api/order-chat?order_id='+encodeURIComponent(activeOrderChatId));
-  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;return refreshOrderChat();}
+  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);setUnifiedChatContext(true);return refreshOrderChat();}
   if(log){log.replaceChildren();(d.messages||[]).forEach(m=>{
    const row=document.createElement('div');row.className='admin-detail-line';
-   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-консультант';
+   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-помощник';
    const body=document.createElement('div');body.textContent=m.content||'';body.style.whiteSpace='pre-wrap';body.style.marginTop='4px';
    const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
    row.append(who,body,date);log.append(row);
   });}
-  const input=document.getElementById('orderChatInput'),send=document.getElementById('orderChatSend');
-  if(input){input.disabled=!d.chat_available;input.placeholder=d.chat_available?'Напишите ИИ-консультанту по этому заказу…':'Первые 3 дня для ИИ-консультанта по заказу завершились.';}
-  if(send)send.disabled=!d.chat_available;
-  if(status)status.textContent=!d.chat_available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'ИИ помогает обсудить изменения. Все изменения применяются только после проверки владельцем.';
- }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить чат заказа.';}
+  const available=!!d.chat_available;
+  if(input){input.disabled=!available;input.placeholder=available?'Напишите сообщение по этому заказу…':'Срок переписки по заказу завершён. История доступна для просмотра.';}
+  if(send)send.disabled=!available;
+  if(status)status.textContent=!available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'Здесь можно обсудить заказ. Любые изменения применяются только после проверки владельцем.';
+ }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить переписку.';}
 }
 async function sendOrderChatMessage(){
- const input=document.getElementById('orderChatInput'),button=document.getElementById('orderChatSend'),status=document.getElementById('orderChatStatus'),message=input?.value.trim()||'';
+ const input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn'),status=document.getElementById('supportResult'),message=input?.value.trim()||'';
  if(!activeOrderChatId||!message)return;
- button.disabled=true;button.textContent='ИИ отвечает…';
- try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-консультанта получен.';}
+ button.disabled=true;button.textContent='Отправляем…';
+ try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-помощника получен.';}
  catch(e){if(status)status.textContent=e.message||'Не удалось отправить сообщение.';}
  finally{button.disabled=false;button.textContent='Отправить';}
 }
@@ -4599,6 +4619,13 @@ async function loadAiOrders(){
     card.append(aiAdminNode('p',(o.payment_status==='paid'?'Оплачен':'Счёт отправлен')+' · заказ Mini App: '+(o.order_id||'—')+(o.paid_at?' · оплата: '+formatDate(o.paid_at):''),'muted'));
     const saveChanges=aiAdminNode('button','Сохранить изменения пожеланий','secondary');saveChanges.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update_after_approval',id:o.id,subject:subject.value,summary:summary.value})});toast('Пожелания к заказу обновлены.');loadAiOrders();}catch(e){toast(e.message||'Не удалось изменить заказ.');}});card.append(saveChanges);
    }else if(o.order_id){card.append(aiAdminNode('p','Связанный заказ Mini App: '+o.order_id,'muted'));}
+   if(details.chat_deleted!==true){
+    const deleteChat=aiAdminNode('button','Удалить чат','secondary');
+    deleteChat.addEventListener('click',async()=>{if(!confirm('Закрыть и удалить переписку покупателя? История чата исчезнет, но заказ, его статус и оплата останутся без изменений. Покупатель не сможет продолжить именно этот диалог.'))return;deleteChat.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'delete_chat',id:o.id})});toast('Чат закрыт и удалён. Данные заказа сохранены.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось удалить чат.');deleteChat.disabled=false;}});
+    card.append(deleteChat);
+   }else{
+    card.append(aiAdminNode('p','🔒 Чат удалён владельцем. История очищена, продолжение этого диалога запрещено.','notice'));
+   }
    appendAdminOrderCard(category,o,card);
   });
   ['bundle','assistant','group'].forEach(finishAdminOrderCategory);

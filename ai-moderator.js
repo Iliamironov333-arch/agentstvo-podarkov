@@ -334,6 +334,10 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
         linked=candidate;linkedDetails=parsed;break;
       }
     }
+    if(linked&&linkedDetails.chat_deleted===true){
+      // Владелец закрыл эту переписку: старый тред больше не обслуживается.
+      return true;
+    }
     if(!linked){
       // Не прикрепляем ответ на чужое или постороннее сообщение к активному заказу.
       return false;
@@ -1072,6 +1076,18 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ordered'").bind(JSON.stringify(data).slice(0,20000),bundle.id).run();
       await aiLog(env,{actor:telegramId,type:"gift_bundle_ai_toggled",details:{order_id:orderId,enabled}});
       return aiJson({ok:true,ai_enabled:enabled});
+    }
+    if(body.action==="delete_chat") {
+      const id=String(body.id||"").slice(0,80);
+      if(!id)return aiJson({error:"Не указан диалог."},400);
+      const draft=await env.DB.prepare("SELECT id,telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('collecting','review','approved','paid','cancelled')").bind(id).first();
+      if(!draft)return aiJson({error:"Диалог не найден или уже удалён."},404);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      if(details.chat_deleted===true)return aiJson({ok:true,deleted:true});
+      details.chat_deleted=true;details.ai_enabled=false;details.conversation=[];details.owner_messages=[];details.chat_deleted_at=new Date().toISOString();
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status=CASE WHEN status='collecting' THEN 'cancelled' ELSE status END,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
+      await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_chat_deleted",details:{draft_id:id,status:draft.status}});
+      return aiJson({ok:true,deleted:true});
     }
     if(body.action==="set_ai") {
       const id=String(body.id||"").slice(0,80),enabled=body.enabled===true;
