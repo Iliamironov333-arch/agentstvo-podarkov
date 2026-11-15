@@ -4134,7 +4134,7 @@ async function pollCraftMessages(){
    craftConversationReady=true;
     if(craftModeActive){const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение по этому заказу…';const button=document.getElementById('supportSendBtn');if(button)button.textContent='Отправить сообщение';}
   }
- }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
 }
 async function loadCraftConversation(){
  if(!craftDraftId){try{craftDraftId=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}}
@@ -4154,7 +4154,7 @@ async function loadCraftConversation(){
    }
    startCraftPolling();
   }
- }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
 }
 async function restoreCraftConversation(){
  let saved='';try{saved=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
@@ -4169,11 +4169,13 @@ async function restoreCraftConversation(){
   if(craftConversationReady){if(status)status.textContent='Предложение сохранено. Статус: '+d.status+'. Можно продолжить переписку по этому заказу.';if(input)input.placeholder='Напишите сообщение по этому заказу…';if(button)button.textContent='Отправить сообщение';}
   else{if(status)status.textContent=craftAiEnabled?'Незавершённый заказ восстановлен. Продолжайте диалог. 💬':'Автоответы ИИ выключены. Вы можете писать — владелец ответит вручную. 💬';}
   if(craftModeActive)renderCraftChat();startCraftPolling();
- }catch(error){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent=error.status===410?'Этот диалог закрыт владельцем. Начните новый.':'Сохранённый диалог больше недоступен. Можно начать новый.';}
+ }catch(error){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation(false);const status=document.getElementById('supportResult');if(status)status.textContent=error.status===410?'Этот диалог закрыт владельцем. Начните новый.':'Сохранённый диалог больше недоступен. Можно начать новый.';}
 }
-function resetCraftConversation(){
+function resetCraftConversation(persistDraftId=true){
  if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
- craftDraftId=newCraftId();craftOwnerMessages=[];try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
+ craftDraftId=persistDraftId?newCraftId():'';
+ craftOwnerMessages=[];
+ try{if(persistDraftId)localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);else localStorage.removeItem('agentstvo-craft-draft-id');}catch{}
  craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
  craftQuestionCount=0;craftConversationReady=false;craftAiEnabled=true;
   const input=document.getElementById('supportMessage');if(input)input.value='';
