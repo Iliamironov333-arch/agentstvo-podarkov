@@ -242,6 +242,22 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
   if (!output.trim()) throw new Error("Empty OpenAI response");
   return output.trim().slice(0,3500);
 }
+async function aiEstimateGroupOrderPrice(env,summary){
+  const instructions=[
+    "Ты оцениваешь предварительную стоимость индивидуальной handmade-работы для Агентства подарков.",
+    "Оцени трудоёмкость, сложность, количество и объём персонализации по описанию заказа.",
+    "Верни только JSON: {\"price_stars\": целое число от 1 до 100000, \"note\": \"короткое объяснение до 160 символов\"}.",
+    "Это только предварительная оценка для владельца. Не утверждай, что цена окончательная, и не обещай сроки.",
+    "Не придумывай дополнительные материалы или услуги, которых нет в описании."
+  ].join("\n");
+  const raw=await aiOpenAi(env,instructions,[{role:"user",content:String(summary||"").slice(0,3000)}],180);
+  const match=raw.match(/\{[\s\S]*\}/);
+  if(!match)throw new Error("ИИ не вернул структурированную оценку цены.");
+  const parsed=JSON.parse(match[0]);
+  const price=Math.round(Number(parsed.price_stars));
+  if(!Number.isSafeInteger(price)||price<1||price>100000)throw new Error("ИИ вернул недопустимую оценку цены.");
+  return {price_stars:price,note:String(parsed.note||"Предварительная оценка ИИ.").slice(0,160)};
+}
 async function aiInspectText(env,text,settings){
   const categories=[];
   if(settings.advertising)categories.push("реклама сторонних услуг и каналов");
@@ -410,8 +426,19 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
       const subject=String(details.order_fields.item||"Индивидуальный заказ").slice(0,120);
       details.summary="Изделие: "+details.order_fields.item+". Пожелания: "+details.order_fields.details+". Количество: "+details.order_fields.quantity+".";
       details.step="submitted";
-      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),active.id).run();
-      await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и укажите итоговую цену. До Вашего подтверждения счёт не отправляется.");
+      let estimatedStars=0;
+      try{
+        const estimate=await aiEstimateGroupOrderPrice(env,details.summary);
+        estimatedStars=estimate.price_stars;
+        details.estimate_note=estimate.note;
+      }catch(error){
+        details.estimate_note="ИИ-оценка временно недоступна; цену нужно указать вручную.";
+        await aiLog(env,{chat_id:chatId,actor:"ai_order_estimator",target:user.id,type:"group_order_estimate_failed",details:{draft_id:active.id,error:String(error).slice(0,180)}});
+      }
+      details.estimated_stars=estimatedStars;
+      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,active.id).run();
+      const estimateNotice=estimatedStars?"\nПредварительная оценка ИИ: "+estimatedStars+" ⭐ (можно изменить).":"\nИИ не смог рассчитать предварительную цену — укажите её вручную.";
+      await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+estimateNotice+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и подтвердите итоговую цену. До Вашего подтверждения счёт не отправляется.");
       await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
     }
