@@ -3096,7 +3096,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT d.telegram_id,d.details_json,d.status,d.subject,d.estimated_stars,d.approved_stars,d.updated_at,d.last_activity_at,o.paid_at FROM ai_order_drafts d LEFT JOIN orders o ON o.id=d.order_id WHERE d.id=? AND d.telegram_id=?").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог удалён. Продолжить его нельзя."},410,origin);
