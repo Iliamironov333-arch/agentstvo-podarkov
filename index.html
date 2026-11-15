@@ -2365,13 +2365,14 @@ async function loadAdminUsers() {
   const users=Array.isArray(data.users)?data.users:[];
   status.textContent=users.length?'Найдено: '+users.length:'Пользователи не найдены.';
   users.forEach(u=>{
-   const row=document.createElement('div');row.className='admin-user-row';
-   const info=document.createElement('div');
-   const name=document.createElement('strong');name.textContent=u.first_name||u.username||'Пользователь';
-   const meta=document.createElement('small');meta.textContent='ID: '+u.telegram_id+' · Баланс: '+Number(u.balance_stars||0).toLocaleString('ru-RU');
-   info.append(name,meta);
-   const btn=document.createElement('button');btn.className='secondary';btn.type='button';btn.textContent='Профиль';btn.addEventListener('click',()=>openAdminUser(u.telegram_id));
-   row.append(info,btn);root.append(row);
+   const folder=document.createElement('details');folder.className='admin-user-profile-folder';
+   const summary=document.createElement('summary');summary.style.cssText='cursor:pointer;padding:12px 10px;font-weight:700';
+   const name=document.createElement('span');name.textContent=u.first_name||u.username||'Пользователь';
+   const meta=document.createElement('small');meta.style.cssText='display:block;font-weight:400;opacity:.75;margin-top:3px';meta.textContent='ID: '+u.telegram_id+' · Баланс: '+Number(u.balance_stars||0).toLocaleString('ru-RU');
+   summary.append(name,meta);folder.append(summary);
+   const content=document.createElement('div');content.className='admin-user-row';
+   const btn=document.createElement('button');btn.className='secondary';btn.type='button';btn.textContent='Открыть профиль';btn.addEventListener('click',()=>openAdminUser(u.telegram_id));
+   content.append(btn);folder.append(content);root.append(folder);
   });
  }catch(e){status.textContent=e.message||'Не удалось загрузить пользователей.';}
 }
@@ -2394,7 +2395,7 @@ async function openAdminUser(telegramId) {
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
-  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть единую CRM-карточку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
   const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
   const historySummary=document.createElement('summary');historySummary.textContent='📚 История покупок и действий · журнал 90 дней';historySummary.style.cssText='cursor:pointer;font-weight:800;padding:10px 0';
   const historyContent=document.createElement('div');historyContent.style.cssText='padding:4px 0 10px';
@@ -2790,8 +2791,13 @@ async function loadAdminSupport() {
    const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
    const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
    info.append(name,username,chatTitle,meta,activity,preview);
-   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть диалог';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Старый диалог открыть больше нельзя.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
+   if(item.deleted){
+    const deleted= document.createElement('p');deleted.className='notice';deleted.textContent='🔒 Чат удалён владельцем · '+(item.deleted_at||'');info.append(deleted);
+    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Посмотреть статус';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
+    row.append(info,button);root.append(row);return;
+   }
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
+   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
    row.append(info,button,removeChat);root.append(row);
   });
   await loadAdminSupportTickets();
@@ -2806,18 +2812,12 @@ async function openAdminConversation(telegramId, conversationId) {
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
   const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
-  const activity=document.createElement('div');activity.className='admin-user-detail';
-  const profile=document.createElement('p');profile.className='notice';profile.textContent='Баланс: '+Number(data.user?.balance_stars||0).toLocaleString('ru-RU')+' баллов · Регистрация: '+(data.user?.created_at||'—')+' · Последнее обновление: '+(data.user?.updated_at||'—');activity.append(profile);
-  const ordersTitle=document.createElement('h4');ordersTitle.textContent='📦 История заказов';activity.append(ordersTitle);
-  if(!(data.orders||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Заказов пока нет.';activity.append(empty);}
-  (data.orders||[]).forEach(order=>{const line=document.createElement('div');line.className='admin-detail-line';const head=document.createElement('b');head.textContent=(order.order_type==='custom'?'Индивидуальный':'Каталог')+' · № '+order.id+' · '+Number(order.total_stars||0)+' ⭐';const body=document.createElement('div');body.textContent=(order.title||'Заказ')+' · '+(order.payment_status||order.status||'—')+' · '+(order.created_at||'');line.append(head,body);activity.append(line);});
-  const ticketsTitle=document.createElement('h4');ticketsTitle.textContent='💬 Обращения покупателя';activity.append(ticketsTitle);
-  if(!(data.tickets||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Обращений пока нет.';activity.append(empty);}
-  (data.tickets||[]).forEach(ticket=>{const line=document.createElement('div');line.className='admin-detail-line';const head=document.createElement('b');head.textContent='Обращение № '+ticket.id+' · '+ticket.status+' · '+(ticket.created_at||'');const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=ticket.message||'';line.append(head,body);activity.append(line);});
-  const balanceTitle=document.createElement('h4');balanceTitle.textContent='🪙 Последние операции с баллами';activity.append(balanceTitle);
-  if(!(data.balance_history||[]).length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Операций пока нет.';activity.append(empty);}
-  (data.balance_history||[]).forEach(tx=>{const line=document.createElement('div');line.className='admin-detail-line';line.textContent=(Number(tx.amount_stars)>0?'+':'')+tx.amount_stars+' баллов · '+(tx.operation_type||'операция')+' · '+(tx.description||'')+' · '+(tx.created_at||'');activity.append(line);});
-  box.append(activity);
+  if(data.deleted){
+   const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён владельцем. Переписка очищена, отправка сообщений и управление чатом недоступны.';
+   box.append(notice);
+   const closeDeleted=document.createElement('button');closeDeleted.type='button';closeDeleted.className='secondary';closeDeleted.textContent='Закрыть';closeDeleted.addEventListener('click',()=>box.classList.add('hidden'));box.append(closeDeleted);
+   return;
+  }
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
   const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
@@ -2835,14 +2835,6 @@ async function openAdminConversation(telegramId, conversationId) {
    const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
    item.append(head,body);box.append(item);
   });
-  const notesTitle=document.createElement('h4');notesTitle.textContent='🔒 Внутренние заметки владельца';box.append(notesTitle);
-  const notesRoot=document.createElement('div');notesRoot.className='admin-notes-list';box.append(notesRoot);
-  if(data.notes_migration_pending){const pending=document.createElement('p');pending.className='notice';pending.textContent='Для заметок требуется миграция 0009_support_internal_notes.sql.';notesRoot.append(pending);}
-  (data.notes||[]).forEach(note=>{const item=document.createElement('div');item.className='admin-detail-line';const head=document.createElement('b');head.textContent='Владелец · '+(note.created_at||'');const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=note.note||'';item.append(head,body);notesRoot.append(item);});
-  const noteInput=document.createElement('textarea');noteInput.rows=2;noteInput.maxLength=2000;noteInput.placeholder='Личная заметка по покупателю — её не увидит покупатель';noteInput.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
-  const saveNote=document.createElement('button');saveNote.type='button';saveNote.className='secondary';saveNote.textContent='Сохранить заметку';saveNote.disabled=!!data.notes_migration_pending;
-  saveNote.addEventListener('click',async()=>{const note=noteInput.value.trim();if(note.length<2){toast('Введите заметку хотя бы из двух символов.');return;}saveNote.disabled=true;try{await apiFetch('/api/admin/support/notes',{method:'POST',body:JSON.stringify({telegram_id:telegramId,note})});toast('Внутренняя заметка сохранена.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось сохранить заметку.');}finally{saveNote.disabled=false;}});
-  box.append(noteInput,saveNote);
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть переписку';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось загрузить историю.';}
 }
@@ -4669,8 +4661,12 @@ async function loadAiOrders(){
    const transcript=aiAdminNode('div',undefined,'muted');transcript.style.cssText='white-space:pre-wrap;max-height:280px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';
    transcript.textContent=(details.conversation||[]).map(m=>(m.role==='user'?'Покупатель':m.role==='owner'?(m.via==='ai'?'ИИ-помощник':'Владелец'):'ИИ-помощник')+': '+(m.content||'')).join('\n\n');
    if(transcript.textContent)card.append(transcript);
-   const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Напишите сообщение от имени ИИ-помощника покупателю…';card.append(reply);
-   const sendReply=aiAdminNode('button','Отправить сообщение от ИИ-помощника','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{const result=await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_order',id:o.id,reply:value})});reply.value='';toast(result.delivered?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{sendReply.disabled=false;}});card.append(sendReply);
+   if(details.chat_deleted!==true){
+    const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Напишите сообщение от имени ИИ-помощника покупателю…';card.append(reply);
+    const sendReply=aiAdminNode('button','Отправить сообщение от ИИ-помощника','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{const result=await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_order',id:o.id,reply:value})});reply.value='';toast(result.delivered?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{sendReply.disabled=false;}});card.append(sendReply);
+   }else{
+    card.append(aiAdminNode('p','🔒 Чат удалён владельцем. Переписка очищена. Поле ввода и отправка сообщений заблокированы.','notice'));
+   }
    if(o.status==='review'){
     const save=aiAdminNode('button','Сохранить изменения','primary');save.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update',id:o.id,subject:subject.value,summary:summary.value,approved_stars:Number(price.value)})});toast('Заказ обновлён.');loadAiOrders();}catch(e){toast(e.message);}});card.append(save);
     if(adminSession?.root_owner){const approve=aiAdminNode('button','Подтвердить и отправить счёт','secondary');approve.addEventListener('click',async()=>{if(!confirm('Подтвердить заказ и отправить покупателю счёт в Telegram?'))return;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'approve',id:o.id})});toast('Заказ подтверждён. Счёт отправлен покупателю в Telegram.');loadAiOrders();}catch(e){toast(e.message);}});card.append(approve);}
@@ -4683,8 +4679,6 @@ async function loadAiOrders(){
     const deleteChat=aiAdminNode('button','Удалить чат','secondary');
     deleteChat.addEventListener('click',async()=>{if(!confirm('Закрыть и удалить переписку покупателя? История чата исчезнет, но заказ, его статус и оплата останутся без изменений. Покупатель не сможет продолжить именно этот диалог.'))return;deleteChat.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'delete_chat',id:o.id})});toast('Чат закрыт и удалён. Данные заказа сохранены.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось удалить чат.');deleteChat.disabled=false;}});
     card.append(deleteChat);
-   }else{
-    card.append(aiAdminNode('p','🔒 Чат удалён владельцем. История очищена, продолжение этого диалога запрещено.','notice'));
    }
    appendAdminOrderCard(category,o,card);
   });
