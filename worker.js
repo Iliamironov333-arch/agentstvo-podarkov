@@ -3055,16 +3055,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       }
       if (path === "/api/craft/messages" && method === "GET") {
         const draftId=String(url.searchParams.get("draft_id")||"").slice(0,80);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
-        if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        if(!draft)return json({error:"Диалог не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
-        if(details.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем и больше недоступен."},410,origin);
+        if(details.chat_deleted===true||draft.status==="cancelled")return json({error:"Этот диалог закрыт владельцем и больше недоступен."},410,origin);
+        if(!["collecting","review","approved","paid"].includes(draft.status))return json({error:"Диалог больше недоступен."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем. Продолжить его нельзя."},410,origin);
