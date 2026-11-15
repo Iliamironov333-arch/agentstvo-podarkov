@@ -3286,8 +3286,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const activeCraftDraft = await env.DB.prepare(
           "SELECT id,subject,details_json,estimated_stars,status FROM ai_order_drafts WHERE telegram_id=? AND status='collecting' AND json_valid(details_json)=1 AND json_extract(details_json,'$.source')='miniapp_support_chat' AND json_extract(details_json,'$.support_conversation_id')=? AND last_activity_at>=datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1"
         ).bind(String(telegramId),conversationId).first();
-        const startsCustomWorkOrder = /(?:хочу|мне\\s+(?:нужно|надо)|давайте)\\s+(?:заказать|оформить)\\s+(?:(?:индивидуальн\\w*|авторск\\w*)\\s+)?(?:работ\\w*|поделк\\w*|издели\\w*|подар\\w*)|хочу\\s+(?:индивидуальн\\w*\\s+)?заказ/i.test(message)
-          && !/(?:не\\s+хочу|не\\s+надо|не\\s+нужно|не\\s+собираюсь)/i.test(message);
+        const startsCustomWorkOrder = /(?:хочу|мне\s+(?:нужно|надо)|давайте)\s+(?:заказать|оформить)\s+(?:(?:индивидуальн\w*|авторск\w*)\s+)?(?:работ\w*|поделк\w*|издели\w*|подар\w*)|хочу\s+(?:индивидуальн\w*\s+)?заказ/i.test(message)
+          && !/(?:не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(message);
         if (activeCraftDraft || startsCustomWorkOrder) {
           try {
             const draftId = activeCraftDraft?.id || makeId();
@@ -3300,7 +3300,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             const craftResult = await createCraftAnswer(env, aiMessages);
             draftConversation.push({ role: "assistant", content: String(craftResult.reply || "").slice(0,1200) });
             const subject = String(draftConversation.find(item => item.role === "user")?.content || "Индивидуальная работа")
-              .replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+              .replace(/\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
             draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
               ai_enabled: true, conversation: draftConversation.slice(-24), summary: String(craftResult.reply || "").slice(0,2000) };
             let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
@@ -3323,10 +3323,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               .bind(telegramId,conversationId,assistantType,reply).run();
             await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
             if (!activeCraftDraft) {
-              await notifyOwner(env,"🟢 НОВЫЙ ЧЕРНОВИК ИНДИВИДУАЛЬНОЙ РАБОТЫ ИЗ ЧАТА ПОМОЩНИКА\\nID: "+draftId+"\\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\\nДиалог Mini App: "+conversationId+"\\n\\nПокупатель явно попросил заказать индивидуальную работу. Черновик сохранён в Админ-панели → ИИ-заказы.");
+              await notifyOwner(env,"🟢 НОВЫЙ ЧЕРНОВИК ИНДИВИДУАЛЬНОЙ РАБОТЫ ИЗ ЧАТА ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\nДиалог Mini App: "+conversationId+"\n\nПокупатель явно попросил заказать индивидуальную работу. Черновик сохранён в Админ-панели → ИИ-заказы.");
             }
             if (craftResult.ready) {
-              await notifyOwner(env,"🎁 ИНДИВИДУАЛЬНЫЙ ЗАПРОС ГОТОВ К ПРОВЕРКЕ\\nID: "+draftId+"\\nКлиент: "+telegramId+"\\nПредварительная оценка: "+estimatedStars+" ⭐\\n\\nОткройте Админ-панель → ИИ-заказы и проверьте запрос перед подтверждением цены.");
+              await notifyOwner(env,"🎁 ИНДИВИДУАЛЬНЫЙ ЗАПРОС ГОТОВ К ПРОВЕРКЕ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nОткройте Админ-панель → ИИ-заказы и проверьте запрос перед подтверждением цены.");
             }
             const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
               .bind(telegramId,chatLimit).all();
