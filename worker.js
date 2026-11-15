@@ -494,7 +494,7 @@ function normalizeSupportNavigationText(value) {
 
 async function buildSupportNavigationActions(env, message) {
   const text = normalizeSupportNavigationText(message);
-  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|как посмотреть|где посмотреть|как проверить|как узнать|хочу посмотреть|хочу открыть|можно посмотреть|можно открыть|помоги открыть|мне нужен|мне нужна|дай.{0,20}(?:кнопк|ссылк)|покажите|кнопку)/i.test(text);
+  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|как посмотреть|где посмотреть|как проверить|как узнать|хочу посмотреть|хочу открыть|можно посмотреть|можно открыть|помоги открыть|мне нужен|мне нужна|мне нужно|дай.{0,20}(?:кнопк|ссылк)|покажите|кнопку|сертификат.{0,30}(?:активир|баланс)|(?:активир|баланс).{0,30}сертификат)/i.test(text);
   if (!asksToNavigate) return [];
 
   const actions = [];
@@ -518,7 +518,7 @@ async function buildSupportNavigationActions(env, message) {
 
   if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
   if (/(корзин|оформить заказ|перейти к оплате|доставк)/i.test(text)) add({ label: "🛒 Открыть корзину", view: "cartView" });
-  if (/(мои заказы|список заказов|истори[яю] заказов)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
+  if (/(мои заказы|список заказов|истори[яю] заказов|(?:мой|мои|моего).{0,12}заказ|статус.{0,20}заказ|заказ.{0,20}статус)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
   if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
   if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
   if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
