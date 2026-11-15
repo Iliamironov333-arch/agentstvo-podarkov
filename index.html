@@ -1756,7 +1756,7 @@ html body>#seasonDecorations .festive-firework{
   </div>
  </div>
  <div class="panel" id="supportMainChatPanel">
-  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><div style="display:flex;align-items:center;gap:7px"><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span><button class="secondary hidden" id="supportNewCraftOrderButton" type="button" onclick="resetCraftConversation()">＋ Новый заказ</button></div></div>
+  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
   <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
   <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
@@ -4083,11 +4083,6 @@ async function sendSupport() {
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
- if(isCraftOrderIntent(message)){
-  await openCraftInAssistant();
-  await sendCraftMessage();
-  return;
- }
  button.disabled = true; result.textContent = 'ИИ помощник готовит ответ…';
  try {
   if (!activeSupportConversationId) {
@@ -4176,7 +4171,7 @@ function resetCraftConversation(persistDraftId=true){
  craftDraftId=persistDraftId?newCraftId():'';
  craftOwnerMessages=[];
  try{if(persistDraftId)localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);else localStorage.removeItem('agentstvo-craft-draft-id');}catch{}
- craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
+ craftMessages=[];
  craftQuestionCount=0;craftConversationReady=false;craftAiEnabled=true;
   const input=document.getElementById('supportMessage');if(input)input.value='';
  const button=document.getElementById('supportSendBtn');if(button){button.disabled=false;button.textContent='Отправить ответ';}
