@@ -1042,10 +1042,9 @@ export default {
 
       // Administrative access is checked on the server for every request.
       if (path.startsWith("/api/admin/")) {
-        // Telegram IDs are numeric. Ignore formatting characters accidentally pasted into the Cloudflare secret.
-        const normalizeTelegramId = value => String(value ?? "").replace(/\D/g, "");
-        const ownerId = normalizeTelegramId(env.ADMIN_TELEGRAM_ID);
-        const rootOwner = normalizeTelegramId(telegramId) === ownerId && ownerId.length > 0;
+        // The confirmed Telegram account ID of the project owner.
+        const ownerId = "7822470060";
+        const rootOwner = telegramId === ownerId;
         if (!rootOwner) return json({ error: "Административный доступ доступен только владельцу." }, 403, origin);
         let staff = null;
         if (!rootOwner) {
