@@ -2791,7 +2791,8 @@ async function loadAdminSupport() {
    const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
    info.append(name,username,chatTitle,meta,activity,preview);
    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть диалог';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-   row.append(info,button);root.append(row);
+   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Старый диалог открыть больше нельзя.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
+   row.append(info,button,removeChat);root.append(row);
   });
   await loadAdminSupportTickets();
   await loadAdminAnalytics();
@@ -4133,7 +4134,7 @@ async function pollCraftMessages(){
    craftConversationReady=true;
     if(craftModeActive){const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение по этому заказу…';const button=document.getElementById('supportSendBtn');if(button)button.textContent='Отправить сообщение';}
   }
- }catch(e){console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
 }
 async function loadCraftConversation(){
  if(!craftDraftId){try{craftDraftId=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}}
@@ -4153,7 +4154,7 @@ async function loadCraftConversation(){
    }
    startCraftPolling();
   }
- }catch(e){console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
+ }catch(e){if(e.status===410||/закрыт владельцем|не найден/i.test(String(e.message||''))){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent='Предыдущий диалог закрыт владельцем. Можно начать новый.';}else console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
 }
 async function restoreCraftConversation(){
  let saved='';try{saved=localStorage.getItem('agentstvo-craft-draft-id')||'';}catch{}
@@ -4168,7 +4169,7 @@ async function restoreCraftConversation(){
   if(craftConversationReady){if(status)status.textContent='Предложение сохранено. Статус: '+d.status+'. Можно продолжить переписку по этому заказу.';if(input)input.placeholder='Напишите сообщение по этому заказу…';if(button)button.textContent='Отправить сообщение';}
   else{if(status)status.textContent=craftAiEnabled?'Незавершённый заказ восстановлен. Продолжайте диалог. 💬':'Автоответы ИИ выключены. Вы можете писать — владелец ответит вручную. 💬';}
   if(craftModeActive)renderCraftChat();startCraftPolling();
- }catch(error){resetCraftConversation();}
+ }catch(error){try{localStorage.removeItem('agentstvo-craft-draft-id');}catch{}resetCraftConversation();const status=document.getElementById('supportResult');if(status)status.textContent=error.status===410?'Этот диалог закрыт владельцем. Начните новый.':'Сохранённый диалог больше недоступен. Можно начать новый.';}
 }
 function resetCraftConversation(){
  if(craftPollTimer){clearInterval(craftPollTimer);craftPollTimer=null;}
@@ -4621,6 +4622,13 @@ async function loadAiOrders(){
     card.append(aiAdminNode('p',(o.payment_status==='paid'?'Оплачен':'Счёт отправлен')+' · заказ Mini App: '+(o.order_id||'—')+(o.paid_at?' · оплата: '+formatDate(o.paid_at):''),'muted'));
     const saveChanges=aiAdminNode('button','Сохранить изменения пожеланий','secondary');saveChanges.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update_after_approval',id:o.id,subject:subject.value,summary:summary.value})});toast('Пожелания к заказу обновлены.');loadAiOrders();}catch(e){toast(e.message||'Не удалось изменить заказ.');}});card.append(saveChanges);
    }else if(o.order_id){card.append(aiAdminNode('p','Связанный заказ Mini App: '+o.order_id,'muted'));}
+   if(details.chat_deleted!==true){
+    const deleteChat=aiAdminNode('button','Удалить чат','secondary');
+    deleteChat.addEventListener('click',async()=>{if(!confirm('Закрыть и удалить переписку покупателя? История чата исчезнет, но заказ, его статус и оплата останутся без изменений. Покупатель не сможет продолжить именно этот диалог.'))return;deleteChat.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'delete_chat',id:o.id})});toast('Чат закрыт и удалён. Данные заказа сохранены.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось удалить чат.');deleteChat.disabled=false;}});
+    card.append(deleteChat);
+   }else{
+    card.append(aiAdminNode('p','🔒 Чат удалён владельцем. История очищена, продолжение этого диалога запрещено.','notice'));
+   }
    appendAdminOrderCard(category,o,card);
   });
   ['bundle','assistant','group'].forEach(finishAdminOrderCategory);
