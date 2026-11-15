@@ -1766,7 +1766,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const since=paid?(product?.paid_at||custom?.paid_at||product?.created_at||custom?.created_at):(product?.created_at||custom?.created_at);
           const age=Date.now()-Date.parse(String(since||"").replace(" ","T")+"Z");
           const terminal=product?["cancelled","refunded","superseded"].includes(String(product.payment_status||""))||["cancelled","superseded"].includes(String(product.fulfillment_status||"")):["cancelled","canceled","superseded","completed","done"].includes(String(custom?.status||""));
-          const closed=!Number.isFinite(age)||age<0||age>72*60*60*1000||terminal;
+          const hasBuyerChat=(rows.results||[]).some(row=>row.sender_type==="buyer");
+          const closed=!hasBuyerChat||!Number.isFinite(age)||age<0||age>72*60*60*1000||terminal;
           const cancellations=await env.DB.prepare("SELECT id,reason,status,created_at FROM order_cancellation_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId).all();
           return json({ok:true,messages:rows.results||[],changes:changes.results||[],cancellations:cancellations.results||[],closed},200,origin);
         }
