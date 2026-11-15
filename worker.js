@@ -1987,7 +1987,13 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const rows = await env.DB.prepare(
             "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
-          return json({ ok: true, conversations: rows.results || [] }, 200, origin);
+          let deletedRows=[];
+          if(await tableExists(env,"admin_action_log")){
+            const deleted=await env.DB.prepare("SELECT l.target_telegram_id AS telegram_id,l.details,l.created_at AS deleted_at,u.first_name,u.username FROM admin_action_log l LEFT JOIN users u ON u.telegram_id=l.target_telegram_id WHERE l.action_type='support_conversation_deleted' AND (?='' OR l.target_telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) ORDER BY l.id DESC LIMIT ?").bind(term,likeTerm,likeUsername,likeTerm,limit).all();
+            deletedRows=(deleted.results||[]).map(row=>{let details={};try{details=JSON.parse(row.details||"{}");}catch{}return {telegram_id:row.telegram_id,conversation_id:details.conversation_id||"",conversation_title:"Удалённый диалог",assistant_type:"standard",first_name:row.first_name,username:row.username,message_count:0,last_message_at:row.deleted_at,last_message:"",last_role:"",ticket_count:0,last_ticket_at:null,deleted:true,deleted_at:row.deleted_at};}).filter(row=>row.conversation_id);
+          }
+          const conversations=[...(rows.results||[]),...deletedRows].sort((a,b)=>String(b.last_message_at||"").localeCompare(String(a.last_message_at||""))).slice(0,limit);
+          return json({ ok: true, conversations }, 200, origin);
         }
         if (path === "/api/admin/support/conversation-delete" && method === "POST") {
           const body = await readJson(request);
@@ -2008,11 +2014,15 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
           const conversationId = (url.searchParams.get("conversation_id") || "").trim().slice(0,80);
-          const [controlsReady, senderTypeReady, conversationColumnReady] = await Promise.all([
+          const [controlsReady, senderTypeReady, conversationColumnReady, actionLogReady] = await Promise.all([
             tableExists(env, "support_conversation_controls"),
             columnExists(env, "support_chat_messages", "sender_type"),
-            columnExists(env, "support_chat_messages", "conversation_id")
+            columnExists(env, "support_chat_messages", "conversation_id"),
+            tableExists(env, "admin_action_log")
           ]);
+          const deletedRecord = conversationId && actionLogReady
+            ? await env.DB.prepare("SELECT created_at FROM admin_action_log WHERE target_telegram_id=? AND action_type='support_conversation_deleted' AND details LIKE ? ORDER BY id DESC LIMIT 1").bind(targetId,"%"+conversationId+"%").first()
+            : null;
           const messageQuery = senderTypeReady && conversationColumnReady
             ? (conversationId
                 ? env.DB.prepare("SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 200").bind(targetId,conversationId)
@@ -2038,9 +2048,9 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
-            conversation_id: conversationId || null,
+            conversation_id: conversationId || null, deleted: !!deletedRecord, deleted_at: deletedRecord?.created_at || null,
             conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
-            messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
+            messages: deletedRecord ? [] : (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
           }, 200, origin);
