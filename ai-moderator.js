@@ -291,6 +291,13 @@ function aiToneInstruction(tone){
   };
   return tones[tone]||tones.respectful;
 }
+async function aiGroupOrderReply(env,chatId,userId,draftId,details,text,replyToMessageId){
+  details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+  details.conversation.push({role:"assistant",content:String(text).slice(0,1200)});
+  details.conversation=details.conversation.slice(-24);
+  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
+  await aiGroupReply(env,chatId,userId,text,replyToMessageId);
+}
 async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   const active=await env.DB.prepare("SELECT id,subject,details_json FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' AND last_activity_at>=datetime('now','-30 minutes') ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
   const lower=String(text||"").toLowerCase().trim();
@@ -313,7 +320,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
     await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status,group_message_id) VALUES(?,?,?,?,?,?,?,0,'collecting',?)")
       .bind(id,String(chatId),String(user.id),user.username||null,user.first_name||null,"Заказ из группы",JSON.stringify(details),replyToMessageId?Number(replyToMessageId):null).run();
     await aiNotifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИЗ ГРУППЫ\nID: "+id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\nПокупатель начал оформление в группе. Счёт недоступен до завершения диалога и проверки владельцем.");
-    await aiGroupReply(env,chatId,user.id,"Конечно, помогу оформить — спокойно и по шагам 😊\nЧто именно Вы хотите заказать?",replyToMessageId);
+    await aiGroupOrderReply(env,chatId,user.id,id,details,"Конечно, помогу оформить — спокойно и по шагам 😊\nЧто именно Вы хотите заказать?",replyToMessageId);
     return true;
   }
   details.conversation=Array.isArray(details.conversation)?details.conversation:[];
@@ -327,17 +334,17 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   }
   if(/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
-    await aiGroupReply(env,chatId,user.id,"Хорошо, сбор заказа остановлен. Если захотите вернуться к идее, я помогу 😊",replyToMessageId);return true;
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Хорошо, сбор заказа остановлен. Если захотите вернуться к идее, я помогу 😊",replyToMessageId);return true;
   }
   if(details.step==="item"){
     details.order_fields.item=String(text).trim().slice(0,700);details.step="details";
-    await aiGroupReply(env,chatId,user.id,"Понял! А каким Вы представляете изделие: цвета, стиль, надпись, рисунок или другие важные детали?",replyToMessageId);
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Понял! А каким Вы представляете изделие: цвета, стиль, надпись, рисунок или другие важные детали?",replyToMessageId);
   }else if(details.step==="details"){
     details.order_fields.details=String(text).trim().slice(0,1200);details.step="quantity";
-    await aiGroupReply(env,chatId,user.id,"Отлично, записал. Сколько таких изделий Вам нужно? Если одно — так и напишите.",replyToMessageId);
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Отлично, записал. Сколько таких изделий Вам нужно? Если одно — так и напишите.",replyToMessageId);
   }else if(details.step==="quantity"){
     details.order_fields.quantity=String(text).trim().slice(0,100);details.step="confirm";
-    await aiGroupReply(env,chatId,user.id,"Проверьте, пожалуйста, всё ли верно:\n\nИзделие: "+details.order_fields.item+"\nПожелания: "+details.order_fields.details+"\nКоличество: "+details.order_fields.quantity+"\n\nЕсли всё правильно, ответьте «Да, всё верно». Если нужно остановиться — напишите «Отмена».",replyToMessageId);
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Проверьте, пожалуйста, всё ли верно:\n\nИзделие: "+details.order_fields.item+"\nПожелания: "+details.order_fields.details+"\nКоличество: "+details.order_fields.quantity+"\n\nЕсли всё правильно, ответьте «Да, всё верно». Если нужно остановиться — напишите «Отмена».",replyToMessageId);
   }else if(details.step==="confirm"){
     if(/^(да|верно|всё верно|все верно|подтверждаю|да,?\s*всё верно|да,?\s*все верно)[.! ]*$/i.test(lower)){
       const subject=String(details.order_fields.item||"Индивидуальный заказ").slice(0,120);
@@ -345,12 +352,12 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
       details.step="submitted";
       await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),active.id).run();
       await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и укажите итоговую цену. До Вашего подтверждения счёт не отправляется.");
-      await aiGroupReply(env,chatId,user.id,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
+      await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
     }
     details.step="item";details.order_fields={};
     await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
-    await aiGroupReply(env,chatId,user.id,"Хорошо, давайте начнём описание заново. Что именно хотите заказать?",replyToMessageId);return true;
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Хорошо, давайте начнём описание заново. Что именно хотите заказать?",replyToMessageId);return true;
   }
   details.conversation=details.conversation.slice(-16);
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
