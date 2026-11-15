@@ -413,7 +413,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
   const parsed=JSON.parse(match[0]);return {reply:String(parsed.reply||"Готово.").slice(0,3000),updates:parsed.updates&&typeof parsed.updates==="object"?parsed.updates:null};
 }
 
-async function createSupportAnswer(env, history, isVip) {
+async function createSupportAnswer(env, history, isVip, customerContext = {}) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
   const forceFinal = questionsUsed >= 16;
@@ -429,15 +429,18 @@ async function createSupportAnswer(env, history, isVip) {
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
     "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
+    "Ты не знаешь местоположение клиента и не имеешь доступа к его геолокации. Не угадывай и не называй город, адрес или регион клиента. Если местоположение действительно важно, сначала прямо спроси клиента.",
+    "Проверенные сервером данные текущего покупателя (используй их для ответов о балансе и заказах; не показывай Telegram ID): " + JSON.stringify(customerContext).slice(0,5000),
+    "Если клиент прямо просит открыть, показать или найти раздел либо конкретную работу, интерфейс добавит подходящую кнопку перехода. Не утверждай, что кнопка уже отправлена, если запрос не содержит явной просьбы о переходе.",
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
-  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ model, instructions,
-      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: 900 })
+      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -482,6 +485,47 @@ async function createSupportAnswer(env, history, isVip) {
     throw failure;
   }
   return answer.trim().slice(0, 4000);
+}
+
+
+function normalizeSupportNavigationText(value) {
+  return String(value || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/gi, " ").trim();
+}
+
+async function buildSupportNavigationActions(env, message) {
+  const text = normalizeSupportNavigationText(message);
+  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|хочу посмотреть|можно посмотреть|дай.{0,20}(?:кнопк|ссылк)|покажите)/i.test(text);
+  if (!asksToNavigate) return [];
+
+  const actions = [];
+  const add = (action) => {
+    if (actions.length < 4 && !actions.some(item => item.view === action.view && item.product_id === action.product_id)) actions.push(action);
+  };
+
+  try {
+    const catalog = await getProducts(env);
+    const normalized = normalizeSupportNavigationText(message);
+    const product = catalog.find(item => {
+      const title = normalizeSupportNavigationText(item.title);
+      return title.length >= 4 && normalized.includes(title);
+    });
+    if (product) {
+      add({ label: "🎁 Открыть работу: " + String(product.title).slice(0, 48), view: "product", product_id: String(product.id) });
+    }
+  } catch (error) {
+    console.error("Support navigation catalog lookup failed:", String(error).slice(0, 250));
+  }
+
+  if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
+  if (/(корзин|оформить заказ|перейти к оплате)/i.test(text)) add({ label: "🛒 Перейти в корзину", view: "cartView" });
+  if (/(мои заказы|список заказов|истори[яю] заказов)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
+  if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
+  if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
+  if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
+  if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
+  if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "💬 Поддержка", view: "supportView" });
+  if (/(о проекте|информаци[яю] о проекте|правила)/i.test(text)) add({ label: "ℹ️ О проекте", view: "aboutView" });
+  return actions;
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
@@ -1249,7 +1293,31 @@ export default {
             return json({ok:true,message:restored.message||"D1 восстановлена.",previous_bookmark:restored.previous_bookmark||before.bookmark||null,new_bookmark:restored.bookmark||null},200,origin);
           }catch(error){return json({error:String(error.message||error).slice(0,500)},502,origin);}
         }
-        if(path==="/api/admin/promos"&&method==="GET"){
+if(path==="/api/admin/gift-certificates"&&method==="GET"){
+          if(!(await tableExists(env,"gift_certificates")))return json({ok:true,certificates:[],migration_pending:true},200,origin);
+          const rows=await env.DB.prepare("SELECT code,points,is_active,redeemed_by,redeemed_at,created_at FROM gift_certificates ORDER BY created_at DESC LIMIT 200").all();
+          return json({ok:true,certificates:rows.results||[]},200,origin);
+        }
+        if(path==="/api/admin/gift-certificates"&&method==="POST"){
+          if(!(await tableExists(env,"gift_certificates")))return json({error:"Требуется миграция 0025_gift_certificates.sql."},503,origin);
+          const body=await readJson(request),code=String(body.code||"").trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32),points=Number(body.points);
+          if(!/^[A-Z0-9_-]{8,32}$/.test(code)||!Number.isSafeInteger(points)||points<1||points>1000000)return json({error:"Укажите код из 8–32 латинских букв/цифр и количество баллов от 1 до 1 000 000."},400,origin);
+          try{
+            await env.DB.prepare("INSERT INTO gift_certificates(code,points,created_by) VALUES(?,?,?)").bind(code,points,telegramId).run();
+          }catch(error){
+            if(String(error).toLowerCase().includes("unique"))return json({error:"Такой код уже существует. Придумайте другой."},409,origin);
+            throw error;
+          }
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,action_type,details) VALUES(?,?,?)").bind(telegramId,"gift_certificate_created",JSON.stringify({code,points})).run();
+          return json({ok:true,code,points},200,origin);
+        }
+        if(path==="/api/admin/gift-certificate-disable"&&method==="POST"){
+          if(!(await tableExists(env,"gift_certificates")))return json({error:"Требуется миграция 0025_gift_certificates.sql."},503,origin);
+          const body=await readJson(request),code=String(body.code||"").trim().toUpperCase();
+          const result=await env.DB.prepare("UPDATE gift_certificates SET is_active=0 WHERE code=? AND redeemed_by IS NULL").bind(code).run();
+          return json({ok:true,disabled:!!result.meta?.changes},200,origin);
+        }
+                if(path==="/api/admin/promos"&&method==="GET"){
           if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true,scope_migration_pending:true},200,origin);
           const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
           const rows=await env.DB.prepare(scopeReady
@@ -1889,7 +1957,7 @@ export default {
           const likeUsername = "%" + term.replace(/^@/, "") + "%";
           const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
           const rows = await env.DB.prepare(
-            "SELECT s.telegram_id,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id ORDER BY last_message_at DESC LIMIT ?"
+            "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           return json({ ok: true, conversations: rows.results || [] }, 200, origin);
         }
@@ -1897,13 +1965,17 @@ export default {
           const url = new URL(request.url);
           const targetId = (url.searchParams.get("telegram_id") || "").trim().slice(0,64);
           if (!targetId) return json({ error: "Укажите Telegram ID." }, 400, origin);
-          const [controlsReady, senderTypeReady] = await Promise.all([
+          const conversationId = (url.searchParams.get("conversation_id") || "").trim().slice(0,80);
+          const [controlsReady, senderTypeReady, conversationColumnReady] = await Promise.all([
             tableExists(env, "support_conversation_controls"),
-            columnExists(env, "support_chat_messages", "sender_type")
+            columnExists(env, "support_chat_messages", "sender_type"),
+            columnExists(env, "support_chat_messages", "conversation_id")
           ]);
-          const messageQuery = senderTypeReady
-            ? env.DB.prepare("SELECT role,content,sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId)
-            : env.DB.prepare("SELECT role,content,'ai' AS sender_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId);
+          const messageQuery = senderTypeReady && conversationColumnReady
+            ? (conversationId
+                ? env.DB.prepare("SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 200").bind(targetId,conversationId)
+                : env.DB.prepare("SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId))
+            : env.DB.prepare("SELECT role,content,'ai' AS sender_type,'standard' AS assistant_type,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 200").bind(targetId);
           const controlQuery = controlsReady
             ? env.DB.prepare("SELECT mode,updated_at FROM support_conversation_controls WHERE telegram_id=?").bind(targetId).first()
             : Promise.resolve(null);
@@ -1924,7 +1996,8 @@ export default {
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
-            conversation_migration_pending: !controlsReady || !senderTypeReady,
+            conversation_id: conversationId || null,
+            conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
             messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
@@ -2220,6 +2293,9 @@ export default {
             users:true,products:true,orders:true,app_settings:true,order_items:await tableExists(env,"order_items"),
             system_error_log:await tableExists(env,"system_error_log"),admin_action_log:await tableExists(env,"admin_action_log"),
             user_blocks:await tableExists(env,"user_blocks"),support_conversation_controls:await tableExists(env,"support_conversation_controls"),
+            support_conversations:await tableExists(env,"support_conversations"),
+            gift_certificates:await tableExists(env,"gift_certificates"),
+            gift_certificate_attempts:await tableExists(env,"gift_certificate_attempts"),
             support_internal_notes:await tableExists(env,"support_internal_notes"),announcements:await tableExists(env,"announcements"),
             campaigns:await tableExists(env,"campaigns"),campaign_recipients:await tableExists(env,"campaign_recipients"),
             announcement_votes:await tableExists(env,"announcement_votes"),
@@ -2239,7 +2315,9 @@ export default {
             "0013_promo_codes":tableChecks.promo_codes&&tableChecks.promo_redemptions&&await columnExists(env,"orders","promo_code")&&await columnExists(env,"orders","discount_stars"),
             "0014_promo_code_scopes":await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids"),
             "0015_admin_staff":tableChecks.admin_staff&&await columnExists(env,"admin_staff","permissions_json")&&await columnExists(env,"admin_staff","status"),
-            "0022_marketing_carousel_polls":tableChecks.announcement_votes&&await columnExists(env,"announcements","emoji")&&await columnExists(env,"announcements","manual_swipe_enabled")
+            "0022_marketing_carousel_polls":tableChecks.announcement_votes&&await columnExists(env,"announcements","emoji")&&await columnExists(env,"announcements","manual_swipe_enabled"),
+            "0024_support_multi_chat":tableChecks.support_conversations&&await columnExists(env,"support_chat_messages","conversation_id")&&await columnExists(env,"support_chat_messages","assistant_type"),
+            "0025_gift_certificates":tableChecks.gift_certificates&&tableChecks.gift_certificate_attempts
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
@@ -2296,8 +2374,8 @@ export default {
         "/api/custom-orders":"feature_custom_orders",
         "/api/balance/topup":"feature_points_topup",
         "/api/support/chat":"feature_support",
-        "/api/vip/subscribe":"feature_vip",
-        "/api/vip/support":"feature_support"
+        "/api/vip/support":"feature_support",
+        "/api/vip/subscribe":"feature_vip"
       };
       const featureKey=method==="POST"?featureGateMap[path]:null;
       if(featureKey){
@@ -2934,54 +3012,170 @@ export default {
         return json({ok:true,conversation:details.conversation},200,origin);
       }
       if (path === "/api/vip/support" && method === "POST") {
-        const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
-        if(!vip)return json({error:"VIP-помощь доступна только при действующей VIP-подписке."},403,origin);
-        const b=await readJson(request),message=typeof b.message==="string"?b.message.trim():"";
-        if(!message||message.length>2000)return json({error:"Сообщение должно содержать от 1 до 2000 символов."},400,origin);
-        try{const reply=await createVipSupportAnswer(env,message);if(/(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message)){await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId,"[VIP] "+message).run();await notifyOwner(env,"👑 VIP-обращение\nTelegram ID: "+telegramId+"\n\n"+message);}return json({ok:true,reply,vip:true},200,origin);}
-        catch(e){console.error("VIP support failed:",String(e));return json({error:e.message||"VIP-помощь временно недоступна."},503,origin);}
-      }
-      if (path === "/api/support/chat" && method === "GET") {
-        const rows = await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 30")
-          .bind(telegramId).all();
+        // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
-        return json({ messages: (rows.results || []).reverse(), vip: !!vip }, 200, origin);
+        if (!vip) return json({ error: "VIP-помощь доступна только при действующей подписке." }, 403, origin);
+        const body = await readJson(request);
+        const message = typeof body.message === "string" ? body.message.trim() : "";
+        if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов." }, 400, origin);
+        try {
+          const reply = await createSupportAnswer(env, [{ role: "user", content: message }], true, { vip: true });
+          return json({ ok: true, reply, vip: true }, 200, origin);
+        } catch (error) {
+          console.error("Legacy VIP support failed:", String(error));
+          return json({ error: error.message || "VIP-помощь временно недоступна." }, 503, origin);
+        }
+      }
+      
+      if (path === "/api/support/chat" && method === "GET") {
+        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
+          .bind(telegramId).first();
+        const chatLimit = vip ? 5 : 3;
+        const conversationsResult = await env.DB.prepare(
+          "SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT ?"
+        ).bind(telegramId, vip ? 1 : 0, chatLimit).all();
+        const conversations = conversationsResult.results || [];
+        const requestedId = (new URL(request.url).searchParams.get("conversation_id") || "").trim();
+        const activeConversation = requestedId
+          ? conversations.find(item => item.id === requestedId)
+          : conversations[0];
+        if (requestedId && !activeConversation) return json({ error: "Диалог не найден или больше недоступен." }, 404, origin);
+        const rows = activeConversation
+          ? await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 60")
+              .bind(telegramId, activeConversation.id).all()
+          : { results: [] };
+        return json({
+          conversations,
+          conversation_id: activeConversation?.id || null,
+          assistant_type: activeConversation?.assistant_type || null,
+          messages: (rows.results || []).reverse(),
+          vip: !!vip,
+          chat_limit: chatLimit
+        }, 200, origin);
       }
 
       if (path === "/api/support/chat" && method === "POST") {
         const body = await readJson(request);
-        const message = typeof body.message === "string" ? body.message.trim() : "";
-        if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов" }, 400, origin);
+        const action = body.action === "create" ? "create" : "send";
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
+        // VIP-модель выбирается автоматически по активной подписке; ручного переключателя нет.
+        const requestedType = vip ? "vip" : "standard";
+        const chatLimit = vip ? 5 : 3;
+
+        if (action === "create") {
+          const conversationsResult = await env.DB.prepare(
+            "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at ASC"
+          ).bind(telegramId, vip ? 1 : 0).all();
+          const existing = conversationsResult.results || [];
+          if (existing.length >= chatLimit) {
+            return json({ error: "Достигнут лимит диалогов (" + chatLimit + "). Старые переписки сохранены — продолжите один из существующих диалогов." }, 409, origin);
+          }
+          const conversationId = crypto.randomUUID();
+          await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
+            .bind(conversationId, telegramId, requestedType).run();
+          const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+            .bind(telegramId, chatLimit).all();
+          return json({ ok: true, conversation_id: conversationId, assistant_type: requestedType, conversations: refreshed.results || [], chat_limit: chatLimit, vip: !!vip }, 200, origin);
+        }
+
+        const message = typeof body.message === "string" ? body.message.trim() : "";
+        if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов." }, 400, origin);
+        let conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim() : "";
+        if (conversationId.length > 80) return json({ error: "Некорректный идентификатор диалога." }, 400, origin);
+        // Совместимость со старой версией Mini App: сообщения без conversation_id продолжают текущий диалог.
+        if (!conversationId) {
+          const latest = await env.DB.prepare(
+            "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 1"
+          ).bind(telegramId, vip ? 1 : 0).first();
+          if (latest?.id) conversationId = latest.id;
+          else {
+            conversationId = crypto.randomUUID();
+            await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
+              .bind(conversationId, telegramId, requestedType).run();
+          }
+        }
+        const conversation = await env.DB.prepare("SELECT id,assistant_type FROM support_conversations WHERE id=? AND telegram_id=?")
+          .bind(conversationId, telegramId).first();
+        if (!conversation) return json({ error: "Диалог не найден. Создайте новый диалог." }, 404, origin);
+        const assistantType = conversation.assistant_type === "vip" ? "vip" : "standard";
+        if (assistantType === "vip" && !vip) return json({ error: "Для продолжения VIP-диалога нужна действующая VIP-подписка." }, 403, origin);
+
+        const certificateMatch = message.match(/(?:сертификат|подарочный\s+код|активируй\s+сертификат|активировать\s+сертификат|код\s+сертификата)\s*[:№-]?\s*([A-Z0-9_-]{8,32})/i);
+        if(certificateMatch){
+          if(!(await tableExists(env,"gift_certificates")))return json({error:"Активация сертификатов ещё не включена: требуется миграция базы данных."},503,origin);
+          await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'user',?,'buyer')")
+            .bind(telegramId,conversationId,assistantType,message).run();
+          await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+            .bind(message.slice(0,42),conversationId,telegramId).run();
+          const code=certificateMatch[1].toUpperCase();
+          const recentAttempts=await env.DB.prepare("SELECT COUNT(*) AS total FROM gift_certificate_attempts WHERE telegram_id=? AND attempted_at>datetime('now','-10 minutes')").bind(telegramId).first();
+          if(Number(recentAttempts?.total||0)>=5){
+            const reply="⏳ Слишком много попыток активации. Попробуйте снова через 10 минут.";
+            await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')").bind(telegramId,conversationId,assistantType,reply).run();
+            return json({ok:true,reply,certificate_activated:false,points:0,conversation_id:conversationId},200,origin);
+          }
+          await env.DB.prepare("INSERT INTO gift_certificate_attempts(telegram_id) VALUES(?)").bind(telegramId).run();
+          await env.DB.prepare("DELETE FROM gift_certificate_attempts WHERE attempted_at<datetime('now','-1 day')").run();
+          const redemption=await env.DB.batch([
+            env.DB.prepare("UPDATE gift_certificates SET redeemed_by=?,redeemed_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND redeemed_by IS NULL AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)").bind(telegramId,code),
+            env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,points,'gift_certificate',?,? FROM gift_certificates WHERE code=? AND redeemed_by=? AND redeemed_at>=datetime('now','-1 minute') AND changes()=1")
+              .bind(telegramId,"Активация подарочного сертификата "+code,"gift-certificate:"+code,code,telegramId),
+            env.DB.prepare("UPDATE users SET balance_stars=balance_stars+(SELECT points FROM gift_certificates WHERE code=? AND redeemed_by=?),updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1 AND EXISTS(SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
+              .bind(code,telegramId,telegramId,"gift-certificate:"+code)
+          ]);
+          const certificate=await env.DB.prepare("SELECT points,redeemed_by,is_active,expires_at FROM gift_certificates WHERE code=?").bind(code).first();
+          const activated=!!redemption[0]?.meta?.changes;
+          const reply=activated
+            ? "🎉 Сертификат успешно активирован! На баланс начислено "+Number(certificate?.points||0).toLocaleString("ru-RU")+" баллов. Спасибо за подарок!"
+            : "Не удалось активировать сертификат. Проверьте код: возможно, он уже использован, отключён, просрочен или введён с ошибкой.";
+          await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')")
+            .bind(telegramId,conversationId,assistantType,reply).run();
+          await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
+          return json({ok:true,reply,certificate_activated:activated,points:activated?Number(certificate?.points||0):0,conversation_id:conversationId,actions:[{label:"⭐ Мой баланс",view:"balanceView"}]},200,origin);
+        }
         const conversationControl = await env.DB.prepare("SELECT mode FROM support_conversation_controls WHERE telegram_id=?").bind(telegramId).first();
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'user',?,'buyer')")
-          .bind(telegramId, message).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES (?,?,?,'user',?,'buyer')")
+          .bind(telegramId, conversationId, assistantType, message).run();
+        await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+          .bind(message.slice(0, 42), conversationId, telegramId).run();
+
         if (conversationControl?.mode === "human") {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
-          return json({ ok: true, reply: "Сообщение передано владельцу. ИИ-помощник временно приостановлен.", vip: !!vip, saved: true, handoff: true }, 200, origin);
+          const reply = "Сообщение передано владельцу. ИИ-помощник временно приостановлен.";
+          await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES (?,?,?,'assistant',?,'ai')")
+            .bind(telegramId, conversationId, assistantType, reply).run();
+          return json({ ok: true, reply, vip: !!vip, saved: true, handoff: true, conversation_id: conversationId }, 200, origin);
         }
+        const customer = await env.DB.prepare("SELECT balance_stars,first_name FROM users WHERE telegram_id=?").bind(telegramId).first();
+        const productOrders = await env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status,fulfillment_status,created_at,priority_order FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 8").bind(telegramId).all();
+        const customOrders = await env.DB.prepare("SELECT id,subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 5").bind(telegramId).all();
+        const customerContext={balance_points:Number(customer?.balance_stars||0),product_orders:productOrders.results||[],custom_orders:customOrders.results||[],vip:!!vip};
         if (!env.OPENAI_API_KEY) return json({ error: "ИИ-помощник ещё не подключён. Владелец должен добавить OPENAI_API_KEY в Cloudflare Worker Secrets." }, 503, origin);
-        const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? ORDER BY id DESC LIMIT 34")
-          .bind(telegramId).all();
+        const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
+          .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
         let reply;
         try {
-          reply = await createSupportAnswer(env, history, !!vip);
+          reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext);
         } catch (error) {
           console.error("Support assistant failed:", String(error));
-          await writeSystemError(env, error?.diagnostic || error, "/api/support/chat");
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
         }
-        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,role,content,sender_type) VALUES (?,'assistant',?,'ai')")
-          .bind(telegramId, reply).run();
+        await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES (?,?,?,'assistant',?,'ai')")
+          .bind(telegramId, conversationId, assistantType, reply).run();
+        await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+          .bind(conversationId, telegramId).run();
         const ownerRequested = /(владелец|оператор|человек|администратор|жалоба|позови|позвать)/i.test(message);
         if (ownerRequested) {
           await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
           await notifyOwner(env, "💬 Запрос на помощь владельца\nTelegram ID: " + telegramId + "\n\n" + message);
         }
-        return json({ ok: true, reply, vip: !!vip, saved: true }, 200, origin);
+        const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+          .bind(telegramId, chatLimit).all();
+        const actions = await buildSupportNavigationActions(env, message);
+        return json({ ok: true, reply, vip: !!vip, saved: true, conversation_id: conversationId, conversations: refreshed.results || [], chat_limit: chatLimit, actions }, 200, origin);
       }
 
       return json({ error: "Маршрут не найден" }, 404, origin);
