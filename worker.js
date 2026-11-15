@@ -3281,6 +3281,63 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             .bind(telegramId, conversationId, assistantType, reply).run();
           return json({ ok: true, reply, vip: !!vip, saved: true, handoff: true, conversation_id: conversationId }, 200, origin);
         }
+        // Явное намерение заказать индивидуальную работу запускает серверный черновик ИИ-заказа.
+        // Черновик привязан к конкретному диалогу Mini App и не затрагивает обычные товарные заказы.
+        const activeCraftDraft = await env.DB.prepare(
+          "SELECT id,subject,details_json,estimated_stars,status FROM ai_order_drafts WHERE telegram_id=? AND status='collecting' AND json_valid(details_json)=1 AND json_extract(details_json,'$.source')='miniapp_support_chat' AND json_extract(details_json,'$.support_conversation_id')=? AND last_activity_at>=datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1"
+        ).bind(String(telegramId),conversationId).first();
+        const startsCustomWorkOrder = /(?:хочу|мне\s+(?:нужно|надо)|давайте)\s+(?:заказать|оформить)\s+(?:(?:индивидуальн\w*|авторск\w*)\s+)?(?:работ\w*|поделк\w*|издели\w*|подар\w*)|хочу\s+(?:индивидуальн\w*\s+)?заказ/i.test(message)
+          && !/(?:не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(message);
+        if (activeCraftDraft || startsCustomWorkOrder) {
+          try {
+            const draftId = activeCraftDraft?.id || makeId();
+            let draftDetails = {};
+            if (activeCraftDraft) { try { draftDetails = JSON.parse(activeCraftDraft.details_json || "{}"); } catch {} }
+            const draftConversation = Array.isArray(draftDetails.conversation) ? draftDetails.conversation : [];
+            draftConversation.push({ role: "user", content: message.slice(0,700) });
+            const aiMessages = draftConversation.filter(item => item && ["user","assistant","owner"].includes(item.role))
+              .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
+            const craftResult = await createCraftAnswer(env, aiMessages);
+            draftConversation.push({ role: "assistant", content: String(craftResult.reply || "").slice(0,1200) });
+            const subject = String(draftConversation.find(item => item.role === "user")?.content || "Индивидуальная работа")
+              .replace(/\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+            draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
+              ai_enabled: true, conversation: draftConversation.slice(-24), summary: String(craftResult.reply || "").slice(0,2000) };
+            let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
+            let status = "collecting";
+            if (craftResult.ready) {
+              const estimate = await estimateCustomOrderPrice(env,{source:"miniapp_support_chat",conversation:aiMessages,proposal:craftResult.reply},250);
+              estimatedStars = estimate.price_stars;
+              draftDetails.estimate_note = String(estimate.note || "").slice(0,180);
+              status = "review";
+            }
+            if (activeCraftDraft) {
+              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'")
+                .bind(subject,JSON.stringify(draftDetails),estimatedStars,status,draftId,String(telegramId)).run();
+            } else {
+              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?,?)")
+                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(draftDetails),estimatedStars,status).run();
+            }
+            const reply = String(craftResult.reply || "Давайте уточним Вашу задумку. Что именно Вы хотели бы заказать?").slice(0,3000);
+            await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')")
+              .bind(telegramId,conversationId,assistantType,reply).run();
+            await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
+            if (!activeCraftDraft) {
+              await notifyOwner(env,"🟢 НОВЫЙ ЧЕРНОВИК ИНДИВИДУАЛЬНОЙ РАБОТЫ ИЗ ЧАТА ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\nДиалог Mini App: "+conversationId+"\n\nПокупатель явно попросил заказать индивидуальную работу. Черновик сохранён в Админ-панели → ИИ-заказы.");
+            }
+            if (craftResult.ready) {
+              await notifyOwner(env,"🎁 ИНДИВИДУАЛЬНЫЙ ЗАПРОС ГОТОВ К ПРОВЕРКЕ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nОткройте Админ-панель → ИИ-заказы и проверьте запрос перед подтверждением цены.");
+            }
+            const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+              .bind(telegramId,chatLimit).all();
+            return json({ok:true,reply,vip:!!vip,saved:true,conversation_id:conversationId,conversations:refreshed.results||[],chat_limit:chatLimit,
+              order_draft:true,draft_id:draftId,ready:craftResult.ready,estimated_stars:estimatedStars},200,origin);
+          } catch (error) {
+            console.error("Support custom-order draft failed:",String(error));
+            return json({error:error.message||"Не удалось создать черновик индивидуальной работы. Сообщение сохранено."},503,origin);
+          }
+        }
+
         const customer = await env.DB.prepare("SELECT balance_stars,first_name FROM users WHERE telegram_id=?").bind(telegramId).first();
         const productOrders = await env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status,fulfillment_status,created_at,priority_order FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 8").bind(telegramId).all();
         const customOrders = await env.DB.prepare("SELECT id,subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 5").bind(telegramId).all();
