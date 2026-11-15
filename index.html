@@ -3251,6 +3251,7 @@ async function loadAdminOrderChat(orderId,root,orderType='product'){
    const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
    row.append(who,body,date);log.append(row);
   });
+  if(d.closed){const closed=document.createElement('p');closed.className='notice';closed.textContent='🔒 Чат заказа закрыт: нет активной переписки или прошло более трёх дней после оплаты/активности. Ответы отключены.';root.append(closed);}
   const pending=(d.changes||[]).filter(x=>x.status==='pending');
   if(pending.length){const h=document.createElement('h4');h.textContent='📝 Предложения изменений от ИИ';changes.append(h);}
   pending.forEach(change=>{
@@ -3277,8 +3278,9 @@ async function loadAdminOrderChat(orderId,root,orderType='product'){
   const mode=document.createElement('select');mode.style.marginTop='12px';
   [['owner','💬 От имени владельца'],['ai','🤖 От имени ИИ-консультанта']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;mode.append(option);});
   const input=document.createElement('textarea');input.rows=3;input.maxLength=2000;input.placeholder='Напишите сообщение покупателю…';input.style.cssText='width:100%;box-sizing:border-box;margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit';
-  const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить в чат заказа';send.style.marginTop='8px';
-  send.addEventListener('click',async()=>{const message=input.value.trim();if(!message)return;send.disabled=true;try{const result=await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:orderId,message,sender_type:mode.value})});input.value='';toast(result.notification?.sent?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAdminOrderChat(orderId,root);}catch(e){toast(e.message||'Не удалось отправить сообщение.');send.disabled=false;}});
+  const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Сохранить ответ в чате';send.style.marginTop='8px';
+  if(d.closed){mode.disabled=true;input.disabled=true;send.disabled=true;input.placeholder='Чат закрыт. Новые ответы заблокированы.';}
+  send.addEventListener('click',async()=>{const message=input.value.trim();if(!message)return;send.disabled=true;try{await apiFetch('/api/admin/order-chat',{method:'POST',body:JSON.stringify({action:'reply',order_id:orderId,message,sender_type:mode.value})});input.value='';toast('Ответ сохранён в чате Mini App. Личное сообщение Telegram не отправлялось.');await loadAdminOrderChat(orderId,root,orderType);}catch(e){toast(e.message||'Не удалось сохранить ответ.');send.disabled=false;}});
   root.append(mode,input,send);
  }catch(e){const error=document.createElement('p');error.className='notice';error.textContent=e.message||'Не удалось загрузить чат заказа.';root.append(error);}
 }
