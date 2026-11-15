@@ -3,8 +3,6 @@ name: Validate application JavaScript
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main, feat/order-chats-ai-controls]
 
 permissions:
   contents: read
