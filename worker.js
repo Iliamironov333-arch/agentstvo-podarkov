@@ -2847,7 +2847,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
             env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved'").bind(orderId)
           ]);
-          await notifyOwner(env,"🎁 НОВЫЙ ОПЛАЧЕННЫЙ ЗАКАЗ С БАЛАНСА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nТовары: "+title+"\nАдрес: "+delivery.address+"\nДистанция: "+delivery.distance_km+" км\nДоставка: "+delivery.delivery_stars+" ⭐"+(priorityDelivery?"\nПриоритет: +100 ⭐":"")+"\nИтого: "+total+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐");
+          await notifyOwner(env,"🎁 НОВЫЙ ОПЛАЧЕННЫЙ ЗАКАЗ С БАЛАНСА\nID: "+orderId+"\nПокупатель: "+telegramId+"\nТовары: "+title+"\nАдрес: "+delivery.address+"\nДистанция: "+delivery.distance_km+" км\nДоставка: "+delivery.delivery_stars+" ⭐"+(priorityDelivery?"\nПриоритетная доставка: включена в VIP":"")+"\nИтого: "+total+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐");
           try{await deliverOrderImages(env,orderId,telegramId);}catch(deliveryError){console.error("Balance-paid order delivery failed:",String(deliveryError).slice(0,300));}
           return json({ok:true,paid:true,order_id:orderId,total_stars:total,balance_used_stars:balanceUsed,delivery_stars:delivery.total_delivery_stars,builder_extra_stars:builderExtraTotal,distance_km:delivery.distance_km},200,origin);
         }
