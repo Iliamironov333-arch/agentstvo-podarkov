@@ -1045,7 +1045,8 @@ export default {
         // The confirmed Telegram account ID of the project owner.
         const ownerId = "7822470060";
         const rootOwner = telegramId === ownerId;
-        if (!rootOwner) return json({ error: "Административный доступ доступен только владельцу." }, 403, origin);
+        // Keep the version-361 staff authorization path: active owners and moderators
+        // are checked against admin_staff instead of being rejected before lookup.
         let staff = null;
         if (!rootOwner) {
           try {
