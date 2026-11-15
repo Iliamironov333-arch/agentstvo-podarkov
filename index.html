@@ -3900,7 +3900,7 @@ async function openSupportDestination(action) {
   else { showView('catalogView'); toast('Работа не найдена в актуальном каталоге.'); }
   return;
  }
- const allowed = ['catalogView','cartView','ordersView','balanceView','profileView','vipView','aiWorkshopView','supportView','aboutView'];
+ const allowed = ['menuView','catalogView','giftBuilderView','cartView','ordersView','balanceView','profileView','vipView','aiWorkshopView','supportView','aboutView','dealsView'];
  if (allowed.includes(action.view)) showView(action.view);
 }
 
