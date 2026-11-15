@@ -1605,21 +1605,23 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const orderType = body.order_type;
           if (!orderId || !["product","custom"].includes(orderType)) return json({ error: "Укажите номер и тип заказа." }, 400, origin);
           const order = orderType === "product"
-            ? await env.DB.prepare("SELECT id,telegram_id,payment_status,fulfillment_status,total_stars FROM orders WHERE id=?").bind(orderId).first()
-            : await env.DB.prepare("SELECT id,telegram_id,status,total_stars FROM custom_orders WHERE id=?").bind(orderId).first();
+            ? await env.DB.prepare("SELECT id,telegram_id,payment_status,fulfillment_status,total_stars,created_at,paid_at FROM orders WHERE id=?").bind(orderId).first()
+            : await env.DB.prepare("SELECT c.id,c.telegram_id,c.status,c.total_stars,c.created_at,o.payment_status,o.paid_at FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
           if (!order) return json({ error: "Заказ не найден." }, 404, origin);
+          const paid=order.payment_status==="paid";
+          const since=paid?(order.paid_at||order.created_at):order.created_at;
+          const age=Date.now()-Date.parse(String(since||"").replace(" ","T")+"Z");
+          const terminal=orderType==="product"?["cancelled","refunded","superseded"].includes(String(order.payment_status||""))||["cancelled","superseded"].includes(String(order.fulfillment_status||"")):["cancelled","canceled","superseded","completed","done"].includes(String(order.status||""));
+          if(!Number.isFinite(age)||age<0||age>72*60*60*1000||terminal)return json({error:"Чат заказа закрыт по сроку хранения. Уведомление не отправлено."},410,origin);
+          const hasBuyerChat=await env.DB.prepare("SELECT 1 AS ok FROM order_chat_messages WHERE order_id=? AND telegram_id=? AND sender_type='buyer' LIMIT 1").bind(orderId,String(order.telegram_id)).first();
+          if(!hasBuyerChat)return json({error:"В заказе нет начатой переписки. Уведомление не отправлено."},409,origin);
           const meta = await getAdminOrderMeta(env, orderType, order);
           const labels = { unpaid: "ожидает оплаты", new: "принят и ожидает обработки", in_progress: "находится в работе", ready: "готов", cancelled: "отменён" };
           const statusText = labels[meta.admin_status] || "обрабатывается";
-          const text = "🎁 Агентство подарков\n\nИнформация по вашему заказу № " + orderId + ": " + statusText + ".\nСумма: " + Number(order.total_stars || 0) + " ⭐\nЕсли у вас есть вопросы, ответьте на это сообщение.";
-          try {
-            await telegram(env, "sendMessage", { chat_id: String(order.telegram_id), text });
-          } catch (error) {
-            console.error("Order notification failed:", String(error).slice(0,300));
-            return json({ error: "Не удалось отправить сообщение. Возможно, покупатель не запускал бота или запретил сообщения." }, 502, origin);
-          }
-          await notifyOwner(env, "📨 Повторное уведомление по заказу " + orderId + " отправлено покупателю " + String(order.telegram_id));
-          return json({ ok: true, order_id: orderId, notified: true }, 200, origin);
+          const textMessage = "Информация по заказу № " + orderId + ": " + statusText + ". Сумма: " + Number(order.total_stars || 0) + " ⭐";
+          await env.DB.prepare("INSERT INTO order_chat_messages(order_id,telegram_id,sender_type,content) VALUES(?,?,'system',?)").bind(orderId,String(order.telegram_id),textMessage).run();
+          await notifyOwner(env, "📨 Информация по заказу " + orderId + " добавлена в чат Mini App покупателя.");
+          return json({ ok: true, order_id: orderId, notified: false, saved: true, delivery: "in_app_only" }, 200, origin);
         }
         if (path === "/api/admin/custom-order-price" && method === "POST") {
           const b=await readJson(request),id=typeof b.order_id==="string"?b.order_id.trim().slice(0,100):"",price=Number(b.price_stars);
@@ -1762,14 +1764,21 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
           const rows=await env.DB.prepare("SELECT sender_type,content,created_at FROM order_chat_messages WHERE order_id=? ORDER BY id LIMIT 200").bind(orderId).all();
           const changes=await env.DB.prepare("SELECT id,telegram_id,proposed_json,ai_summary,status,created_at FROM order_change_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 50").bind(orderId).all();
+          const product=await env.DB.prepare("SELECT created_at,paid_at,payment_status,fulfillment_status FROM orders WHERE id=?").bind(orderId).first();
+          const custom=await env.DB.prepare("SELECT c.created_at,c.status,o.paid_at,o.payment_status FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
+          const paid=product?.payment_status==="paid"||custom?.payment_status==="paid";
+          const since=paid?(product?.paid_at||custom?.paid_at||product?.created_at||custom?.created_at):(product?.created_at||custom?.created_at);
+          const age=Date.now()-Date.parse(String(since||"").replace(" ","T")+"Z");
+          const terminal=product?["cancelled","refunded","superseded"].includes(String(product.payment_status||""))||["cancelled","superseded"].includes(String(product.fulfillment_status||"")):["cancelled","canceled","superseded","completed","done"].includes(String(custom?.status||""));
+          const closed=!Number.isFinite(age)||age<0||age>72*60*60*1000||terminal;
           const cancellations=await env.DB.prepare("SELECT id,reason,status,created_at FROM order_cancellation_requests WHERE order_id=? ORDER BY created_at DESC LIMIT 20").bind(orderId).all();
-          return json({ok:true,messages:rows.results||[],changes:changes.results||[],cancellations:cancellations.results||[]},200,origin);
+          return json({ok:true,messages:rows.results||[],changes:changes.results||[],cancellations:cancellations.results||[],closed},200,origin);
         }
         if (path === "/api/admin/order-chat" && method === "POST") {
           const body=await readJson(request),orderId=String(body.order_id||"").trim().slice(0,100),action=String(body.action||"reply");
           if(!orderId)return json({error:"Не указан номер заказа."},400,origin);
-          const product=await env.DB.prepare("SELECT telegram_id FROM orders WHERE id=?").bind(orderId).first();
-          const custom=await env.DB.prepare("SELECT telegram_id FROM custom_orders WHERE id=?").bind(orderId).first();
+          const product=await env.DB.prepare("SELECT telegram_id,created_at,paid_at,payment_status,fulfillment_status FROM orders WHERE id=?").bind(orderId).first();
+          const custom=await env.DB.prepare("SELECT c.telegram_id,c.created_at,c.status,o.paid_at,o.payment_status FROM custom_orders c LEFT JOIN orders o ON o.id=c.id AND o.telegram_id=c.telegram_id WHERE c.id=?").bind(orderId).first();
           const target=product||custom;
           if(!target)return json({error:"Заказ не найден."},404,origin);
           if(action==="reply"){
