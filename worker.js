@@ -2374,6 +2374,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         "/api/custom-orders":"feature_custom_orders",
         "/api/balance/topup":"feature_points_topup",
         "/api/support/chat":"feature_support",
+        "/api/vip/support":"feature_support",
         "/api/vip/subscribe":"feature_vip"
       };
       const featureKey=method==="POST"?featureGateMap[path]:null;
@@ -3010,6 +3011,23 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         await notifyOwner(env,"💬 Новое сообщение в чате ИИ-мастерской\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте покупателю в Админ-панели → ИИ-заказы.");
         return json({ok:true,conversation:details.conversation},200,origin);
       }
+      if (path === "/api/vip/support" && method === "POST") {
+        // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
+        const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
+          .bind(telegramId).first();
+        if (!vip) return json({ error: "VIP-помощь доступна только при действующей подписке." }, 403, origin);
+        const body = await readJson(request);
+        const message = typeof body.message === "string" ? body.message.trim() : "";
+        if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов." }, 400, origin);
+        try {
+          const reply = await createSupportAnswer(env, [{ role: "user", content: message }], true, { vip: true });
+          return json({ ok: true, reply, vip: true }, 200, origin);
+        } catch (error) {
+          console.error("Legacy VIP support failed:", String(error));
+          return json({ error: error.message || "VIP-помощь временно недоступна." }, 503, origin);
+        }
+      }
+      
       if (path === "/api/support/chat" && method === "GET") {
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
