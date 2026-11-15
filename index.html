@@ -4189,7 +4189,11 @@ async function loadMe() {
   const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   setVipUi(!!me.vip,true);
- }catch(e){console.warn('Не удалось загрузить профиль и баланс:',e);}
+ }catch(e){
+  console.warn('Не удалось загрузить профиль и баланс:',e);
+  try{const vipData=await apiFetch('/api/vip');setVipUi(!!vipData.vip,true);}
+  catch(vipError){setVipUi(vipActive,false);console.warn('Не удалось отдельно проверить VIP:',vipError);}
+ }
  try{
   const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[];
