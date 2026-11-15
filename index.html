@@ -4005,10 +4005,12 @@ function renderSupportConversations() {
   empty.textContent = 'Пока нет диалогов. Нажми «Новый диалог», чтобы начать.';
   root.appendChild(empty);
  } else {
-  const makeFolder=(title,items)=>{
+  const makeFolder=(title,items,collapsible=true)=>{
    if(!items.length)return;
-   const folder=document.createElement('details');folder.className='admin-detail-line';folder.open=false;
-   const summary=document.createElement('summary');summary.textContent=title+' · '+items.length;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+   const folder=collapsible?document.createElement('details'):document.createElement('div');
+   if(collapsible){folder.className='admin-detail-line';folder.open=false;}
+   const summary=collapsible?document.createElement('summary'):null;
+   if(summary){summary.textContent=title+' · '+items.length;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';}
    const list=document.createElement('div');list.style.cssText='display:grid;gap:8px;margin-top:8px';
    items.forEach(chat=>{
     const row=document.createElement('div');row.style.cssText='display:flex;align-items:stretch;gap:8px;min-width:0';
@@ -4020,9 +4022,10 @@ function renderSupportConversations() {
     const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.style.cssText='flex-shrink:0;padding:10px 12px;color:var(--muted)';remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));remove.addEventListener('click',()=>deleteSupportConversation(chat.id));
     row.append(button,remove);list.append(row);
    });
-   folder.append(summary,list);root.append(folder);
+   if(summary){folder.append(summary,list);root.append(folder);}
+   else {list.style.marginTop='0';root.append(list);}
   };
-  makeFolder('📁 Мои диалоги · за последние 3 дня',supportConversations.filter(chat=>!chat.closed));
+  makeFolder('Мои диалоги',supportConversations.filter(chat=>!chat.closed),false);
   makeFolder('🗂️ Архив диалогов · более 3 дней',supportConversations.filter(chat=>chat.closed));
  }
  const counter = document.getElementById('supportChatCounter');
