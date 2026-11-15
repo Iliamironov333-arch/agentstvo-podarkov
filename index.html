@@ -2415,7 +2415,7 @@ async function openAdminUser(telegramId) {
   const blockHistory=Array.isArray(data.block_history)?data.block_history:[];
   if(blockHistory.length){addHistoryLine('История ограничений',blockHistory.map(item=>(item.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(item.status==='active'?'Активна':'Снята')+' · '+(item.reason||'')+' · '+(item.blocked_at||'')+(item.unblocked_at?' · снята: '+item.unblocked_at:'')).join(' | '));}
   const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
-  const actionNames={profile_viewed:'Открыт профиль',order_status_changed:'Изменён статус заказа',order_comment:'Добавлен комментарий',staff_role_changed:'Изменена должность',staff_permissions_changed:'Изменены права',balance_adjusted:'Изменён баланс',user_blocked:'Пользователь ограничен',user_unblocked:'Ограничение снято'};
+  const actionNames={profile_viewed:'Открыт профиль',order_status_changed:'Изменён статус заказа',order_comment:'Добавлен комментарий',staff_role_changed:'Изменена должность',staff_permissions_changed:'Изменены права',balance_adjusted:'Изменён баланс',user_blocked:'Пользователь ограничен',user_unblocked:'Ограничение снято',support_conversation_deleted:'Удалена переписка',support_mode_changed:'Изменён режим переписки',support_internal_note_added:'Добавлена внутренняя заметка'};
   addHistoryLine('Действий администраторов за 90 дней',adminHistory.length);
   adminHistory.forEach(item=>{
    let details={};try{details=JSON.parse(item.details||'{}')}catch{}
@@ -2811,13 +2811,13 @@ async function openAdminConversation(telegramId, conversationId) {
   const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId)+'&conversation_id='+encodeURIComponent(conversationId||''));
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
-  const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
   if(data.deleted){
    const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён владельцем. Переписка очищена, отправка сообщений и управление чатом недоступны.';
    box.append(notice);
    const closeDeleted=document.createElement('button');closeDeleted.type='button';closeDeleted.className='secondary';closeDeleted.textContent='Закрыть';closeDeleted.addEventListener('click',()=>box.classList.add('hidden'));box.append(closeDeleted);
    return;
   }
+  const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
   const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
