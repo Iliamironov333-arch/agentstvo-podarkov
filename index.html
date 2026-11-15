@@ -2415,7 +2415,7 @@ async function openAdminUser(telegramId) {
   const blockHistory=Array.isArray(data.block_history)?data.block_history:[];
   if(blockHistory.length){addHistoryLine('История ограничений',blockHistory.map(item=>(item.block_type==='full'?'Полная блокировка':'Запрет покупок')+' · '+(item.status==='active'?'Активна':'Снята')+' · '+(item.reason||'')+' · '+(item.blocked_at||'')+(item.unblocked_at?' · снята: '+item.unblocked_at:'')).join(' | '));}
   const adminHistory=Array.isArray(data.admin_history)?data.admin_history:[];
-  const actionNames={profile_viewed:'Открыт профиль',order_status_changed:'Изменён статус заказа',order_comment:'Добавлен комментарий',staff_role_changed:'Изменена должность',staff_permissions_changed:'Изменены права',balance_adjusted:'Изменён баланс',user_blocked:'Пользователь ограничен',user_unblocked:'Ограничение снято',support_conversation_deleted:'Удалена переписка',support_mode_changed:'Изменён режим переписки',support_internal_note_added:'Добавлена внутренняя заметка'};
+  const actionNames={profile_viewed:'Открыт профиль',order_status_changed:'Изменён статус заказа',order_comment:'Добавлен комментарий',staff_role_changed:'Изменена должность',staff_permissions_changed:'Изменены права',balance_adjusted:'Изменён баланс',user_blocked:'Пользователь ограничен',user_unblocked:'Ограничение снято',support_conversation_deleted:'Удалена переписка',support_mode_changed:'Изменён режим переписки',support_internal_note_added:'Добавлена внутренняя заметка',ai_order_chat_deleted:'Удалён ИИ-чат заказа'};
   addHistoryLine('Действий администраторов за 90 дней',adminHistory.length);
   adminHistory.forEach(item=>{
    let details={};try{details=JSON.parse(item.details||'{}')}catch{}
@@ -2788,14 +2788,15 @@ async function loadAdminSupport() {
    const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
    const chatTitle=document.createElement('small');chatTitle.textContent='Диалог: '+(item.conversation_title||'Старый диалог');
    const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+(item.assistant_type==='vip'?'VIP-режим':'ИИ помощник')+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
-   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
-   const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
-   info.append(name,username,chatTitle,meta,activity,preview);
+   info.append(name,username,chatTitle);
    if(item.deleted){
     const deleted= document.createElement('p');deleted.className='notice';deleted.textContent='🔒 Чат удалён владельцем · '+(item.deleted_at||'');info.append(deleted);
     const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Посмотреть статус';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
     row.append(info,button);root.append(row);return;
    }
+   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
+   const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
+   info.append(meta,activity,preview);
    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
    const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
    row.append(info,button,removeChat);root.append(row);
