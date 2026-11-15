@@ -2783,6 +2783,8 @@ async function loadAdminSupport() {
   const data=await apiFetch('/api/admin/support/conversations?q='+encodeURIComponent(q));
   const rows=Array.isArray(data.conversations)?data.conversations:[];
   status.textContent=rows.length?'Диалогов: '+rows.length:'Сохранённых диалогов пока нет.';
+  const makeFolder=(title)=>{const folder=document.createElement('details');folder.className='admin-detail-line';folder.open=false;const summary=document.createElement('summary');summary.textContent=title;summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';const list=document.createElement('div');list.style.cssText='display:grid;gap:8px';folder.append(summary,list);root.append(folder);return {folder,summary,list};};
+  const fresh=makeFolder('🆕 Новые диалоги · за последние 3 дня'),old=makeFolder('🗂️ Старые диалоги · более 3 дней / закрытые');
   rows.forEach(item=>{
    const row=document.createElement('div');row.className='admin-user-row';
    const info=document.createElement('div');
@@ -2790,46 +2792,45 @@ async function loadAdminSupport() {
    const username=document.createElement('small');username.textContent=item.username?'@'+item.username:'Без username';
    const chatTitle=document.createElement('small');chatTitle.textContent='Диалог: '+(item.conversation_title||'Старый диалог');
    const meta=document.createElement('small');meta.textContent='ID '+item.telegram_id+' · '+(item.assistant_type==='vip'?'VIP-режим':'ИИ помощник')+' · '+Number(item.message_count||0)+' сообщений · '+Number(item.ticket_count||0)+' обращений';
-   info.append(name,username,chatTitle);
-   if(item.deleted){
-    const deleted= document.createElement('p');deleted.className='notice';deleted.textContent='🔒 Чат удалён владельцем · '+(item.deleted_at||'');info.append(deleted);
-    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Посмотреть статус';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-    row.append(info,button);root.append(row);return;
-   }
-   const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');
-   const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);
-   info.append(meta,activity,preview);
-   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id));
-   const removeChat=document.createElement('button');removeChat.type='button';removeChat.className='secondary';removeChat.textContent='Удалить чат';removeChat.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;removeChat.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');const detail=document.getElementById('adminConversationDetail');if(detail)detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');removeChat.disabled=false;}});
-   row.append(info,button,removeChat);root.append(row);
+   info.append(name,username,chatTitle,meta);
+   if(item.deleted){const note=document.createElement('p');note.className='notice';note.textContent='🔒 Чат удалён покупателем или владельцем · '+(item.deleted_at||'');info.append(note);}
+   else{const activity=document.createElement('small');activity.textContent='Последний диалог: '+(item.last_message_at||'—')+' · Последнее обращение: '+(item.last_ticket_at||'—');const preview=document.createElement('small');preview.textContent=(item.last_role==='assistant'?'ИИ: ':'Покупатель: ')+String(item.last_message||'').slice(0,110);info.append(activity,preview);}
+   const detail=document.createElement('div');detail.className='admin-user-detail hidden';detail.style.marginTop='10px';
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=item.deleted?'Статус переписки':'Открыть переписку';button.addEventListener('click',()=>openAdminConversation(item.telegram_id,item.conversation_id,detail));
+   row.append(info,button);
+   if(!item.deleted){const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить чат';remove.addEventListener('click',async()=>{if(!confirm('Удалить эту переписку и её сообщения? Заказы, оплаты и баланс покупателя не изменятся. В списке останется отметка об удалении.'))return;remove.disabled=true;try{await apiFetch('/api/admin/support/conversation-delete',{method:'POST',body:JSON.stringify({telegram_id:item.telegram_id,conversation_id:item.conversation_id})});toast('Переписка удалена. Отметка сохранена.');detail.classList.add('hidden');await loadAdminSupport();}catch(e){toast(e.message||'Не удалось удалить переписку.');remove.disabled=false;}});row.append(remove);}
+   row.append(detail);(item.closed||item.deleted?old.list:fresh.list).append(row);
   });
-  await loadAdminSupportTickets();
-  await loadAdminAnalytics();
+  fresh.summary.textContent='🆕 Новые диалоги · за последние 3 дня · '+fresh.list.children.length;
+  old.summary.textContent='🗂️ Старые диалоги · более 3 дней / закрытые · '+old.list.children.length;
+  fresh.folder.hidden=!fresh.list.children.length;old.folder.hidden=!old.list.children.length;
+  await loadAdminSupportTickets();await loadAdminAnalytics();
  }catch(e){status.textContent=e.message||'Не удалось загрузить переписки.';}
 }
-async function openAdminConversation(telegramId, conversationId) {
- const box=document.getElementById('adminConversationDetail');if(!box)return;
+async function openAdminConversation(telegramId, conversationId, targetBox=null) {
+ const box=targetBox||document.getElementById('adminConversationDetail');if(!box)return;
  box.classList.remove('hidden');box.textContent='Загружаем историю…';
  try{
   const data=await apiFetch('/api/admin/support/conversation?telegram_id='+encodeURIComponent(telegramId)+'&conversation_id='+encodeURIComponent(conversationId||''));
   box.replaceChildren();
   const title=document.createElement('div');title.className='admin-detail-title';title.textContent='Переписка · '+(data.user?.first_name||'Покупатель')+' · '+telegramId;box.append(title);
   if(data.deleted){
-   const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён владельцем. Переписка очищена, отправка сообщений и управление чатом недоступны.';
+   const notice=document.createElement('p');notice.className='notice';notice.textContent='🔒 Этот чат удалён. Переписка очищена, новые сообщения и ответы заблокированы.';
    box.append(notice);
    const closeDeleted=document.createElement('button');closeDeleted.type='button';closeDeleted.className='secondary';closeDeleted.textContent='Закрыть';closeDeleted.addEventListener('click',()=>box.classList.add('hidden'));box.append(closeDeleted);
    return;
   }
+  if(data.closed){const closedNotice=document.createElement('p');closedNotice.className='notice';closedNotice.textContent='🔒 Диалог закрыт: прошло более трёх дней без активности. История доступна только для просмотра; ответы заблокированы.';box.append(closedNotice);}
   const mode=document.createElement('p');mode.className='notice';mode.textContent=data.mode==='human'?'Режим владельца включён: ИИ не отвечает.':'Режим ИИ включён.';box.append(mode);
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
-  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending;
+  const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending||!!data.closed;
   modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
   controls.append(modeButton);box.append(controls);
-  if(data.mode==='human'){
+  if(data.mode==='human'&&!data.closed){
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
    const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
-   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,conversation_id:conversationId,message})});toast('Ответ сохранён в переписке Mini App. Личное сообщение Telegram не отправлялось.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
    box.append(reply,send);
   }
   (data.messages||[]).forEach(message=>{
@@ -2867,17 +2868,16 @@ async function loadAdminSupportTickets() {
    const meta=document.createElement('small');meta.textContent='Обращение №'+ticket.id+' · ID '+ticket.telegram_id+' · '+ticket.created_at+' · Всего обращений покупателя: '+Number(ticket.customer_ticket_count||0);
    const message=document.createElement('p');message.textContent=ticket.message||'';
    const actions=document.createElement('div');actions.className='row-actions';
-   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>openAdminConversation(ticket.telegram_id));
+   const profile=document.createElement('button');profile.type='button';profile.className='secondary';profile.textContent='Карточка покупателя';profile.addEventListener('click',()=>{let detail=row.querySelector('.admin-user-detail');if(!detail){detail=document.createElement('div');detail.className='admin-user-detail hidden';row.append(detail);}openAdminConversation(ticket.telegram_id,'',detail);});
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответить покупателю в Telegram';reply.setAttribute('aria-label','Ответ на обращение №'+ticket.id);
    reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
-   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в Telegram';
+   const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Ответить в диалоге';
    send.addEventListener('click',async()=>{
     const text=reply.value.trim();if(!text){toast('Напишите ответ покупателю.');return;}
-    if(!confirm('Отправить этот ответ покупателю в Telegram?'))return;
-    send.disabled=true;send.textContent='Отправляем…';
-    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ отправлен. Обращение переведено в работу.');await loadAdminSupportTickets();}
+    send.disabled=true;send.textContent='Сохраняем…';
+    try{await apiFetch('/api/admin/support/ticket-reply',{method:'POST',body:JSON.stringify({id:ticket.id,message:text})});toast('Ответ сохранён в активном диалоге Mini App.');await loadAdminSupportTickets();}
     catch(e){toast(e.message||'Не удалось отправить ответ.');}
-    finally{send.disabled=false;send.textContent='Ответить в Telegram';}
+    finally{send.disabled=false;send.textContent='Ответить в диалоге';}
    });
    const select=document.createElement('select');select.setAttribute('aria-label','Статус обращения');
    Object.entries(labels).forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);});
