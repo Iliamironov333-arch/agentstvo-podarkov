@@ -3666,7 +3666,9 @@ function applyAdminPermissionVisibility(){
 }
 function setOwnerAccessDiagnostic(code, title, detail, clientIdState) {
  const box = document.getElementById('ownerAccessDiagnostic');
- const message = `Диагностика доступа [${code}] — ${title}. ${detail}${clientIdState ? ' Проверка ID в интерфейсе: ' + clientIdState + '.' : ''}`;
+ // Public-facing diagnostic is intentionally limited to a harmless code.
+ // Never expose Telegram IDs, initData state, server messages, endpoints or auth details.
+ const message = `Проверка доступа к панели владельца: [${String(code || 'A??').replace(/[^A-Z0-9]/g,'').slice(0,4)}]. Панель владельца сейчас недоступна. Каталог, корзина и заказы продолжают работать.`;
  console.error('[ADMIN ACCESS DIAGNOSTIC]', {code, title, detail, clientIdState, hasTelegramWebApp:!!tg, hasInitData:!!initData});
  if (box) {
   box.textContent = message;
