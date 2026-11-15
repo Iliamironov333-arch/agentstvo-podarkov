@@ -1416,7 +1416,7 @@ html body>#seasonDecorations .festive-firework{
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
-  <button class="menu-card" onclick="showView('supportView')"><strong>💬 Поддержка</strong><span>Базовый ИИ или помощь VIP</span></button>
+  <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и помощь по приложению</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('aiWorkshopView')"><strong>🧵 ИИ-мастерская</strong><span>Подбор авторской работы, вариантов и бюджета</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
@@ -1558,7 +1558,7 @@ html body>#seasonDecorations .festive-firework{
    <div id="adminAnalyticsDaily" class="admin-detail-line"></div>
   </div>
   <div class="panel" id="adminSupportPanel">
-   <div class="sectionhead"><h3>💬 Поддержка и CRM</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
+   <div class="sectionhead"><h3>🤖 ИИ помощник и CRM</h3><button class="secondary" type="button" onclick="loadAdminSupport()">↻ Обновить</button></div>
    <p class="muted">История переписки с ИИ и обращения покупателей. Здесь можно отслеживать диалоги и менять статус заявок.</p>
    <h4>Диалоги с помощником</h4>
    <div class="admin-search"><input id="adminSupportSearch" type="search" maxlength="64" placeholder="Имя, username или Telegram ID"><button class="secondary" type="button" onclick="loadAdminSupport()">Найти</button></div>
@@ -1727,9 +1727,28 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ VIP-ассистент общается и помогает подобрать подарок. Базовая ИИ-поддержка остаётся бесплатной.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
- <div class="sectionhead"><h2>💬 Поддержка</h2></div>
- <div class="panel" id="vipHelpCard"><h3>👑 Помощь Агентства VIP</h3><p class="muted" id="vipHelpDescription">Проверяем действующую подписку…</p><button class="primary" id="vipHelpButton" onclick="openVipSupport()" disabled>🔒 VIP-помощь заблокирована</button></div>
- <div class="panel"><h3>🤖 Помощник Агентства</h3><p class="muted">Задай вопрос о товарах, заказах, оплате, балансе или VIP. Если потребуется помощь владельца, попроси передать обращение.</p><div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div><textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button><p class="notice" id="supportResult" aria-live="polite"></p><button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button></div>
+ <div class="sectionhead"><h2>🤖 ИИ помощник</h2><span id="supportChatCounter">0 / 3 диалога</span></div>
+ <div class="panel">
+  <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
+  <p class="muted">🎟️ Для активации подарочного сертификата напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
+ </div>
+ <div class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+   <h3 style="margin:0">Мои диалоги</h3>
+   <button class="secondary" id="supportNewChatButton" type="button" onclick="createSupportConversation()">＋ Новый диалог</button>
+  </div>
+  <div id="supportConversationList" style="display:grid;gap:8px;margin-top:12px">
+   <p class="muted">Загружаем сохранённые диалоги…</p>
+  </div>
+ </div>
+ <div class="panel">
+  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
+  <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
+  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
+  <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
+  <p class="notice" id="supportResult" aria-live="polite"></p>
+  <button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button>
+ </div>
 </section>
 <section id="aiWorkshopView" class="hidden">
   <div class="hero"><small>Творческая лаборатория</small><h2>🧵 ИИ-мастерская</h2><p>Сначала обсудим задумку, бюджет и материалы. Затем помощник предложит подходящий проект и предварительную стоимость.</p></div>
@@ -1754,7 +1773,7 @@ html body>#seasonDecorations .festive-firework{
  <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
  <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
  <button data-view="aiWorkshopView"><strong>🧵</strong>ИИ-мастерская</button>
- <button data-view="supportView"><strong>💬</strong>Поддержка</button>
+ <button data-view="supportView"><strong>🤖</strong>ИИ помощник</button>
  <button data-view="ordersView"><strong>📦</strong>Заказы</button>
 </div>
 <div class="toast" id="toast"></div>
@@ -1841,7 +1860,7 @@ let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
 try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));window.pendingGiftBundlePriority=localStorage.getItem('gift-pending-bundle-priority')==='1';}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
-const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','vipSupportView','balanceView','profileView','dealsView','aboutView'];
+const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','aiWorkshopView','balanceView','profileView','dealsView','aboutView'];
 
 // Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
 document.addEventListener('click', event => {
@@ -1963,8 +1982,8 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)restoreC
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
- if (id === 'supportView') { loadSupportHistory(); refreshVipHelpCard(); }
- if (id === 'vipSupportView') refreshVipHelpCard();
+ if (id === 'supportView') loadSupportHistory();
+ 
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
  if (id === 'aiWorkshopView') loadCraftConversation();
@@ -2497,7 +2516,7 @@ const adminFeatureDefinitions=[
  {key:'feature_product_orders',title:'Заказы из каталога',description:'Создание новых заказов на товары'},
  {key:'feature_custom_orders',title:'Индивидуальные заказы',description:'Отправка заявок на авторские работы'},
  {key:'feature_points_topup',title:'Пополнение баланса',description:'Создание счёта на пополнение баллов'},
- {key:'feature_support',title:'Поддержка',description:'Отправка сообщений ИИ-помощнику и владельцу'},
+ {key:'feature_support',title:'ИИ помощник',description:'Диалоги с ИИ-помощником и связь с владельцем'},
  {key:'feature_vip',title:'VIP-подписка',description:'Создание новых VIP-счетов'}
 ];
 
@@ -3742,10 +3761,16 @@ async function subscribeVip(planType) {
 
 async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
 
+let supportConversations = [];
+let activeSupportConversationId = null;
+let activeSupportAssistant = 'standard';
+let supportChatLimit = 3;
 let supportPendingActions = [];
 
 async function openSupportDestination(action) {
  if (!action || typeof action !== 'object') return;
+ if (action.view === 'owner') { openOwnerChat(); return; }
+ if (action.view === 'customWizardView') { openCustomWizard(); return; }
  if (action.view === 'product') {
   let product = products.find(item => String(item[0]) === String(action.product_id));
   if (!product && initData) {
@@ -3762,62 +3787,139 @@ async function openSupportDestination(action) {
 function renderSupportMessages(messages, actions = []) {
  supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
+ if (!root) return;
  root.replaceChildren();
  if (!messages.length) {
   const empty = document.createElement('p'); empty.className = 'muted';
-  empty.textContent = 'Привет! Я помощник Агентства подарков. Чем могу помочь?';
-  root.appendChild(empty); return;
- }
- for (const item of messages) {
-  const bubble = document.createElement('div');
-  bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
-  const label = document.createElement('b');
-  label.textContent = item.role === 'user' ? 'Ты' : 'Помощник';
-  label.style.display = 'block'; label.style.marginBottom = '4px';
-  const content = document.createElement('span'); content.textContent = item.content;
-  bubble.append(label,content); root.appendChild(bubble);
- }
- if (messages.length && messages[messages.length-1].role === 'assistant' && supportPendingActions.length) {
-  const actionRow = document.createElement('div');
-  actionRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;max-width:100%';
-  supportPendingActions.forEach(action => {
-   if (!action || typeof action.label !== 'string' || !action.label.trim()) return;
-   const button = document.createElement('button');
-   button.type = 'button'; button.className = 'secondary'; button.textContent = action.label;
-   button.addEventListener('click', () => openSupportDestination(action));
-   actionRow.append(button);
-  });
-  if (actionRow.childElementCount) root.append(actionRow);
+  empty.textContent = 'Привет! Я ИИ помощник Агентства подарков. Чем могу помочь?';
+  root.appendChild(empty);
+ } else {
+  for (const item of messages) {
+   const bubble = document.createElement('div');
+   bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
+   const label = document.createElement('b');
+   label.textContent = item.role === 'user' ? 'Ты' : 'ИИ помощник';
+   label.style.display = 'block'; label.style.marginBottom = '4px';
+   const content = document.createElement('span'); content.textContent = item.content;
+   bubble.append(label,content); root.appendChild(bubble);
+  }
+  if (messages[messages.length-1].role === 'assistant' && supportPendingActions.length) {
+   const actionRow = document.createElement('div');
+   actionRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;max-width:100%';
+   supportPendingActions.forEach(action => {
+    if (!action || typeof action.label !== 'string' || !action.label.trim()) return;
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'secondary'; button.textContent = action.label;
+    button.addEventListener('click', () => openSupportDestination(action));
+    actionRow.append(button);
+   });
+   if (actionRow.childElementCount) root.append(actionRow);
+  }
  }
  root.scrollTop = root.scrollHeight;
 }
 
-async function loadSupportHistory(actions = []) {
+function renderSupportConversations() {
+ const root = document.getElementById('supportConversationList');
+ if (!root) return;
+ root.replaceChildren();
+ if (!supportConversations.length) {
+  const empty = document.createElement('p'); empty.className = 'muted';
+  empty.textContent = 'Пока нет диалогов. Нажми «Новый диалог», чтобы начать.';
+  root.appendChild(empty);
+ } else {
+  supportConversations.forEach(chat => {
+   const button = document.createElement('button');
+   button.type = 'button'; button.className = 'secondary';
+   button.style.cssText = 'width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
+   if (chat.id === activeSupportConversationId) button.style.borderColor = 'var(--gold)';
+   const label = document.createElement('span');
+   label.textContent = chat.title || 'Новый диалог';
+   label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+   const tag = document.createElement('small');
+   tag.textContent = chat.assistant_type === 'vip' ? 'Расширенный режим' : 'ИИ помощник';
+   tag.style.color = 'var(--muted)';
+   button.append(label,tag);
+   button.addEventListener('click', () => openSupportConversation(chat.id));
+   root.appendChild(button);
+  });
+ }
+ const counter = document.getElementById('supportChatCounter');
+ if (counter) counter.textContent = supportConversations.length + ' / ' + supportChatLimit + ' диалогов';
+}
+
+function updateSupportAssistantUi() {
+ const info = document.getElementById('supportAssistantInfo');
+ const title = document.getElementById('supportActiveChatTitle');
+ const label = document.getElementById('supportActiveAssistantLabel');
+ const current = supportConversations.find(x => x.id === activeSupportConversationId);
+ if (title) title.textContent = current?.title || 'Новый диалог';
+ if (label) label.textContent = activeSupportAssistant === 'vip' ? '🤖 Расширенный режим' : '🤖 ИИ помощник';
+ if (info) info.textContent = activeSupportAssistant === 'vip'
+  ? 'VIP-подписка подтверждена сервером: расширенный режим включён автоматически.'
+  : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включается автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.');
+}
+
+async function loadSupportHistory(conversationId, actions = []) {
  const root = document.getElementById('supportChatLog');
+ if (!root) return;
+ supportPendingActions = Array.isArray(actions) ? actions : [];
  if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
-  const data = await apiFetch('/api/support/chat');
-  renderSupportMessages(data.messages || [], actions);
+  const suffix = conversationId ? '?conversation_id=' + encodeURIComponent(conversationId) : '';
+  const data = await apiFetch('/api/support/chat' + suffix);
+  supportConversations = Array.isArray(data.conversations) ? data.conversations : [];
+  supportChatLimit = Number(data.chat_limit || (data.vip ? 5 : 3));
+  if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip); }
+  activeSupportConversationId = data.conversation_id || null;
+  activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
+  renderSupportConversations();
+  updateSupportAssistantUi();
+  renderSupportMessages(data.messages || [], supportPendingActions);
  } catch(e) { root.textContent = e.message || 'Не удалось загрузить историю диалога.'; }
 }
 
+async function openSupportConversation(id) {
+ await loadSupportHistory(id);
+}
+
+async function createSupportConversation() {
+ const button = document.getElementById('supportNewChatButton');
+ if (button) button.disabled = true;
+ try {
+  const data = await apiFetch('/api/support/chat', {method:'POST',body:JSON.stringify({action:'create'})});
+  activeSupportConversationId = data.conversation_id || null;
+  activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
+  await loadSupportHistory(activeSupportConversationId);
+  const result = document.getElementById('supportResult');
+  if (result) result.textContent = 'Новый диалог создан и будет сохранён.';
+ } catch(e) {
+  const result = document.getElementById('supportResult');
+  if (result) result.textContent = e.message || 'Не удалось создать диалог.';
+ } finally { if (button) button.disabled = false; }
+}
+
 function openOwnerChat(){const url='https://t.me/Iliya_Mironov_33';if(window.Telegram?.WebApp?.openTelegramLink)window.Telegram.WebApp.openTelegramLink(url);else window.open(url,'_blank','noopener');}
+
 async function sendSupport() {
  const input = document.getElementById('supportMessage');
  const result = document.getElementById('supportResult');
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
- button.disabled = true; result.textContent = 'Помощник готовит ответ…';
+ button.disabled = true; result.textContent = 'ИИ помощник готовит ответ…';
  try {
-  const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message})});
+  if (!activeSupportConversationId) {
+   await createSupportConversation();
+   if (!activeSupportConversationId) throw new Error(result.textContent || 'Не удалось открыть диалог. Попробуй ещё раз.');
+  }
+  const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message,conversation_id:activeSupportConversationId})});
   input.value = '';
-  await loadSupportHistory(data.actions || []);
-  result.textContent = data.vip ? 'Ответ VIP-помощника готов.' : 'Ответ помощника готов.';
+  await loadSupportHistory(activeSupportConversationId,data.actions||[]);
+  result.textContent = data.handoff ? 'Сообщение передано владельцу.' : 'Ответ ИИ помощника готов.';
  } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
  finally { button.disabled = false; }
 }
-
 
 function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),d=document.getElementById('vipHelpDescription'),b=document.getElementById('vipHelpButton'),h=document.getElementById('vipHelpStatus');if(s&&!v)s.textContent='Активной VIP-подписки пока нет.';if(d)d.textContent=v?'Подписка подтверждена сервером. Вам доступен отдельный канал VIP-помощи.':'Для доступа необходима действующая VIP-подписка. Обычная поддержка остаётся доступной.';if(b){b.disabled=!v;b.textContent=v?'Открыть VIP-помощь →':'🔒 VIP-помощь заблокирована';}if(h)h.textContent=v?'Подписка активна':'Нужен VIP';}
 async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку: '+(e.message||'ошибка сервера')+'. Обновите приложение.';}}
