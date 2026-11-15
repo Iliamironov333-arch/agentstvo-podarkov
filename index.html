@@ -1684,7 +1684,7 @@ html body>#seasonDecorations .festive-firework{
     <option value="pickup">Самовывоз — пункт выдачи: Новаторов, 8 · бесплатно</option>
    </select>
   </label>
-  <p class="notice" id="deliveryMethodHint">Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.</p>
+  <p class="notice" id="deliveryMethodHint">Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка доступна только с VIP без доплаты.</p>
   <div id="deliveryAddressFields">
    <label for="deliveryAddress">Адрес (улица и номер дома)
     <input id="deliveryAddress" maxlength="350" autocomplete="street-address" placeholder="Екатеринбург, улица, дом">
@@ -1698,7 +1698,7 @@ html body>#seasonDecorations .festive-firework{
   </label>
   <label style="display:flex;align-items:center;gap:9px;margin:12px 0">
    <input id="priorityDelivery" type="checkbox" style="width:auto">
-   <span>⚡ Приоритетная доставка <b>+100 ⭐</b></span>
+   <span>⚡ Приоритетная доставка — включена в VIP</span>
   </label>
   <label style="display:flex;align-items:center;gap:9px;margin:12px 0">
    <input id="priorityOrder" type="checkbox" style="width:auto">
@@ -1863,6 +1863,7 @@ let cart = {};
 try { const savedCart = localStorage.getItem('gift-cart'); const parsedCart = savedCart ? JSON.parse(savedCart) : {}; cart = parsedCart && typeof parsedCart === 'object' && !Array.isArray(parsedCart) ? parsedCart : {}; } catch (storageError) { console.warn('Корзина восстановлена без повреждённых локальных данных:', storageError); cart = {}; }
 let activePromo = null;
 let vipActive = false;
+let vipStatusVerified = false;
 let activeFilter = 'all';
 let quickBuyMode=false;
 let giftBuilderSelection={};
@@ -1992,7 +1993,10 @@ function showView(id) { if(id==='aiWorkshopView'&&!craftMessages.length)restoreC
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
- if (['ordersView','profileView','balanceView'].includes(id)) loadMe();
+ if (['ordersView','profileView','balanceView','cartView'].includes(id)) {
+  if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
+  loadMe();
+ }
  if (id === 'supportView') loadSupportHistory();
  
  if (id === 'balanceView') loadBalance();
@@ -2284,21 +2288,23 @@ function openProductDetail(product){
  content.append(image,title,price,description,add);modal.classList.add('open');
 }
 function updateDeliveryMethodUI(){
- const priorityOrder=document.getElementById('priorityOrder');if(priorityOrder){priorityOrder.disabled=!vipActive;if(!vipActive)priorityOrder.checked=false;}
- const priorityHint=document.getElementById('priorityOrderHint');if(priorityHint)priorityHint.textContent=vipActive?'VIP активен: приоритетная обработка заказа доступна.':'🔒 Приоритетная обработка доступна только с действующей VIP-подпиской.';
+ const vipReady=vipStatusVerified&&vipActive;
+ const priorityOrder=document.getElementById('priorityOrder');if(priorityOrder){priorityOrder.disabled=!vipReady;if(!vipReady)priorityOrder.checked=false;}
+ const priorityHint=document.getElementById('priorityOrderHint');if(priorityHint)priorityHint.textContent=vipReady?'👑 VIP активен: приоритетная обработка заказа доступна.':'🔒 Проверяем VIP-подписку или оформите VIP, чтобы открыть приоритетную обработку.';
  const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
  const fields=document.getElementById('deliveryAddressFields');
  const priority=document.getElementById('priorityDelivery');
  const hint=document.getElementById('deliveryMethodHint');
  const noteLabel=document.getElementById('deliveryNoteLabel');
  if(fields)fields.classList.toggle('hidden',pickup);
- if(priority){priority.disabled=pickup;if(pickup)priority.checked=false;}
- if(hint)hint.textContent=pickup?'Самовывоз из пункта выдачи: Новаторов, 8. Оплата доставки не требуется.':'Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. Приоритетная доставка — дополнительно 100 ⭐.';
+ if(priority){priority.disabled=pickup||!vipReady;if(pickup||!vipReady)priority.checked=false;}
+ const priorityDeliveryText=vipReady?'⚡ Приоритетная доставка включена в VIP без доплаты.':'🔒 Приоритетная доставка доступна только с действующей VIP-подпиской.';
+ if(hint)hint.textContent=pickup?'Самовывоз из пункта выдачи: Новаторов, 8. Оплата доставки не требуется.':'Курьерская доставка: 23 ⭐ за километр автомобильного маршрута, максимум 450 ⭐. '+priorityDeliveryText;
  if(noteLabel)noteLabel.textContent=pickup?'Комментарий к получению (необязательно)':'Комментарий курьеру (необязательно)';
  const cost=document.getElementById('deliveryCost');
  if(cost)cost.textContent=pickup?'0 ⭐ · самовывоз':'По адресу';
  const status=document.getElementById('deliveryCalcStatus');
- if(status)status.textContent=pickup?'Самовывоз: Новаторов, 8. Доставка бесплатная.':'Точную стоимость рассчитаем по адресу при оформлении.';
+ if(status)status.textContent=pickup?'Самовывоз: Новаторов, 8. Доставка бесплатная.':(vipReady?'VIP-приоритетная доставка без дополнительной платы доступна. ':'')+'Точную стоимость рассчитаем по адресу при оформлении.';
  const total=document.getElementById('total');
  if(total&&pickup){const sub=document.getElementById('subtotal');total.textContent=sub?.textContent||'0 ⭐';}
 }
@@ -3110,7 +3116,7 @@ async function openAdminOrder(orderId,orderType) {
     addLine('Комментарий курьеру',delivery.delivery_note||'Нет');
     addLine('Автомобильный маршрут',Number(delivery.distance_km||0).toFixed(2)+' км');
     addLine('Стоимость доставки',Number(delivery.delivery_stars||0)+' ⭐');
-    addLine('Приоритет',delivery.priority_delivery?'Да · +'+Number(delivery.priority_stars||100)+' ⭐':'Нет');
+    addLine('Приоритетная доставка',delivery.priority_delivery?(Number(delivery.priority_stars||0)>0?'Да · ранее оплачена':'Да · включена в VIP'):'Нет');
    }
    const payment=data.payment;
    if(payment)addLine('Платёж',payment.status+' · '+payment.amount_stars+' '+payment.currency+' · '+(payment.confirmed_at||payment.created_at));
@@ -3800,7 +3806,7 @@ async function subscribeVip(planType) {
  }catch(e){toast(e.message||'Не удалось оформить VIP.');}
 }
 
-async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(false);}}
+async function loadVip(){const el=document.getElementById('vipStatus');if(!el||!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v,true);if(v)el.textContent=`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'подписка'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`;}catch(e){el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(vipActive,false);}}
 
 let supportConversations = [];
 let activeSupportConversationId = null;
@@ -3901,7 +3907,7 @@ function updateSupportAssistantUi() {
   : (vipActive ? 'VIP-подписка активна. Для новых диалогов расширенный режим включается автоматически.' : 'Помощник работает в стандартном режиме. При активной VIP-подписке расширенный режим включится автоматически.');
 }
 
-async function loadSupportHistory(conversationId, actions = []) {
+async function loadSupportHistory(conversationId, actions = null) {
  const root = document.getElementById('supportChatLog');
  if (!root) return;
  supportPendingActions = Array.isArray(actions) ? actions : [];
@@ -3911,9 +3917,10 @@ async function loadSupportHistory(conversationId, actions = []) {
   const data = await apiFetch('/api/support/chat' + suffix);
   supportConversations = Array.isArray(data.conversations) ? data.conversations : [];
   supportChatLimit = Number(data.chat_limit || (data.vip ? 5 : 3));
-  if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip); }
+  if (typeof data.vip === 'boolean') { vipActive = data.vip; setVipUi(data.vip,true); }
   activeSupportConversationId = data.conversation_id || null;
   activeSupportAssistant = data.assistant_type || (data.vip ? 'vip' : 'standard');
+  if (!Array.isArray(actions)) supportPendingActions = Array.isArray(data.actions) ? data.actions : [];
   renderSupportConversations();
   updateSupportAssistantUi();
   renderSupportMessages(data.messages || [], supportPendingActions);
@@ -3962,7 +3969,7 @@ async function sendSupport() {
  finally { button.disabled = false; }
 }
 
-function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus');if(s)s.textContent=v?'VIP-подписка активна. Расширенный режим ИИ помощника включается автоматически.':'Активной VIP-подписки пока нет. ИИ помощник работает в стандартном режиме.';}
+function setVipUi(v,verified=true){vipActive=!!v;vipStatusVerified=!!verified;const s=document.getElementById('vipStatus');if(s)s.textContent=v?'VIP-подписка активна. Расширенный режим ИИ помощника включается автоматически.':'Активной VIP-подписки пока нет. ИИ помощник работает в стандартном режиме.';updateDeliveryMethodUI();}
 let craftMessages=[];
 let craftQuestionCount=0;
 let craftConversationReady=false;
@@ -4181,8 +4188,12 @@ async function loadMe() {
   const reputation=document.getElementById('profileReputation');if(reputation){const value=Number(me.reputation_points||0).toLocaleString('ru-RU');reputation.lastElementChild.textContent=value;}
   const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
-  setVipUi(!!me.vip);
- }catch(e){console.warn('Не удалось загрузить профиль и баланс:',e);}
+  setVipUi(!!me.vip,true);
+ }catch(e){
+  console.warn('Не удалось загрузить профиль и баланс:',e);
+  try{const vipData=await apiFetch('/api/vip');setVipUi(!!vipData.vip,true);}
+  catch(vipError){setVipUi(vipActive,false);console.warn('Не удалось отдельно проверить VIP:',vipError);}
+ }
  try{
   const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[];

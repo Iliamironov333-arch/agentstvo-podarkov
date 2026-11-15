@@ -309,7 +309,7 @@ async function calculateDeliveryQuote(address, priority) {
   if (!routeData.routes?.length || !Number.isFinite(meters) || meters <= 0) throw new Error("Не удалось построить автомобильный маршрут до адреса. Проверьте номер дома.");
   const distanceKm = Math.round((meters / 1000) * 100) / 100;
   const deliveryStars = Math.min(450, Math.ceil(distanceKm * 23));
-  const priorityStars = priority ? 100 : 0;
+  const priorityStars = 0;
   return { address: clean, distance_km: distanceKm, delivery_stars: deliveryStars, priority_delivery: !!priority, priority_stars: priorityStars, total_delivery_stars: deliveryStars + priorityStars };
 }
 
@@ -413,7 +413,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
   const parsed=JSON.parse(match[0]);return {reply:String(parsed.reply||"Готово.").slice(0,3000),updates:parsed.updates&&typeof parsed.updates==="object"?parsed.updates:null};
 }
 
-async function createSupportAnswer(env, history, isVip, customerContext = {}) {
+async function createSupportAnswer(env, history, isVip, customerContext = {}, navigationActions = []) {
   if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
   const forceFinal = questionsUsed >= 16;
@@ -431,7 +431,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}) {
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
     "Ты не знаешь местоположение клиента и не имеешь доступа к его геолокации. Не угадывай и не называй город, адрес или регион клиента. Если местоположение действительно важно, сначала прямо спроси клиента.",
     "Проверенные сервером данные текущего покупателя (используй их для ответов о балансе и заказах; не показывай Telegram ID): " + JSON.stringify(customerContext).slice(0,5000),
-    "Если клиент прямо просит открыть, показать или найти раздел либо конкретную работу, интерфейс добавит подходящую кнопку перехода. Не утверждай, что кнопка уже отправлена, если запрос не содержит явной просьбы о переходе.",
+    navigationActions.length ? ("Под ответом интерфейс покажет реальные кнопки перехода: " + navigationActions.map(item => item.label).join(", ") + ". Можно прямо назвать эти кнопки и предложить нажать одну из них.") : "Для этого ответа кнопки перехода не сформированы. НИКОГДА не пиши «нажмите кнопку ниже», «кнопка ниже» или похожие фразы. Если нужен переход, объясни словами, как открыть раздел через главное меню. Не выдумывай кнопки и ссылки.",
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
@@ -494,7 +494,7 @@ function normalizeSupportNavigationText(value) {
 
 async function buildSupportNavigationActions(env, message) {
   const text = normalizeSupportNavigationText(message);
-  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|хочу посмотреть|можно посмотреть|дай.{0,20}(?:кнопк|ссылк)|покажите)/i.test(text);
+  const asksToNavigate = /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|как посмотреть|где посмотреть|как проверить|как узнать|хочу посмотреть|хочу открыть|можно посмотреть|можно открыть|помоги открыть|мне нужен|мне нужна|мне нужно|дай.{0,20}(?:кнопк|ссылк)|покажите|кнопку|сертификат.{0,30}(?:активир|баланс)|(?:активир|баланс).{0,30}сертификат)/i.test(text);
   if (!asksToNavigate) return [];
 
   const actions = [];
@@ -517,13 +517,15 @@ async function buildSupportNavigationActions(env, message) {
   }
 
   if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
-  if (/(корзин|оформить заказ|перейти к оплате)/i.test(text)) add({ label: "🛒 Перейти в корзину", view: "cartView" });
-  if (/(мои заказы|список заказов|истори[яю] заказов)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
+  if (/(корзин|оформить заказ|перейти к оплате|доставк)/i.test(text)) add({ label: "🛒 Открыть корзину", view: "cartView" });
+  if (/(мои заказы|список заказов|истори[яю] заказов|(?:мой|мои|моего).{0,12}заказ|статус.{0,20}заказ|заказ.{0,20}статус)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
   if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
   if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
   if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
   if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
-  if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "💬 Поддержка", view: "supportView" });
+  if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "🤖 ИИ помощник", view: "supportView" });
+  if (/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text)) add({ label: "✉️ Написать владельцу", view: "owner" });
+  if (/сертификат/i.test(text) && /(активир|баланс|начисл)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
   if (/(о проекте|информаци[яю] о проекте|правила)/i.test(text)) add({ label: "ℹ️ О проекте", view: "aboutView" });
   return actions;
 }
@@ -767,7 +769,7 @@ async function handleWebhook(request, env) {
       const deliveryInfo=await env.DB.prepare("SELECT address,delivery_details,delivery_note,distance_km,delivery_stars,priority_delivery,priority_stars FROM order_delivery WHERE order_id=?").bind(order.id).first();
       await notifyOwner(env, "🎁 Оплачен заказ!\nID: " + order.id + "\nПокупатель: " + telegramId +
         "\nИтого заказа: " + order.total_stars + " ⭐\nСписано с баланса: " + Number(order.balance_applied_stars||0) + " ⭐\nОплата Telegram: " + payment.total_amount + " ⭐\nБаллы: +" + earned + "\nТовар: " + order.product_title +
-        (deliveryInfo ? (String(deliveryInfo.address || "").startsWith("Самовывоз") ? "\n" + deliveryInfo.address + "\nДоставка: бесплатно" : "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритет: +100 ⭐" : "")) : ""));
+        (deliveryInfo ? (String(deliveryInfo.address || "").startsWith("Самовывоз") ? "\n" + deliveryInfo.address + "\nДоставка: бесплатно" : "\nАдрес доставки: " + deliveryInfo.address + (deliveryInfo.delivery_details ? ", " + deliveryInfo.delivery_details : "") + "\nРасстояние: " + deliveryInfo.distance_km + " км\nДоставка: " + deliveryInfo.delivery_stars + " ⭐" + (deliveryInfo.priority_delivery ? "\nПриоритетная доставка: включена в VIP" : "")) : ""));
     } else if (intent.status !== "paid" || String(intent.charge_id || "") !== chargeId || order.payment_status !== "paid") {
       return json({ ok: true });
     }
@@ -2705,10 +2707,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const deliveryNote = typeof body.delivery_note === "string" ? body.delivery_note.trim().slice(0,500) : "";
         const priorityDelivery = deliveryMethod === "courier" && body.priority_delivery === true;
         const priorityOrder = body.priority_order === true;
-        const activeVipForOrder = priorityOrder
+        const activeVipForOrder = (priorityDelivery || priorityOrder)
           ? await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first()
           : null;
-        if (priorityOrder && !activeVipForOrder) return json({error:"Приоритетный заказ доступен только участникам с действующей VIP-подпиской."},403,origin);
+        if ((priorityDelivery || priorityOrder) && !activeVipForOrder) return json({error:"Приоритетная доставка и приоритетная обработка доступны только с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
         const quantities = new Map();
@@ -3045,13 +3047,19 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           ? await env.DB.prepare("SELECT role,content,created_at FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 60")
               .bind(telegramId, activeConversation.id).all()
           : { results: [] };
+        const messages = (rows.results || []).reverse();
+        const lastUserMessage = messages.length && messages[messages.length - 1].role === "assistant"
+          ? [...messages].reverse().find(item => item.role === "user")?.content || ""
+          : "";
+        const actions = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : [];
         return json({
           conversations,
           conversation_id: activeConversation?.id || null,
           assistant_type: activeConversation?.assistant_type || null,
-          messages: (rows.results || []).reverse(),
+          messages,
           vip: !!vip,
-          chat_limit: chatLimit
+          chat_limit: chatLimit,
+          actions
         }, 200, origin);
       }
 
@@ -3156,9 +3164,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
+        const actions = await buildSupportNavigationActions(env, message);
         let reply;
         try {
-          reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext);
+          reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext, actions);
         } catch (error) {
           console.error("Support assistant failed:", String(error));
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
@@ -3174,7 +3183,6 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         }
         const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
           .bind(telegramId, chatLimit).all();
-        const actions = await buildSupportNavigationActions(env, message);
         return json({ ok: true, reply, vip: !!vip, saved: true, conversation_id: conversationId, conversations: refreshed.results || [], chat_limit: chatLimit, actions }, 200, origin);
       }
 
