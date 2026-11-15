@@ -3064,8 +3064,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
 
         const message = typeof body.message === "string" ? body.message.trim() : "";
         if (!message || message.length > 2000) return json({ error: "Сообщение должно содержать от 1 до 2000 символов." }, 400, origin);
-        const conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim() : "";
-        if (!conversationId || conversationId.length > 80) return json({ error: "Сначала откройте или создайте диалог." }, 400, origin);
+        let conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim() : "";
+        if (conversationId.length > 80) return json({ error: "Некорректный идентификатор диалога." }, 400, origin);
+        // Совместимость со старой версией Mini App: сообщения без conversation_id продолжают текущий диалог.
+        if (!conversationId) {
+          const latest = await env.DB.prepare(
+            "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 1"
+          ).bind(telegramId, vip ? 1 : 0).first();
+          if (latest?.id) conversationId = latest.id;
+          else {
+            conversationId = crypto.randomUUID();
+            await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
+              .bind(conversationId, telegramId, requestedType).run();
+          }
+        }
         const conversation = await env.DB.prepare("SELECT id,assistant_type FROM support_conversations WHERE id=? AND telegram_id=?")
           .bind(conversationId, telegramId).first();
         if (!conversation) return json({ error: "Диалог не найден. Создайте новый диалог." }, 404, origin);
