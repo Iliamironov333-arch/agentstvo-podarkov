@@ -3353,7 +3353,7 @@ function appendAdminOrderCard(key,order,card){
   const conversation=Array.isArray(details.conversation)?details.conversation:[];
   const userText=conversation.filter(m=>m&&m.role==='user').map(m=>String(m.content||'')).join(' ');
   const intentText=(userText+' '+String(details.summary||'')+' '+String(order.subject||'')).toLowerCase();
-  const orderIntent=details.order_intent===true||/хочу\\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\\s+(?:у вас\\s+)?заказ|хочу\\s+заказ(?:ать)?|готов(?:а|ы)?\\s+оформить|можно\\s+заказать|заказать\\s+у\\s+вас|приобрести\\s+(?:у вас\\s+)?/.test(intentText);
+  const orderIntent=details.order_intent===true||/хочу\\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\\s+(?:у вас\\s+)?заказ|хочу\\s+заказ(?:ать)?|готов(?:а|ы)?\\s+оформить|можно\\s+(?:оформить|сделать|разместить|заказать)|заказать\\s+у\\s+вас|приобрести\\s+(?:у вас\\s+)?/.test(intentText);
   let folderKey,folderTitle,openFolder;
   if(bucket==='paid'){folderKey='paid';folderTitle='⭐ Оплаченные';openFolder=false;}
   else if(bucket==='cancelled'){folderKey='cancelled';folderTitle='🔒 Отменённые';openFolder=false;}
@@ -3398,7 +3398,7 @@ function finishAdminOrderCategory(key){
    if(!folder&&folderCounts[folderKey]){folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantFolder=folderKey;folder.open=folderKey==='unfinished'||folderKey==='recent';const summary=document.createElement('summary');summary.textContent=label+' · '+folderCounts[folderKey];summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';const list=document.createElement('div');list.className='admin-assistant-folder-list';folder.append(summary,list);section.append(folder);}
    if(folder){folder.hidden=!(folderCounts[folderKey]>0);const summary=folder.querySelector('summary');if(summary)summary.textContent=label+' · '+(folderCounts[folderKey]||0);}
   });
-  if(!total){const empty=document.createElement('p');empty.className='muted';empty.textContent='Диалогов и незавершённых заказов пока нет.';section.append(empty);}
+  if(!total){const empty=document.createElement('p');empty.className='muted admin-assistant-empty';empty.textContent='Диалогов и незавершённых заказов пока нет.';section.append(empty);}
   return;
  }
  const active=section.querySelector('.admin-order-active');const activeSummary=active?.querySelector('summary');if(activeSummary)activeSummary.textContent='Незавершённые и ожидающие · '+counts.active;
