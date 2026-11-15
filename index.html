@@ -3324,6 +3324,10 @@ function initAdminOrderCategories(){
   const cancelledList=document.createElement('div');cancelledList.className='admin-order-cancelled-list';cancelled.append(cancelledSummary,cancelledList);
   section.append(head,active,paid,cancelled);root.append(section);
   section._orderCounts={active:0,paid:0,cancelled:0};
+  if(key==='assistant'){
+   active.hidden=true;paid.hidden=true;cancelled.hidden=true;
+   section._assistantFolderCounts={unfinished:0,recent:0,older:0,paid:0,cancelled:0};
+  }
  });
  root.dataset.categoryGroupsReady='1';return root;
 }
@@ -3340,27 +3344,40 @@ function resetAdminOrderCategory(key){
 function appendAdminOrderCard(key,order,card){
  const section=document.querySelector('[data-admin-order-category="'+key+'"]');if(!section)return;
  const bucket=adminOrderBucket(order);section._orderCounts[bucket]++;
- const target=bucket==='paid'?section.querySelector('.admin-order-paid-list'):bucket==='cancelled'?section.querySelector('.admin-order-cancelled-list'):section.querySelector('.admin-order-active-list');
- if(key==='assistant'&&target){
-  let created=String(order.created_at||'').trim();
-  if(created&&!created.includes('T'))created=created.replace(' ','T')+'Z';
-  const createdAt=created?Date.parse(created):NaN;
-  const recent=Number.isFinite(createdAt)&&(Date.now()-createdAt)<=3*24*60*60*1000&&(Date.now()-createdAt)>=0;
-  const groupKey=recent?'recent':'older';
-  let folder=target.querySelector('[data-assistant-age="'+groupKey+'"]');
-  if(!folder){
-   folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantAge=groupKey;folder.open=recent;
-   const summary=document.createElement('summary');
-   summary.textContent=recent?'🆕 Новые · за последние 3 дня':'🗂️ Старые · более 3 дней';
-   summary.style.cssText='cursor:pointer;font-weight:700;padding:9px 0';
-   const list=document.createElement('div');list.className='admin-assistant-age-list';
-   folder.append(summary,list);target.append(folder);
+ if(key==='assistant'){
+  const details=(()=>{try{return JSON.parse(order.details_json||'{}')}catch{return {}}})();
+  const conversation=Array.isArray(details.conversation)?details.conversation:[];
+  const userText=conversation.filter(m=>m&&m.role==='user').map(m=>String(m.content||'')).join(' ');
+  const intentText=(userText+' '+String(details.summary||'')+' '+String(order.subject||'')).toLowerCase();
+  const orderIntent=details.order_intent===true||/хочу\\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\\s+(?:у вас\\s+)?заказ|хочу\\s+заказ(?:ать)?|готов(?:а|ы)?\\s+оформить|можно\\s+заказать|заказать\\s+у\\s+вас|приобрести\\s+(?:у вас\\s+)?/.test(intentText);
+  let folderKey,folderTitle,openFolder;
+  if(bucket==='paid'){folderKey='paid';folderTitle='⭐ Оплаченные';openFolder=false;}
+  else if(bucket==='cancelled'){folderKey='cancelled';folderTitle='🔒 Отменённые';openFolder=false;}
+  else if(orderIntent||['review','approved'].includes(String(order.status||''))){folderKey='unfinished';folderTitle='🛒 Незавершённые заказы';openFolder=true;}
+  else{
+   let created=String(order.created_at||'').trim();
+   if(created&&!created.includes('T'))created=created.replace(' ','T')+'Z';
+   const createdAt=created?Date.parse(created):NaN;
+   const recent=Number.isFinite(createdAt)&&(Date.now()-createdAt)<=3*24*60*60*1000&&(Date.now()-createdAt)>=0;
+   folderKey=recent?'recent':'older';
+   folderTitle=recent?'🆕 Новые диалоги · за последние 3 дня':'🗂️ Старые диалоги · более 3 дней';
+   openFolder=recent;
   }
-  const list=folder.querySelector('.admin-assistant-age-list');list?.append(card);
-  const summary=folder.querySelector('summary');
-  if(summary){const count=list?.children.length||0;summary.textContent=(recent?'🆕 Новые · за последние 3 дня':'🗂️ Старые · более 3 дней')+' · '+count;}
+  let folder=section.querySelector('[data-assistant-folder="'+folderKey+'"]');
+  if(!folder){
+   folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantFolder=folderKey;folder.open=openFolder;
+   const summary=document.createElement('summary');summary.textContent=folderTitle;
+   summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';
+   const list=document.createElement('div');list.className='admin-assistant-folder-list';
+   folder.append(summary,list);section.append(folder);
+  }
+  const list=folder.querySelector('.admin-assistant-folder-list');list?.append(card);
+  const counts=section._assistantFolderCounts||(section._assistantFolderCounts={unfinished:0,recent:0,older:0,paid:0,cancelled:0});
+  counts[folderKey]=(counts[folderKey]||0)+1;
+  const summary=folder.querySelector('summary');if(summary)summary.textContent=folderTitle+' · '+(list?.children.length||0);
   return;
  }
+ const target=bucket==='paid'?section.querySelector('.admin-order-paid-list'):bucket==='cancelled'?section.querySelector('.admin-order-cancelled-list'):section.querySelector('.admin-order-active-list');
  target?.append(card);
 }
 function finishAdminOrderCategory(key){
@@ -3369,6 +3386,17 @@ function finishAdminOrderCategory(key){
  const total=counts.active+counts.paid+counts.cancelled;
  const count=section.querySelector('.admin-order-category-count');
  if(count)count.textContent='Всего: '+total+' · активных: '+counts.active;
+ if(key==='assistant'){
+  const folderCounts=section._assistantFolderCounts||{};
+  const labels={unfinished:'🛒 Незавершённые заказы',recent:'🆕 Новые диалоги · за последние 3 дня',older:'🗂️ Старые диалоги · более 3 дней',paid:'⭐ Оплаченные',cancelled:'🔒 Отменённые'};
+  Object.entries(labels).forEach(([folderKey,label])=>{
+   let folder=section.querySelector('[data-assistant-folder="'+folderKey+'"]');
+   if(!folder&&folderCounts[folderKey]){folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantFolder=folderKey;folder.open=folderKey==='unfinished'||folderKey==='recent';const summary=document.createElement('summary');summary.textContent=label+' · '+folderCounts[folderKey];summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';const list=document.createElement('div');list.className='admin-assistant-folder-list';folder.append(summary,list);section.append(folder);}
+   if(folder){folder.hidden=!(folderCounts[folderKey]>0);const summary=folder.querySelector('summary');if(summary)summary.textContent=label+' · '+(folderCounts[folderKey]||0);}
+  });
+  if(!total){const empty=document.createElement('p');empty.className='muted';empty.textContent='Диалогов и незавершённых заказов пока нет.';section.append(empty);}
+  return;
+ }
  const active=section.querySelector('.admin-order-active');const activeSummary=active?.querySelector('summary');if(activeSummary)activeSummary.textContent='Незавершённые и ожидающие · '+counts.active;
  if(!counts.active){const empty=document.createElement('p');empty.className='muted';empty.textContent='Нет неоплаченных или незавершённых заказов.';section.querySelector('.admin-order-active-list')?.append(empty);}
  const paid=section.querySelector('.admin-order-paid'),paidSummary=section.querySelector('.admin-order-paid summary');
