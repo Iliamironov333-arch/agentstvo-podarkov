@@ -3661,14 +3661,16 @@ function applyAdminPermissionVisibility(){
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
  if (!card) return;
- const isRootOwnerClient = String(tg?.initDataUnsafe?.user?.id || '') === '7822470060';
- card.classList.toggle('hidden', !isRootOwnerClient);
- if (!initData) return;
+ // Keep the entry visible; every administrative API request remains server-authorized.
+ card.classList.remove('hidden');
+ if (!initData) {
+  console.warn('Telegram initData is unavailable; admin API access will require opening the app inside Telegram.');
+  return;
+ }
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
   if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
-   card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
    const heroTitle=document.querySelector('#adminPanelView .hero h2');
@@ -3678,12 +3680,12 @@ async function checkOwnerAccess() {
    applyAdminPermissionVisibility();
    if(result.root_owner) loadAdminStaff();
   } else {
-   card.classList.toggle('hidden', !isRootOwnerClient);
+   adminSession = null;
+   console.warn('Admin session was not granted by the server.');
   }
  } catch(e) {
   adminSession = null;
-  card.classList.toggle('hidden', !isRootOwnerClient);
-  if (isRootOwnerClient) console.error('Owner admin session check failed:', e);
+  console.error('Admin session check failed:', e);
  }
 }
 async function loadAdminStaff(){
