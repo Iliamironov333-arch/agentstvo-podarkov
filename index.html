@@ -3676,7 +3676,7 @@ async function checkOwnerAccess() {
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
-  if (result && result.root_owner === true && result.admin_access === true && result.role === 'owner') {
+  if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
