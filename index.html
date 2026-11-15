@@ -1756,7 +1756,7 @@ html body>#seasonDecorations .festive-firework{
   </div>
  </div>
  <div class="panel" id="supportMainChatPanel">
-  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
+  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><div style="display:flex;align-items:center;gap:7px"><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span><button class="secondary hidden" id="supportNewCraftOrderButton" type="button" onclick="resetCraftConversation()">＋ Новый заказ</button></div></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
   <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
   <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
@@ -4057,6 +4057,7 @@ function openCraftInAssistant(){
  const label=document.getElementById('supportActiveAssistantLabel');if(label)label.textContent='🎨 Заказ';
  const input=document.getElementById('supportMessage');if(input)input.placeholder='Расскажи, что хотелось бы создать…';
  const send=document.getElementById('supportSendBtn');if(send)send.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';
+ const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.remove('hidden');
  const button=document.getElementById('supportCraftModeButton');if(button){button.textContent='← Вернуться к обычному чату';button.onclick=closeCraftInAssistant;}
  if(!craftMessages.length)restoreCraftConversation();else loadCraftConversation();
 }
@@ -4067,6 +4068,7 @@ function closeCraftInAssistant(){
  const label=document.getElementById('supportActiveAssistantLabel');if(label)label.textContent='🤖 ИИ помощник';
  const input=document.getElementById('supportMessage');if(input)input.placeholder='Напиши сообщение ИИ помощнику...';
  const send=document.getElementById('supportSendBtn');if(send)send.textContent='Отправить';
+ const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
  const button=document.getElementById('supportCraftModeButton');if(button){button.textContent='🧵 Создать индивидуальную авторскую работу';button.onclick=openCraftInAssistant;}
  loadSupportHistory(activeSupportConversationId);
 }
@@ -4120,9 +4122,7 @@ async function pollCraftMessages(){
   if(next.length!==craftMessages.length||next.some((m,i)=>m.role!==craftMessages[i]?.role||m.content!==craftMessages[i]?.content)){craftMessages=next;if(craftModeActive)renderCraftChat();}
   if(['review','approved','paid'].includes(d.status)&&!craftConversationReady){
    craftConversationReady=true;
-   const panel=document.getElementById('craftResultPanel');panel?.classList.remove('hidden');
-   const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение по этому заказу…';
-   const button=document.getElementById('supportSendBtn');if(button)button.textContent='Отправить сообщение';
+    if(craftModeActive){const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение по этому заказу…';const button=document.getElementById('supportSendBtn');if(button)button.textContent='Отправить сообщение';}
   }
  }catch(e){console.warn('Не удалось обновить переписку ИИ-помощника:',e);}
 }
@@ -4135,12 +4135,14 @@ async function loadCraftConversation(){
    craftMessages=d.conversation;craftOwnerMessages=Array.isArray(d.messages)?d.messages:[];
    craftQuestionCount=Math.min(16,craftMessages.filter(m=>m.role==='user').length);
    craftConversationReady=['review','approved','paid'].includes(d.status);craftAiEnabled=d.ai_enabled!==false;
-   const final=craftMessages.filter(m=>m.role==='assistant').slice(-1)[0];
-   const status=document.getElementById('supportResult');
-   if(status)status.textContent=craftConversationReady?(d.status==='paid'?'Заказ оплачен. Можно продолжить переписку с владельцем здесь.':'Подбор отправлен владельцу. Вы можете продолжить диалог с ним здесь.'):(craftAiEnabled?'Незавершённый диалог восстановлен. Продолжайте отвечать ИИ-мастеру.':'Автоответы ИИ выключены. Вы можете продолжить переписку — владелец ответит вручную.');
-   const input=document.getElementById('supportMessage');if(input)input.placeholder=craftConversationReady?'Напишите сообщение по этому заказу…':'Расскажи подробнее о задумке…';
-   const button=document.getElementById('supportSendBtn');if(button){button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
-   if(craftModeActive)renderCraftChat();startCraftPolling();
+   if(craftModeActive){
+    const status=document.getElementById('supportResult');
+    if(status)status.textContent=craftConversationReady?(d.status==='paid'?'Заказ оплачен. Можно продолжить переписку с владельцем здесь.':'Подбор отправлен владельцу. Вы можете продолжить диалог с ним здесь.'):(craftAiEnabled?'Незавершённый заказ восстановлен. Продолжайте диалог.':'Автоответы ИИ выключены. Вы можете писать — владелец ответит вручную.');
+    const input=document.getElementById('supportMessage');if(input)input.placeholder=craftConversationReady?'Напишите сообщение по этому заказу…':'Расскажи подробнее о задумке…';
+    const button=document.getElementById('supportSendBtn');if(button){button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
+    renderCraftChat();
+   }
+   startCraftPolling();
   }
  }catch(e){console.warn('Не удалось восстановить диалог ИИ-помощника:',e);}
 }
@@ -4156,7 +4158,7 @@ async function restoreCraftConversation(){
   const status=document.getElementById('supportResult'),input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn');
   if(craftConversationReady){if(status)status.textContent='Предложение сохранено. Статус: '+d.status+'. Можно продолжить переписку по этому заказу.';if(input)input.placeholder='Напишите сообщение по этому заказу…';if(button)button.textContent='Отправить сообщение';}
   else{if(status)status.textContent=craftAiEnabled?'Незавершённый заказ восстановлен. Продолжайте диалог. 💬':'Автоответы ИИ выключены. Вы можете писать — владелец ответит вручную. 💬';}
-  renderCraftChat();startCraftPolling();
+  if(craftModeActive)renderCraftChat();startCraftPolling();
  }catch(error){resetCraftConversation();}
 }
 function resetCraftConversation(){
@@ -4164,11 +4166,10 @@ function resetCraftConversation(){
  craftDraftId=newCraftId();craftOwnerMessages=[];try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}
  craftMessages=[{role:'assistant',content:'Привет! Давай вместе придумаем авторскую работу или подарок. Расскажите, какая идея у Вас появилась — даже если пока совсем общая. 😊'}];
  craftQuestionCount=0;craftConversationReady=false;craftAiEnabled=true;
- const panel=document.getElementById('craftResultPanel');if(panel)panel.classList.add('hidden');
- const input=document.getElementById('supportMessage');if(input)input.value='';
+  const input=document.getElementById('supportMessage');if(input)input.value='';
  const button=document.getElementById('supportSendBtn');if(button){button.disabled=false;button.textContent='Отправить ответ';}
  const status=document.getElementById('supportResult');if(status)status.textContent='Помощник уточнит пожелания и подготовит предложение с предварительной ценой.';
- renderCraftChat();
+ if(craftModeActive)renderCraftChat();
 }
 async function sendCraftMessage(){
  const input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn'),status=document.getElementById('supportResult'),message=input.value.trim();
@@ -4187,7 +4188,7 @@ async function sendCraftMessage(){
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   if(Array.isArray(d.conversation))craftMessages=d.conversation;else craftMessages.push({role:d.handoff?'system':'assistant',content:d.reply||'Помощник не вернул сообщение.'});
   craftDraftId=d.draft_id||craftDraftId;craftAiEnabled=d.ai_enabled!==false;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}if(craftDraftId)startCraftPolling();
-  if(d.ready){craftConversationReady=true;const p=document.getElementById('craftResultPanel');p.classList.remove('hidden');document.getElementById('craftResultText').textContent=d.reply||'';status.textContent='Предложение сохранено и передано владельцу. Предварительная оценка ИИ: '+Number(d.estimated_stars||0)+' ⭐. Владелец может изменить итоговую цену перед отправкой счёта. Теперь можно продолжить диалог с ним здесь.';input.placeholder='Напишите мастеру Агентства…';startCraftPolling();}
+  if(d.ready){craftConversationReady=true;status.textContent='Предложение сохранено и передано владельцу. Предварительная оценка ИИ: '+Number(d.estimated_stars||0)+' ⭐. Владелец может изменить итоговую цену перед отправкой счёта. Теперь можно продолжить диалог с ним здесь.';input.placeholder='Напишите сообщение по этому заказу…';startCraftPolling();}
   else if(d.handoff){status.textContent='Сообщение сохранено. Автоответы ИИ выключены — владелец сможет ответить вручную. 💬';}
   else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();
