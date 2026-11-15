@@ -3004,6 +3004,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(!/^[0-9a-f-]{30,40}$/i.test(draftId))draftId=makeId();
           let existing=await env.DB.prepare("SELECT id,telegram_id,status,estimated_stars,details_json FROM ai_order_drafts WHERE id=?").bind(draftId).first();
           if(existing&&String(existing.telegram_id)!==String(telegramId))return json({error:"Не удалось сохранить диалог мастерской."},409,origin);
+          if(existing){let oldDetails={};try{oldDetails=JSON.parse(existing.details_json||"{}");}catch{}if(oldDetails.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем. Начните новый диалог."},410,origin);}
           if(existing?.status==="cancelled"){draftId=makeId();existing=null;}
           if(existing&&existing.status!=="collecting")return json({error:"Этот диалог уже передан владельцу. Продолжите переписку в чате заказа."},409,origin);
           let previous={};try{previous=JSON.parse(existing?.details_json||"{}");}catch{}
@@ -3057,6 +3058,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем и больше недоступен."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
       }
       if (path === "/api/craft/messages" && method === "POST") {
@@ -3065,6 +3067,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.chat_deleted===true)return json({error:"Этот диалог закрыт владельцем. Продолжить его нельзя."},410,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
