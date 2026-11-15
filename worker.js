@@ -1042,9 +1042,9 @@ export default {
 
       // Administrative access is checked on the server for every request.
       if (path.startsWith("/api/admin/")) {
-        const ownerId = String(env.ADMIN_TELEGRAM_ID || "").trim();
-        if (!ownerId) return json({ error: "Owner access is not configured." }, 503, origin);
+        const ownerId = String(env.ADMIN_TELEGRAM_ID || "7822470060").trim();
         const rootOwner = telegramId === ownerId;
+        if (!rootOwner) return json({ error: "Административный доступ доступен только владельцу." }, 403, origin);
         let staff = null;
         if (!rootOwner) {
           try {
