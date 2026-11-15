@@ -541,13 +541,17 @@ async function buildSupportNavigationActions(env, message) {
     console.error("Support navigation catalog lookup failed:", String(error).slice(0, 250));
   }
 
+  if (/(главн.{0,8}меню|в меню|домой|на главную)/i.test(text)) add({ label: "🏠 Главное меню", view: "menuView" });
   if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
+  if (/(конструктор подарка|собрать подарок|сборк.{0,12}подарк|подарочн.{0,12}набор)/i.test(text)) add({ label: "🎁 Конструктор подарка", view: "giftBuilderView" });
+  if (/(акци|скидк|спецпредложен)/i.test(text)) add({ label: "🍂 Скидки и акции", view: "dealsView" });
   if (/(корзин|оформить заказ|перейти к оплате|доставк)/i.test(text)) add({ label: "🛒 Открыть корзину", view: "cartView" });
   if (/(мои заказы|список заказов|истори[яю] заказов|(?:мой|мои|моего).{0,12}заказ|статус.{0,20}заказ|заказ.{0,20}статус)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
   if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
   if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
   if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
-  if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
+  if (/(создать индивидуальн.{0,12}заказ|оформить индивидуальн.{0,12}заказ|конструктор индивидуальн.{0,12}заказ)/i.test(text)) add({ label: "📝 Индивидуальный заказ", view: "customWizardView" });
+  else if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
   if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "🤖 ИИ помощник", view: "supportView" });
   if (/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text)) add({ label: "✉️ Написать владельцу", view: "owner" });
   if (/сертификат/i.test(text) && /(активир|баланс|начисл)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
