@@ -334,6 +334,10 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
         linked=candidate;linkedDetails=parsed;break;
       }
     }
+    if(linked&&linkedDetails.chat_deleted===true){
+      // Владелец закрыл эту переписку: старый тред больше не обслуживается.
+      return true;
+    }
     if(!linked){
       // Не прикрепляем ответ на чужое или постороннее сообщение к активному заказу.
       return false;
@@ -1081,7 +1085,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
       if(details.chat_deleted===true)return aiJson({ok:true,deleted:true});
       details.chat_deleted=true;details.ai_enabled=false;details.conversation=[];details.owner_messages=[];details.chat_deleted_at=new Date().toISOString();
-      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status=CASE WHEN status='collecting' THEN 'cancelled' ELSE status END,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
       await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_chat_deleted",details:{draft_id:id,status:draft.status}});
       return aiJson({ok:true,deleted:true});
     }
