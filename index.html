@@ -3664,7 +3664,7 @@ async function checkOwnerAccess() {
  const description = card.querySelector('span:last-child');
  // The Telegram client-side ID only controls whether the entry is displayed.
  // Every administrative API request is still authenticated and authorized by the Worker.
- const isKnownOwner = String(tg?.initDataUnsafe?.user?.id || '') === '7822470060';
+ const isKnownOwner = String(tg?.initDataUnsafe?.user?.id || '').trim() === '7822470060';
  card.classList.toggle('hidden', !isKnownOwner);
  if (isKnownOwner && description) description.textContent = 'Проверяем защищённый доступ к панели…';
  if (!initData) {
@@ -3676,7 +3676,7 @@ async function checkOwnerAccess() {
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
-  if (result && result.admin_access === true && ['owner','moderator'].includes(result.role)) {
+  if (result && result.root_owner === true && result.admin_access === true && result.role === 'owner') {
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
    if(title) title.textContent=result.role==='owner'?'🔐 Панель владельца':'🛡️ Панель модератора';
