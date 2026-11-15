@@ -1726,7 +1726,7 @@ html body>#seasonDecorations .festive-firework{
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
  <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
- <div class="panel hidden" id="orderChatPanel"><div class="sectionhead"><h3 id="orderChatTitle">💬 Чат заказа</h3><button class="secondary" type="button" onclick="refreshOrderChat()">↻ Обновить</button></div><div id="orderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:45vh;overflow:auto;padding:4px 0 12px"></div><textarea id="orderChatInput" rows="3" maxlength="2000" placeholder="Напишите ИИ-консультанту по этому заказу…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="orderChatSend" type="button" onclick="sendOrderChatMessage()">Отправить</button><p class="notice" id="orderChatStatus">ИИ помогает обсудить изменения. Любое изменение заказа сначала проверяет владелец.</p></div>
+ 
 </section>
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
 <section id="profileView" class="hidden">
@@ -1740,7 +1740,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 ИИ помощник отвечает на вопросы и помогает с заказами; при необходимости обращение можно передать владельцу. ✨ При активной VIP-подписке расширенный режим включается автоматически. Базовый режим остаётся доступным всем.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
- <div class="sectionhead"><h2>🤖 ИИ помощник</h2><span id="supportChatCounter">0 / 3 диалога</span></div>
+ <div class="sectionhead"><h2 id="supportMainHeading">🤖 ИИ помощник</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
  <div class="panel">
   <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
   <p class="muted">🎟️ Для активации подарочного сертификата напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
@@ -2000,7 +2000,7 @@ function showView(id) {
   if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
   loadMe();
  }
- if (id === 'supportView') { if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
+ if (id === 'supportView') { if(activeOrderChatId)refreshOrderChat(); else if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
  
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
@@ -4033,13 +4033,13 @@ async function loadSupportHistory(conversationId, actions = null) {
 }
 
 async function openSupportConversation(id) {
- craftModeActive=false;
+ activeOrderChatId='';craftModeActive=false;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
  await loadSupportHistory(id);
 }
 
 async function createSupportConversation() {
- craftModeActive=false;
+ activeOrderChatId='';craftModeActive=false;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
  const button = document.getElementById('supportNewChatButton');
  if (button) button.disabled = true;
@@ -4065,7 +4065,7 @@ function isCraftOrderIntent(message){
  return /(?:индивидуальн\w*\s+(?:авторск\w*\s+)?работ\w*|авторск\w*\s+(?:работ\w*|подар\w*|издел\w*)|(?:заказать|оформить)\s+(?:мне\s+)?(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ)|(?:сделать|создать|изготовить)\s+(?:мне\s+)?(?:на\s+заказ|индивидуальн\w*|авторск\w*)|хочу\s+(?:заказать|создать|оформить)\s+(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ|на\s+заказ))/i.test(text);
 }
 async function openCraftInAssistant(){
- craftModeActive=true;
+ activeOrderChatId='';craftModeActive=true;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.remove('hidden');
  const input=document.getElementById('supportMessage');if(input)input.placeholder='Напиши сообщение ИИ-помощнику…';
  const send=document.getElementById('supportSendBtn');if(send)send.textContent=craftConversationReady?'Отправить сообщение':'Отправить';
@@ -4082,6 +4082,7 @@ async function sendSupport() {
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
  if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
+ if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
  if(isCraftOrderIntent(message)){
   await openCraftInAssistant();
@@ -4297,38 +4298,61 @@ async function checkout() {
 async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
 async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 let activeOrderChatId='',activeOrderChatType='product';
+function setUnifiedChatContext(isOrder){
+ const list=document.getElementById('supportConversationPanel');
+ const back=document.getElementById('supportBackToInboxButton');
+ const heading=document.getElementById('supportMainHeading');
+ const refresh=document.getElementById('supportRefreshButton');
+ const input=document.getElementById('supportMessage');
+ const send=document.getElementById('supportSendBtn');
+ if(list)list.classList.toggle('hidden',isOrder);
+ if(back)back.classList.toggle('hidden',!isOrder);
+ if(refresh)refresh.hidden=!isOrder;
+ if(heading)heading.textContent=isOrder?'💬 Переписка по заказу № '+activeOrderChatId:'🤖 ИИ помощник';
+ if(input){input.placeholder=isOrder?'Напишите сообщение по этому заказу…':'Напиши сообщение ИИ помощнику…';input.disabled=false;}
+ if(send){send.textContent='Отправить';send.disabled=false;}
+}
 async function openOrderChat(id,type,title){
  activeOrderChatId=String(id);activeOrderChatType=type==='custom'?'custom':'product';
- const panel=document.getElementById('orderChatPanel');if(panel)panel.classList.remove('hidden');
- const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;
- const input=document.getElementById('orderChatInput');if(input)input.value='';
- await refreshOrderChat();panel?.scrollIntoView({behavior:'smooth',block:'start'});
+ craftModeActive=false;
+ const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.add('hidden');
+ showView('supportView');
+ setUnifiedChatContext(true);
+ const input=document.getElementById('supportMessage');if(input)input.value='';
+ await refreshOrderChat();
+ document.getElementById('supportMainChatPanel')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function exitOrderChat(){
+ activeOrderChatId='';
+ setUnifiedChatContext(false);
+ loadSupportHistory(activeSupportConversationId);
 }
 async function refreshOrderChat(){
  if(!activeOrderChatId)return;
- const log=document.getElementById('orderChatLog'),status=document.getElementById('orderChatStatus');
+ const log=document.getElementById('supportChatLog'),status=document.getElementById('supportResult');
+ const input=document.getElementById('supportMessage'),send=document.getElementById('supportSendBtn');
  if(status)status.textContent='Загружаем переписку…';
  try{
   const d=await apiFetch('/api/order-chat?order_id='+encodeURIComponent(activeOrderChatId));
-  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);const heading=document.getElementById('orderChatTitle');if(heading)heading.textContent='💬 Заказ № '+activeOrderChatId;return refreshOrderChat();}
+  if(d.superseded&&d.new_order_id){activeOrderChatId=String(d.new_order_id);setUnifiedChatContext(true);return refreshOrderChat();}
   if(log){log.replaceChildren();(d.messages||[]).forEach(m=>{
    const row=document.createElement('div');row.className='admin-detail-line';
-   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-консультант';
+   const who=document.createElement('b');who.textContent=m.sender_type==='buyer'?'Вы':m.sender_type==='owner'?'Владелец':m.sender_type==='system'?'Система':'ИИ-помощник';
    const body=document.createElement('div');body.textContent=m.content||'';body.style.whiteSpace='pre-wrap';body.style.marginTop='4px';
    const date=document.createElement('small');date.className='muted';date.textContent=formatDate(m.created_at);
    row.append(who,body,date);log.append(row);
   });}
-  const input=document.getElementById('orderChatInput'),send=document.getElementById('orderChatSend');
-  if(input){input.disabled=!d.chat_available;input.placeholder=d.chat_available?'Напишите ИИ-консультанту по этому заказу…':'Первые 3 дня для ИИ-консультанта по заказу завершились.';}
-  if(send)send.disabled=!d.chat_available;
-  if(status)status.textContent=!d.chat_available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'ИИ помогает обсудить изменения. Все изменения применяются только после проверки владельцем.';
- }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить чат заказа.';}
+  const available=!!d.chat_available;
+  if(input){input.disabled=!available;input.placeholder=available?'Напишите сообщение по этому заказу…':'Срок переписки по заказу завершён. История доступна для просмотра.';}
+  if(send)send.disabled=!available;
+  if(status)status.textContent=!available?'Срок работы ИИ-консультанта по заказу завершён. История переписки доступна для просмотра.':(d.changes||[]).some(x=>x.status==='pending')?'Предложение по изменению передано владельцу на проверку.':'Здесь можно обсудить заказ. Любые изменения применяются только после проверки владельцем.';
+ }catch(e){if(status)status.textContent=e.message||'Не удалось загрузить переписку.';}
 }
 async function sendOrderChatMessage(){
- const input=document.getElementById('orderChatInput'),button=document.getElementById('orderChatSend'),status=document.getElementById('orderChatStatus'),message=input?.value.trim()||'';
+ const input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn'),status=document.getElementById('supportResult'),message=input?.value.trim()||'';
  if(!activeOrderChatId||!message)return;
- button.disabled=true;button.textContent='ИИ отвечает…';
- try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-консультанта получен.';}
+ button.disabled=true;button.textContent='Отправляем…';
+ try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-помощника получен.';}
  catch(e){if(status)status.textContent=e.message||'Не удалось отправить сообщение.';}
  finally{button.disabled=false;button.textContent='Отправить';}
 }
