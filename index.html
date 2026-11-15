@@ -1494,6 +1494,17 @@ html body>#seasonDecorations .festive-firework{
    <label>Подтверждение<input id="adminBackupRestoreConfirm" maxlength="20" placeholder="Введите RESTORE D1"></label>
    <button class="secondary" type="button" id="adminBackupRestoreButton" onclick="restoreAdminBackup()">Восстановить базу</button>
   </div>
+  <div class="panel" id="adminGiftCertificatesPanel">
+   <div class="sectionhead"><h3>🎟️ Подарочные сертификаты</h3><button class="secondary" type="button" onclick="loadAdminGiftCertificates()">↻ Обновить</button></div>
+   <p class="muted">Создавай одноразовые коды. Покупатель вводит код в чате помощника, а сервер начисляет указанные баллы на его внутренний баланс.</p>
+   <div class="admin-user-detail">
+    <label>Код сертификата (8–32 символа)<input id="adminGiftCertificateCode" minlength="8" maxlength="32" placeholder="Например, GIFT2026"></label>
+    <label>Количество баллов<input id="adminGiftCertificatePoints" type="number" min="1" max="1000000" step="1" placeholder="Например, 250"></label>
+    <button class="primary" type="button" onclick="saveAdminGiftCertificate()">＋ Создать сертификат</button>
+   </div>
+   <p id="adminGiftCertificatesStatus" class="notice" aria-live="polite">Список сертификатов загружается…</p>
+   <div id="adminGiftCertificatesList"></div>
+  </div>
   <div class="panel" id="adminPromosPanel">
    <div class="sectionhead"><h3>🏷️ Промокоды и акции</h3><button class="secondary" type="button" onclick="loadAdminPromos()">↻ Обновить</button></div>
    <p class="muted">Дополнительная скидка применяется только по введённому коду. Итоговую цену всегда рассчитывает Worker.</p>
@@ -1724,7 +1735,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка открывает VIP-поддержку и VIP-ассистента по подбору подарков.</p></div>
  <div class="panel"><h3>✨ VIP на месяц</h3><div class="price">500 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Доступ на 30 дней. Подписка активируется после подтверждения оплаты Telegram.</p><button class="primary" onclick="subscribeVip('subscription')">Оформить VIP на месяц</button></div>
  <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">2 000 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Постоянный VIP-доступ. Статус фиксируется в серверной базе после подтверждения платежа.</p><button class="primary" onclick="subscribeVip('lifetime')">Купить VIP навсегда</button></div>
- <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ VIP-ассистент общается и помогает подобрать подарок. Базовая ИИ-поддержка остаётся бесплатной.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
+ <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ Расширенный режим ИИ помощника автоматически включается при активной VIP-подписке. Базовый режим остаётся доступным всем.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>🤖 ИИ помощник</h2><span id="supportChatCounter">0 / 3 диалога</span></div>
@@ -1755,7 +1766,7 @@ html body>#seasonDecorations .festive-firework{
   <div class="panel"><div class="sectionhead"><h3>Диалог с мастером</h3><span id="craftQuestionCount">0 / 16 вопросов</span></div><div id="craftChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:48vh;overflow:auto;padding:4px 0 12px"></div><textarea id="craftChatInput" rows="3" maxlength="1500" placeholder="Расскажи, что хотелось бы создать…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="craftSendBtn" onclick="sendCraftMessage()">Отправить ответ</button><div class="row-actions"><button class="secondary" type="button" onclick="resetCraftConversation()">Начать заново</button></div><p class="notice" id="craftResultStatus" aria-live="polite">Помощник уточняет пожелания, подбирает готовую работу и рассчитывает предварительную цену.</p></div>
   <div class="panel hidden" id="craftResultPanel"><h3>Предложение мастерской</h3><div id="craftResultText" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px"></div></div>
  </section>
-<section id="vipSupportView" class="hidden"><div class="sectionhead"><h2>👑 VIP-помощь Агентства</h2><span id="vipHelpStatus">Проверка подписки…</span></div><div class="panel"><p class="muted">Персональная помощь для владельцев действующей VIP-подписки. Опишите вопрос — помощник учтёт VIP-статус и при необходимости передаст обращение владельцу.</p><textarea id="vipSupportMessage" rows="4" maxlength="2000" placeholder="Опишите, с чем нужна помощь…" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea><button class="primary" id="vipSupportSendBtn" onclick="sendVipSupport()">Отправить в VIP-поддержку</button><p class="notice" id="vipSupportResult" aria-live="polite"></p></div></section>
+
 <section id="balanceView" class="hidden">
  <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
  <div class="panel"><div class="lineitem"><span>Баланс</span><b id="balancePoints">— ⭐</b></div><p class="muted">1 Telegram Star = 1 балл. Все операции фиксируются в базе Агентства.</p><div class="sectionhead"><h3>Пополнить</h3><span>выбери сумму</span></div><div class="row-actions"><button class="secondary" onclick="topUp(50)">50 ⭐</button><button class="secondary" onclick="topUp(100)">100 ⭐</button><button class="secondary" onclick="topUp(250)">250 ⭐</button><button class="secondary" onclick="topUp(500)">500 ⭐</button><button class="secondary" onclick="topUp(750)">750 ⭐</button><button class="secondary" onclick="topUp(1000)">1000 ⭐</button></div><div style="margin-top:16px"><label for="customTopUpAmount" class="muted" style="display:block;margin-bottom:7px">Или укажите собственную сумму (от 1 до 10 000 ⭐)</label><input id="customTopUpAmount" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="Например, 1250" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><button class="primary" type="button" onclick="topUpCustom()">Пополнить на указанную сумму</button><p class="notice">Сервер проверит сумму и создаст счёт Telegram Stars. При сумме свыше 500 ⭐ сохраняется бонус +50 баллов.</p></div></div>
@@ -2685,6 +2696,34 @@ async function restoreAdminBackup(){
  catch(e){status.textContent=e.message||'Не удалось восстановить D1.';toast(status.textContent);}
  finally{button.disabled=false;}
 }
+async function loadAdminGiftCertificates(){
+ const status=document.getElementById('adminGiftCertificatesStatus'),root=document.getElementById('adminGiftCertificatesList');if(!status||!root)return;
+ status.textContent='Загружаем сертификаты…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/gift-certificates');
+  if(data.migration_pending){status.textContent='Для сертификатов требуется миграция 0025_gift_certificates.sql.';return;}
+  const rows=data.certificates||[];status.textContent='Сертификатов: '+rows.length;
+  rows.forEach(item=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');const title=document.createElement('strong');title.textContent=item.code+' · '+Number(item.points).toLocaleString('ru-RU')+' баллов';
+   const meta=document.createElement('small');meta.textContent=item.redeemed_by?'Использован · Telegram ID: '+item.redeemed_by+' · '+(item.redeemed_at||''):(item.is_active?'Активен · ещё не использован':'Отключён');
+   info.append(title,meta);row.append(info);
+   if(item.is_active&&!item.redeemed_by){const disable=document.createElement('button');disable.type='button';disable.className='secondary';disable.textContent='Отключить';disable.addEventListener('click',async()=>{if(!confirm('Отключить сертификат '+item.code+'?'))return;disable.disabled=true;try{await apiFetch('/api/admin/gift-certificate-disable',{method:'POST',body:JSON.stringify({code:item.code})});await loadAdminGiftCertificates();}catch(e){toast(e.message||'Не удалось отключить сертификат.');disable.disabled=false;}});row.append(disable);}
+   root.append(row);
+  });
+ }catch(e){status.textContent=e.message||'Не удалось загрузить сертификаты.';}
+}
+async function saveAdminGiftCertificate(){
+ const code=document.getElementById('adminGiftCertificateCode')?.value.trim()||'';
+ const points=Number(document.getElementById('adminGiftCertificatePoints')?.value||0);
+ const button=document.querySelector('#adminGiftCertificatesPanel button.primary');if(button)button.disabled=true;
+ try{
+  const data=await apiFetch('/api/admin/gift-certificates',{method:'POST',body:JSON.stringify({code,points})});
+  document.getElementById('adminGiftCertificateCode').value='';document.getElementById('adminGiftCertificatePoints').value='';
+  toast('Сертификат '+data.code+' создан на '+Number(data.points).toLocaleString('ru-RU')+' баллов.');await loadAdminGiftCertificates();
+ }catch(e){toast(e.message||'Не удалось создать сертификат.');}
+ finally{if(button)button.disabled=false;}
+}
 async function loadAdminPromos(){
  const status=document.getElementById('adminPromosStatus'),root=document.getElementById('adminPromosList');if(!status||!root)return;
  status.textContent='Загружаем промокоды…';root.replaceChildren();
@@ -2777,7 +2816,7 @@ async function openAdminConversation(telegramId, conversationId) {
   if(data.mode==='human'){
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
    const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
-   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,message})});toast('Сообщение отправлено.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
    box.append(reply,send);
   }
   (data.messages||[]).forEach(message=>{
@@ -3006,6 +3045,7 @@ async function loadAnnouncements(){
 }
 
 async function loadAdminDashboard() {
+ loadAdminGiftCertificates();
  loadAdminPromos();
  loadAdminAnalytics();
  loadAdminBackupStatus();
@@ -3923,9 +3963,6 @@ async function sendSupport() {
 }
 
 function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),d=document.getElementById('vipHelpDescription'),b=document.getElementById('vipHelpButton'),h=document.getElementById('vipHelpStatus');if(s&&!v)s.textContent='Активной VIP-подписки пока нет.';if(d)d.textContent=v?'Подписка подтверждена сервером. Вам доступен отдельный канал VIP-помощи.':'Для доступа необходима действующая VIP-подписка. Обычная поддержка остаётся доступной.';if(b){b.disabled=!v;b.textContent=v?'Открыть VIP-помощь →':'🔒 VIP-помощь заблокирована';}if(h)h.textContent=v?'Подписка активна':'Нужен VIP';}
-async function refreshVipHelpCard(){if(!initData){setVipUi(false);return;}try{const d=await apiFetch('/api/vip');setVipUi(!!d.vip);}catch(e){setVipUi(false);const x=document.getElementById('vipHelpDescription');if(x)x.textContent='Не удалось проверить подписку: '+(e.message||'ошибка сервера')+'. Обновите приложение.';}}
-function openVipSupport(){if(!vipActive){toast('Для VIP-помощи нужна действующая подписка.');return;}showView('vipSupportView');}
-async function sendVipSupport(){const i=document.getElementById('vipSupportMessage'),r=document.getElementById('vipSupportResult'),b=document.getElementById('vipSupportSendBtn'),message=i.value.trim();if(!message){r.textContent='Опишите вопрос перед отправкой.';return;}b.disabled=true;r.textContent='VIP-помощник готовит ответ…';try{const d=await apiFetch('/api/vip/support',{method:'POST',body:JSON.stringify({message})});i.value='';r.textContent=d.reply||'Обращение обработано.';}catch(e){r.textContent=e.message||'Не удалось отправить обращение.';}finally{b.disabled=false;}}
 let craftMessages=[];
 let craftQuestionCount=0;
 let craftConversationReady=false;
