@@ -309,15 +309,22 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId){
   let details={};if(active){try{details=JSON.parse(active.details_json||"{}");}catch{}}
   if(!active){
     const id=crypto.randomUUID();
-    details={source:"group",group_chat_id:String(chatId),conversation:[{role:"user",content:String(text).slice(0,1000)}],order_fields:{},step:"item"};
+    details={source:"group",ai_enabled:true,group_chat_id:String(chatId),conversation:[{role:"user",content:String(text).slice(0,1000)}],order_fields:{},step:"item"};
     await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status,group_message_id) VALUES(?,?,?,?,?,?,?,0,'collecting',?)")
       .bind(id,String(chatId),String(user.id),user.username||null,user.first_name||null,"Заказ из группы",JSON.stringify(details),replyToMessageId?Number(replyToMessageId):null).run();
+    await aiNotifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИЗ ГРУППЫ\nID: "+id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\nПокупатель начал оформление в группе. Счёт недоступен до завершения диалога и проверки владельцем.");
     await aiGroupReply(env,chatId,user.id,"Конечно, помогу оформить — спокойно и по шагам 😊\nЧто именно Вы хотите заказать?",replyToMessageId);
     return true;
   }
   details.conversation=Array.isArray(details.conversation)?details.conversation:[];
   details.conversation.push({role:"user",content:String(text).slice(0,1000)});
   details.order_fields=details.order_fields||{};
+  if(details.ai_enabled===false&&!/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
+    details.conversation=details.conversation.slice(-24);
+    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
+    await aiNotifyOwner(env,"💬 Сообщение по групповому заказу (ИИ выключен)\nЗаказ: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\n"+String(text).slice(0,700)+"\n\nОтветьте вручную в разделе ИИ-заказы.");
+    return true;
+  }
   if(/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
     await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
     await aiGroupReply(env,chatId,user.id,"Хорошо, сбор заказа остановлен. Если захотите вернуться к идее, я помогу 😊",replyToMessageId);return true;
@@ -960,6 +967,41 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   if(path==="/api/admin/ai-orders" && method==="POST") {
     if(!has("ai_orders_manage"))return aiJson({error:"Недостаточно прав."},403);
     const body=await aiReadJson(request);
+    if(body.action==="set_bundle_ai") {
+      const orderId=String(body.order_id||"").slice(0,100),enabled=body.enabled===true;
+      const bundle=await env.DB.prepare("SELECT id,bundle_json FROM gift_bundles WHERE order_id=? AND status='ordered' ORDER BY created_at DESC LIMIT 1").bind(orderId).first();
+      if(!bundle)return aiJson({error:"Заказ конструктора не найден или уже закрыт."},404);
+      let data={};try{data=JSON.parse(bundle.bundle_json||"{}");}catch{}
+      data.ai_enabled=enabled;
+      await env.DB.prepare("UPDATE gift_bundles SET bundle_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ordered'").bind(JSON.stringify(data).slice(0,20000),bundle.id).run();
+      await aiLog(env,{actor:telegramId,type:"gift_bundle_ai_toggled",details:{order_id:orderId,enabled}});
+      return aiJson({ok:true,ai_enabled:enabled});
+    }
+    if(body.action==="set_ai") {
+      const id=String(body.id||"").slice(0,80),enabled=body.enabled===true;
+      const draft=await env.DB.prepare("SELECT id,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('collecting','review','approved','paid')").bind(id).first();
+      if(!draft)return aiJson({error:"Заказ или диалог не найден."},404);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      details.ai_enabled=enabled;
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
+      await aiLog(env,{actor:telegramId,type:"ai_order_auto_reply_toggled",details:{draft_id:id,enabled}});
+      return aiJson({ok:true,ai_enabled:enabled});
+    }
+    if(body.action==="reply_order") {
+      const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,2000);
+      if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
+      const draft=await env.DB.prepare("SELECT id,chat_id,telegram_id,group_message_id,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('collecting','review','approved','paid')").bind(id).first();
+      if(!draft)return aiJson({error:"Диалог заказа не найден."},404);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
+      details.owner_messages.push({content:reply,created_at:new Date().toISOString(),sender:"owner"});details.owner_messages=details.owner_messages.slice(-20);
+      details.conversation=Array.isArray(details.conversation)?details.conversation:[];details.conversation.push({role:"owner",content:reply});details.conversation=details.conversation.slice(-24);
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
+      let delivered=false;
+      try{if(details.source==="group")await aiTelegram(env,"sendMessage",{chat_id:draft.chat_id,text:"💬 Ответ владельца Агентства по Вашему заказу\n\n"+reply,reply_to_message_id:draft.group_message_id||undefined,allow_sending_without_reply:true});else await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"💬 Сообщение владельца по Вашему заказу\n\n"+reply});delivered=true;}catch(error){console.error("AI order owner reply delivery failed:",String(error).slice(0,220));}
+      await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_owner_reply",details:{draft_id:id,delivered}});
+      return aiJson({ok:true,delivered});
+    }
     if(body.action==="reply_workshop") {
       const id=String(body.id||"").slice(0,80),reply=String(body.reply||"").trim().slice(0,3000);
       if(!reply)return aiJson({error:"Введите сообщение покупателю."},400);
