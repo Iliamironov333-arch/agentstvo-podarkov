@@ -3660,8 +3660,10 @@ function applyAdminPermissionVisibility(){
 }
 async function checkOwnerAccess() {
  const card = document.getElementById('ownerAdminCard');
- if (!card || !initData) return;
- card.classList.add('hidden');
+ if (!card) return;
+ const isRootOwnerClient = String(tg?.initDataUnsafe?.user?.id || '') === '7822470060';
+ card.classList.toggle('hidden', !isRootOwnerClient);
+ if (!initData) return;
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
@@ -3675,10 +3677,13 @@ async function checkOwnerAccess() {
    if(cardTitle?.firstChild) cardTitle.firstChild.textContent=result.role==='owner'?'🔐 Панель владельца ':'🛡️ Панель модератора ';
    applyAdminPermissionVisibility();
    if(result.root_owner) loadAdminStaff();
+  } else {
+   card.classList.toggle('hidden', !isRootOwnerClient);
   }
  } catch(e) {
   adminSession = null;
-  card.classList.add('hidden');
+  card.classList.toggle('hidden', !isRootOwnerClient);
+  if (isRootOwnerClient) console.error('Owner admin session check failed:', e);
  }
 }
 async function loadAdminStaff(){
