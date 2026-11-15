@@ -1732,10 +1732,10 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill hidden">👑 VIP УЧАСТНИК</span></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Баллы репутации</span><b id="profileReputation" style="display:inline-flex;align-items:center;gap:7px"><span style="display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:linear-gradient(145deg,#9b5cff,#5925b7);color:#fff;font-size:15px;box-shadow:0 2px 9px #7838d855">ϟ</span><span>—</span></b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">За каждую оплаченную Telegram Star начисляется 1 балл репутации. Пополнения внутреннего баланса учитываются; повторное списание внутреннего баланса баллы не добавляет.</p><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
 </section>
 <section id="vipView" class="hidden">
- <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка открывает VIP-поддержку и VIP-ассистента по подбору подарков.</p></div>
+ <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка включает расширенный режим ИИ помощника и дополнительные возможности Агентства.</p></div>
  <div class="panel"><h3>✨ VIP на месяц</h3><div class="price">500 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Доступ на 30 дней. Подписка активируется после подтверждения оплаты Telegram.</p><button class="primary" onclick="subscribeVip('subscription')">Оформить VIP на месяц</button></div>
  <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">2 000 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Постоянный VIP-доступ. Статус фиксируется в серверной базе после подтверждения платежа.</p><button class="primary" onclick="subscribeVip('lifetime')">Купить VIP навсегда</button></div>
- <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 VIP-поддержка старается решить вопросы и при необходимости передаёт обращение владельцу вместе с историей. ✨ Расширенный режим ИИ помощника автоматически включается при активной VIP-подписке. Базовый режим остаётся доступным всем.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
+ <div class="panel"><h3>Что входит?</h3><p class="muted">🤖 ИИ помощник отвечает на вопросы и помогает с заказами; при необходимости обращение можно передать владельцу. ✨ При активной VIP-подписке расширенный режим включается автоматически. Базовый режим остаётся доступным всем.</p><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2>🤖 ИИ помощник</h2><span id="supportChatCounter">0 / 3 диалога</span></div>
@@ -3962,7 +3962,7 @@ async function sendSupport() {
  finally { button.disabled = false; }
 }
 
-function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus'),d=document.getElementById('vipHelpDescription'),b=document.getElementById('vipHelpButton'),h=document.getElementById('vipHelpStatus');if(s&&!v)s.textContent='Активной VIP-подписки пока нет.';if(d)d.textContent=v?'Подписка подтверждена сервером. Вам доступен отдельный канал VIP-помощи.':'Для доступа необходима действующая VIP-подписка. Обычная поддержка остаётся доступной.';if(b){b.disabled=!v;b.textContent=v?'Открыть VIP-помощь →':'🔒 VIP-помощь заблокирована';}if(h)h.textContent=v?'Подписка активна':'Нужен VIP';}
+function setVipUi(v){vipActive=!!v;const s=document.getElementById('vipStatus');if(s)s.textContent=v?'VIP-подписка активна. Расширенный режим ИИ помощника включается автоматически.':'Активной VIP-подписки пока нет. ИИ помощник работает в стандартном режиме.';}
 let craftMessages=[];
 let craftQuestionCount=0;
 let craftConversationReady=false;
