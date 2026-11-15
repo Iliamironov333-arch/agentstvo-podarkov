@@ -3298,11 +3298,11 @@ function initAdminOrderCategories(){
  if(root.dataset.categoryGroupsReady==='1')return root;
  root.replaceChildren();
  const definitions=[
-  ['workshop','🧵 Из ИИ-мастерской'],
   ['questionnaire','📝 Через опрос'],
   ['store','🛍️ Через магазин'],
-  ['bundle','🎁 Подарочными наборами'],
-  ['assistant','🤖 С помощью ИИ-помощника']
+  ['bundle','🧩 ИИ-конструктор и подарочные наборы'],
+  ['assistant','🤖 ИИ-помощник и индивидуальные чаты'],
+  ['group','👥 ИИ-заказы из группы']
  ];
  definitions.forEach(([key,title])=>{
   const section=document.createElement('section');section.className='admin-order-category';section.dataset.adminOrderCategory=key;
@@ -3310,7 +3310,9 @@ function initAdminOrderCategories(){
   const heading=document.createElement('h4');heading.textContent=title;
   const count=document.createElement('small');count.className='muted admin-order-category-count';count.textContent='Загрузка…';
   head.append(heading,count);
-  const active=document.createElement('div');active.className='admin-order-active';
+  const active=document.createElement('details');active.className='admin-detail-line admin-order-active';active.open=true;
+  const activeSummary=document.createElement('summary');activeSummary.textContent='Незавершённые и ожидающие';activeSummary.style.cssText='cursor:pointer;font-weight:700;padding:9px 0';
+  const activeList=document.createElement('div');activeList.className='admin-order-active-list';active.append(activeSummary,activeList);
   const paid=document.createElement('details');paid.className='admin-detail-line admin-order-paid';
   const paidSummary=document.createElement('summary');paidSummary.textContent='Оплаченные';paidSummary.style.cssText='cursor:pointer;font-weight:700;padding:9px 0';
   const paidList=document.createElement('div');paidList.className='admin-order-paid-list';paid.append(paidSummary,paidList);
@@ -3325,7 +3327,7 @@ function initAdminOrderCategories(){
 function resetAdminOrderCategory(key){
  const section=document.querySelector('[data-admin-order-category="'+key+'"]');if(!section)return null;
  section._orderCounts={active:0,paid:0,cancelled:0};
- section.querySelector('.admin-order-active')?.replaceChildren();
+ const active=section.querySelector('.admin-order-active');if(active){active.open=true;active.querySelector('.admin-order-active-list')?.replaceChildren();}
  section.querySelector('.admin-order-paid-list')?.replaceChildren();
  section.querySelector('.admin-order-cancelled-list')?.replaceChildren();
  const paid=section.querySelector('.admin-order-paid');if(paid){paid.open=false;paid.hidden=true;}
@@ -3335,7 +3337,7 @@ function resetAdminOrderCategory(key){
 function appendAdminOrderCard(key,order,card){
  const section=document.querySelector('[data-admin-order-category="'+key+'"]');if(!section)return;
  const bucket=adminOrderBucket(order);section._orderCounts[bucket]++;
- const target=bucket==='paid'?section.querySelector('.admin-order-paid-list'):bucket==='cancelled'?section.querySelector('.admin-order-cancelled-list'):section.querySelector('.admin-order-active');
+ const target=bucket==='paid'?section.querySelector('.admin-order-paid-list'):bucket==='cancelled'?section.querySelector('.admin-order-cancelled-list'):section.querySelector('.admin-order-active-list');
  target?.append(card);
 }
 function finishAdminOrderCategory(key){
@@ -3344,7 +3346,8 @@ function finishAdminOrderCategory(key){
  const total=counts.active+counts.paid+counts.cancelled;
  const count=section.querySelector('.admin-order-category-count');
  if(count)count.textContent='Всего: '+total+' · активных: '+counts.active;
- if(!counts.active){const empty=document.createElement('p');empty.className='muted';empty.textContent='Нет неоплаченных или незавершённых заказов.';section.querySelector('.admin-order-active')?.append(empty);}
+ const active=section.querySelector('.admin-order-active');const activeSummary=active?.querySelector('summary');if(activeSummary)activeSummary.textContent='Незавершённые и ожидающие · '+counts.active;
+ if(!counts.active){const empty=document.createElement('p');empty.className='muted';empty.textContent='Нет неоплаченных или незавершённых заказов.';section.querySelector('.admin-order-active-list')?.append(empty);}
  const paid=section.querySelector('.admin-order-paid'),paidSummary=section.querySelector('.admin-order-paid summary');
  if(paid){paid.hidden=!counts.paid;if(paidSummary)paidSummary.textContent='Оплаченные · '+counts.paid;}
  const cancelled=section.querySelector('.admin-order-cancelled'),cancelledSummary=section.querySelector('.admin-order-cancelled summary');
@@ -4137,7 +4140,7 @@ async function sendCraftMessage(){
   if(craftConversationReady){
    const d=await apiFetch('/api/craft/messages',{method:'POST',body:JSON.stringify({draft_id:craftDraftId,message})});
    craftMessages=Array.isArray(d.conversation)?d.conversation:[...craftMessages,{role:'user',content:message}];
-   status.textContent='Сообщение отправлено владельцу. Ответ появится здесь. 💬';
+   status.textContent=d.handoff?'Сообщение сохранено. Автоответы ИИ выключены — владелец сможет ответить вручную. 💬':'ИИ ответил в чате этого заказа. 💬';
    renderCraftChat();return;
   }
   if(craftQuestionCount>=16){status.textContent='Лимит вопросов достигнут. Готовим итоговый подбор…';}
@@ -4459,7 +4462,7 @@ async function sendAiGroupInvoice(){
 async function loadAiOrders(){
  const status=document.getElementById('aiOrdersStatus');if(!status)return;
  initAdminOrderCategories();
- resetAdminOrderCategory('workshop');resetAdminOrderCategory('bundle');resetAdminOrderCategory('assistant');
+ resetAdminOrderCategory('bundle');resetAdminOrderCategory('assistant');resetAdminOrderCategory('group');
  status.textContent='Загрузка ИИ-заказов…';
  try{
   const [data,noticeData]=await Promise.all([apiFetch('/api/admin/ai-orders'),apiFetch('/api/admin/notifications').catch(()=>({notifications:[]}))]);
@@ -4498,6 +4501,11 @@ async function loadAiOrders(){
     const bucket=adminOrderBucket(o);
     const paymentLabel=bucket==='paid'?'Оплачен':bucket==='cancelled'?'Отменён':'Ожидает оплаты';
     card.append(aiAdminNode('p','Клиент: '+(o.first_name||'Покупатель')+' · Telegram ID: '+o.telegram_id+' · '+formatDate(o.created_at)+' · '+paymentLabel+' · '+Number(o.approved_stars||0)+' ⭐','muted'));
+    const bundleAiToggle=aiAdminNode('label',undefined,'admin-detail-line');bundleAiToggle.style.cssText='display:flex;align-items:center;gap:9px;margin:8px 0';
+    const bundleAiCheck=document.createElement('input');bundleAiCheck.type='checkbox';bundleAiCheck.checked=bundle.ai_enabled!==false;bundleAiCheck.setAttribute('aria-label','Автоматические ответы ИИ по этому заказу');
+    const bundleAiText=aiAdminNode('span',bundleAiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены');
+    bundleAiCheck.addEventListener('change',async()=>{bundleAiCheck.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'set_bundle_ai',order_id:o.order_id||o.id,enabled:bundleAiCheck.checked})});bundleAiText.textContent=bundleAiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены';toast(bundleAiCheck.checked?'ИИ-ответы включены для этого заказа.':'ИИ-ответы выключены. Покупатель сможет писать, а вы — отвечать вручную.');}catch(e){bundleAiCheck.checked=!bundleAiCheck.checked;toast(e.message||'Не удалось изменить настройку ИИ.');}finally{bundleAiCheck.disabled=false;}});
+    bundleAiToggle.append(bundleAiCheck,bundleAiText);card.append(bundleAiToggle);
     const items=(bundle.items||[]).map(x=>(adminProductsCache.find(p=>String(p.id)===String(x.id))?.title||('Товар '+x.id))+' × '+x.qty).join('\n');
     const desc=[items,bundle.postcard_text?'Открытка: '+bundle.postcard_text:'',bundle.postcard_wishes?'Пожелания: '+bundle.postcard_wishes:'',bundle.box_request?'Коробка: '+bundle.box_request:'','Наполнитель: '+(bundle.filler_level||'—'),'Стикеры: '+(bundle.sticker_qty||0),'Секретный подарок: '+((bundle.seasonal_extras||[]).includes('secret_seasonal')?'да':'нет'),bundle.priority_order?'⚡ Приоритет VIP-заказа':''].filter(Boolean).join('\n');
     const detailsBox=aiAdminNode('div',desc,'muted');detailsBox.style.cssText='white-space:pre-wrap;line-height:1.5;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';card.append(detailsBox);
@@ -4514,23 +4522,24 @@ async function loadAiOrders(){
    }
    const details=(()=>{try{return JSON.parse(o.details_json||'{}')}catch{return {}}})();
    const source=details.source||'';
-   const category=source==='miniapp_workshop'?'workshop':'assistant';
+   const category=source==='group'?'group':'assistant';
    const card=aiAdminNode('div',undefined,'admin-user-detail');
-   const sourceLabel=source==='miniapp_workshop'?'🧵 ИИ-мастерская':'🤖 ИИ-помощник';
+   const sourceLabel=source==='group'?'👥 ИИ-заказ из группы':source==='miniapp_workshop'?'🤖 ИИ-помощник · творческий диалог':'🤖 ИИ-помощник';
    card.append(aiAdminNode('h4',sourceLabel+' · '+(o.subject||'Индивидуальный заказ')));
    card.append(aiAdminNode('p','Клиент: '+(o.first_name||'Участник')+' · Telegram ID: '+o.telegram_id+' · '+formatDate(o.created_at)+' · Статус: '+(o.status==='cancelled'?'Отменён':o.payment_status==='paid'||o.status==='paid'?'Оплачен':o.status==='collecting'?'Заполняется':o.status==='review'?'Ожидает решения владельца':o.status==='approved'?'Ожидает оплаты':o.status),'muted'));
    const summary=aiAdminNode('textarea');summary.rows=4;summary.value=(details.summary||(details.messages||[]).join('\n'))+(details.change_requests?.length?'\n\nИзменения после согласования:\n'+details.change_requests.map(x=>x.text).join('\n'):'');summary.placeholder='Пожелания клиента';card.append(summary);
    const subject=aiAdminNode('input');subject.value=o.subject||'';subject.placeholder='Название заказа';card.append(subject);
    const price=aiAdminNode('input');price.type='number';price.min='1';price.max='100000';price.value=o.approved_stars||o.estimated_stars||'';price.placeholder='Итоговая цена в Stars';card.append(price);
-   if(source==='miniapp_workshop'){
-    const transcript=aiAdminNode('div',undefined,'muted');transcript.style.cssText='white-space:pre-wrap;max-height:260px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';
-    transcript.textContent=(details.conversation||[]).map(m=>(m.role==='user'?'Покупатель':m.role==='owner'?'Вы — мастер':'ИИ-мастер')+': '+m.content).join('\n\n');if(transcript.textContent)card.append(transcript);
-    const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Ответить покупателю прямо в чате ИИ-мастерской…';card.append(reply);
-    const sendReply=aiAdminNode('button','Отправить ответ в ИИ-мастерскую','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_workshop',id:o.id,reply:value})});reply.value='';toast('Ответ отправлен в чат ИИ-мастерской.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить ответ.');}finally{sendReply.disabled=false;}});card.append(sendReply);
-   }else if(Array.isArray(details.conversation)&&details.conversation.length){
-    const transcript=aiAdminNode('div',undefined,'muted');transcript.style.cssText='white-space:pre-wrap;max-height:220px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';
-    transcript.textContent=details.conversation.map(m=>(m.role==='user'?'Покупатель':'ИИ-помощник')+': '+m.content).join('\n\n');card.append(transcript);
-   }
+   const aiToggle=aiAdminNode('label',undefined,'admin-detail-line');aiToggle.style.cssText='display:flex;align-items:center;gap:9px;margin:8px 0';
+   const aiCheck=document.createElement('input');aiCheck.type='checkbox';aiCheck.checked=details.ai_enabled!==false;aiCheck.setAttribute('aria-label','Автоматические ответы ИИ по этому заказу');
+   const aiText=aiAdminNode('span',aiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены');
+   aiCheck.addEventListener('change',async()=>{aiCheck.disabled=true;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'set_ai',id:o.id,enabled:aiCheck.checked})});aiText.textContent=aiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены';toast(aiCheck.checked?'ИИ-ответы включены для этого заказа.':'ИИ-ответы выключены. Покупатель всё равно может писать, а вы — отвечать вручную.');}catch(e){aiCheck.checked=!aiCheck.checked;toast(e.message||'Не удалось изменить настройку ИИ.');}finally{aiCheck.disabled=false;}});
+   aiToggle.append(aiCheck,aiText);card.append(aiToggle);
+   const transcript=aiAdminNode('div',undefined,'muted');transcript.style.cssText='white-space:pre-wrap;max-height:280px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0';
+   transcript.textContent=(details.conversation||[]).map(m=>(m.role==='user'?'Покупатель':m.role==='owner'?'Владелец':'ИИ-помощник')+': '+(m.content||'')).join('\\n\\n');
+   if(transcript.textContent)card.append(transcript);
+   const reply=aiAdminNode('textarea');reply.rows=3;reply.placeholder='Ответить покупателю от своего имени в чате этого заказа…';card.append(reply);
+   const sendReply=aiAdminNode('button','Отправить сообщение покупателю','secondary');sendReply.addEventListener('click',async()=>{const value=reply.value.trim();if(!value)return toast('Введите сообщение покупателю.');sendReply.disabled=true;try{const result=await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'reply_order',id:o.id,reply:value})});reply.value='';toast(result.delivered?'Сообщение отправлено покупателю.':'Сообщение сохранено, но Telegram не подтвердил доставку.');await loadAiOrders();}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{sendReply.disabled=false;}});card.append(sendReply);
    if(o.status==='review'){
     const save=aiAdminNode('button','Сохранить изменения','primary');save.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update',id:o.id,subject:subject.value,summary:summary.value,approved_stars:Number(price.value)})});toast('Заказ обновлён.');loadAiOrders();}catch(e){toast(e.message);}});card.append(save);
     if(adminSession?.root_owner){const approve=aiAdminNode('button','Подтвердить и отправить счёт','secondary');approve.addEventListener('click',async()=>{if(!confirm('Подтвердить заказ и отправить покупателю счёт в Telegram?'))return;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'approve',id:o.id})});toast('Заказ подтверждён. Счёт отправлен покупателю в Telegram.');loadAiOrders();}catch(e){toast(e.message);}});card.append(approve);}
@@ -4541,7 +4550,7 @@ async function loadAiOrders(){
    }else if(o.order_id){card.append(aiAdminNode('p','Связанный заказ Mini App: '+o.order_id,'muted'));}
    appendAdminOrderCard(category,o,card);
   });
-  ['workshop','bundle','assistant'].forEach(finishAdminOrderCategory);
+  ['bundle','assistant','group'].forEach(finishAdminOrderCategory);
   if(!orders.length)status.textContent='ИИ-заказов пока нет.';
  }catch(e){status.textContent=e.message||'Не удалось загрузить ИИ-заказы.';}
 }
