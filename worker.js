@@ -1040,26 +1040,15 @@ export default {
         return json({ok:true,vote_results:options.map((_,i)=>map.get(i)||0),my_vote:optionIndex},200,origin);
       }
 
-      // Administrative access is checked on the server for every request.
+      // Administrative access is restricted to the single confirmed project owner.
+      // Staff records and moderator roles never grant access to the owner panel.
       if (path.startsWith("/api/admin/")) {
-        // The confirmed Telegram account ID of the project owner.
         const ownerId = "7822470060";
-        const rootOwner = telegramId === ownerId;
-        // Keep the version-361 staff authorization path: active owners and moderators
-        // are checked against admin_staff instead of being rejected before lookup.
-        let staff = null;
+        const rootOwner = String(telegramId || "").trim() === ownerId;
         if (!rootOwner) {
-          try {
-            staff = await env.DB.prepare("SELECT telegram_id,role,permissions_json,status FROM admin_staff WHERE telegram_id=?")
-              .bind(telegramId).first();
-          } catch (error) {
-            if (isMissingTableError(error, "admin_staff")) return json({ error: "Система должностей ещё не установлена. Требуется миграция 0015_admin_staff.sql." }, 503, origin);
-            throw error;
-          }
-          if (!staff || staff.status !== "active" || !["moderator","owner"].includes(staff.role)) {
-            return json({ error: "Административный доступ не предоставлен." }, 403, origin);
-          }
+          return json({ error: "Административный доступ предоставляется только основному владельцу." }, 403, origin);
         }
+        const staff = null;
         let permissions = rootOwner || staff?.role === "owner" ? defaultAdminPermissions() : {};
         if (!rootOwner && staff?.role === "moderator") {
           try { permissions = { ...defaultAdminPermissions("moderator"), ...JSON.parse(staff.permissions_json || "{}") }; }
