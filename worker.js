@@ -3028,14 +3028,23 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
       if (path === "/api/craft/messages" && method === "POST") {
         const b=await readJson(request),draftId=String(b.draft_id||"").slice(0,80),message=typeof b.message==="string"?b.message.trim().slice(0,1500):"";
         if(!draftId||!message)return json({error:"Введите сообщение для мастера."},400,origin);
-        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
+        const draft=await env.DB.prepare("SELECT telegram_id,details_json,status,subject,estimated_stars,approved_stars FROM ai_order_drafts WHERE id=? AND telegram_id=? AND status IN ('collecting','review','approved','paid')").bind(draftId,String(telegramId)).first();
         if(!draft)return json({error:"Диалог мастерской не найден."},404,origin);
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
         let reply=null,handoff=false;
-        if(details.ai_enabled!==false){try{const answer=await createCraftAnswer(env,details.conversation.filter(x=>x&&["user","assistant"].includes(x.role)).slice(-24));reply=answer.reply;details.conversation.push({role:"assistant",content:reply});details.conversation=details.conversation.slice(-24);}catch(error){handoff=true;reply="Автоматический ответ сейчас недоступен. Сообщение сохранено — владелец сможет ответить вручную.";await notifyOwner(env,"⚠️ ИИ не смог ответить в чате заказа "+draftId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\nОшибка: "+String(error).slice(0,180));}}
+        if(details.ai_enabled!==false){try{
+          const aiMessages=details.conversation.filter(x=>x&&["user","assistant","owner"].includes(x.role)).slice(-24).map(x=>({role:x.role==="owner"?"assistant":x.role,content:x.content}));
+          if(draft.status==="collecting"){
+            const answer=await createCraftAnswer(env,aiMessages);reply=answer.reply;
+          }else{
+            const customerContext={order_chat:true,order_subject:draft.subject||"Индивидуальный заказ",order_status:draft.status,order_summary:details.summary||"",ai_estimate_stars:draft.estimated_stars||null,owner_confirmed_price_stars:draft.approved_stars||null,order_chat_instruction:"Это отдельный чат только по указанному заказу. Не смешивай его с другими заказами клиента. Учитывай сообщения владельца как подтверждённый контекст. Не изменяй цену, статус, оплату или заказ."};
+            reply=await createSupportAnswer(env,aiMessages,false,customerContext,[]);
+          }
+          details.conversation.push({role:"assistant",content:reply});details.conversation=details.conversation.slice(-24);
+        }catch(error){handoff=true;reply="Автоматический ответ сейчас недоступен. Сообщение сохранено — владелец сможет ответить вручную.";await notifyOwner(env,"⚠️ ИИ не смог ответить в чате заказа "+draftId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\nОшибка: "+String(error).slice(0,180));}}
         else{handoff=true;reply="Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную.";await notifyOwner(env,"💬 Новое сообщение в заказе (ИИ выключен)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");}
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(JSON.stringify(details),draftId,String(telegramId)).run();
         return json({ok:true,reply,conversation:details.conversation,handoff,ai_enabled:details.ai_enabled!==false},200,origin);
