@@ -2983,7 +2983,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
 
       if (path === "/api/craft/create" && method === "POST") {
         const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
-        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
+        if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant","owner","system"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
         if(messages[messages.length-1].role!=="user")return json({error:"Сначала отправьте свой ответ."},400,origin);
         try{
           let draftId=String(b.conversation_id||"");
