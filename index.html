@@ -4346,7 +4346,7 @@ drawProducts();
 drawCart();
 loadProducts();
 loadMe();
-refreshVipHelpCard();
+if (typeof refreshVipHelpCard === 'function') refreshVipHelpCard();
 checkOwnerAccess();
 showView('menuView');
 
