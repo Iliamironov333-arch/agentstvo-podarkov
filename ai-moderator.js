@@ -311,7 +311,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_paused_topic_change",details:{draft_id:active.id}});
     return false;
   }
-  if(!active&&replyToOriginalId){
+  if(replyToOriginalId){
     const candidates=await env.DB.prepare("SELECT id,chat_id,telegram_id,group_message_id,subject,details_json,status,estimated_stars,approved_stars FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status IN ('review','approved','paid') ORDER BY updated_at DESC LIMIT 20").bind(String(chatId),String(user.id)).all();
     let linked=null,linkedDetails={};
     for(const candidate of candidates.results||[]){let parsed={};try{parsed=JSON.parse(candidate.details_json||"{}");}catch{}const ids=Array.isArray(parsed.thread_message_ids)?parsed.thread_message_ids:[];if(Number(candidate.group_message_id)===Number(replyToOriginalId)||ids.some(id=>Number(id)===Number(replyToOriginalId))){linked=candidate;linkedDetails=parsed;break;}}
