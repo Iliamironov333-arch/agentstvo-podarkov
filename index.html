@@ -2397,7 +2397,7 @@ async function openAdminUser(telegramId,box) {
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
-  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';crmButton.addEventListener('click',()=>openAdminConversation(telegramId));box.append(crmButton);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(telegramId,'',crmDetail));box.append(crmButton,crmDetail);
   const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
   const historySummary=document.createElement('summary');historySummary.textContent='📚 История покупок и действий · журнал 90 дней';historySummary.style.cssText='cursor:pointer;font-weight:800;padding:10px 0';
   const historyContent=document.createElement('div');historyContent.style.cssText='padding:4px 0 10px';
@@ -2825,12 +2825,12 @@ async function openAdminConversation(telegramId, conversationId, targetBox=null)
   const controls=document.createElement('div');controls.className='row-actions';
   if(data.conversation_migration_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='История CRM доступна для просмотра. Для переключения между ИИ и владельцем требуется миграция 0008_support_human_takeover.sql.';box.append(migrationWarning);}
   const modeButton=document.createElement('button');modeButton.type='button';modeButton.className='secondary';modeButton.textContent=data.mode==='human'?'Вернуть управление ИИ':'Взять диалог на себя';modeButton.disabled=!!data.conversation_migration_pending||!!data.closed;
-  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
+  modeButton.addEventListener('click',async()=>{modeButton.disabled=true;try{await apiFetch('/api/admin/support/conversation-mode',{method:'POST',body:JSON.stringify({telegram_id:telegramId,mode:data.mode==='human'?'ai':'human'})});await openAdminConversation(telegramId,conversationId,box);toast(data.mode==='human'?'ИИ снова отвечает в этом диалоге.':'Диалог передан владельцу, ИИ приостановлен.');}catch(e){toast(e.message||'Не удалось изменить режим.');}finally{modeButton.disabled=false;}});
   controls.append(modeButton);box.append(controls);
   if(data.mode==='human'&&!data.closed){
    const reply=document.createElement('textarea');reply.rows=3;reply.maxLength=4000;reply.placeholder='Ответ покупателю от имени владельца';reply.style.cssText='width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit';
    const send=document.createElement('button');send.type='button';send.className='primary';send.textContent='Отправить покупателю';
-   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,conversation_id:conversationId,message})});toast('Ответ сохранён в переписке Mini App. Личное сообщение Telegram не отправлялось.');await openAdminConversation(telegramId,conversationId);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
+   send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,conversation_id:conversationId,message})});toast('Ответ сохранён в переписке Mini App. Личное сообщение Telegram не отправлялось.');await openAdminConversation(telegramId,conversationId,box);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
    box.append(reply,send);
   }
   (data.messages||[]).forEach(message=>{
@@ -3107,7 +3107,7 @@ async function openAdminOrder(orderId,orderType,targetBox) {
   const statusLabels={unpaid:'Не оплачен',new:'Новый',in_progress:'В работе',ready:'Готов',cancelled:'Отменён'};
   addLine('Покупатель',order.first_name||order.username||order.telegram_id);
   addLine('Telegram ID',order.telegram_id);
-  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id));box.append(crmButton);
+  const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть CRM-карточку покупателя';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(order.telegram_id,'',crmDetail));box.append(crmButton,crmDetail);
   addLine('Дата',order.created_at);
   addLine('Сумма',Number(order.total_stars||0)+' ⭐');
   if(orderType==='product'){
