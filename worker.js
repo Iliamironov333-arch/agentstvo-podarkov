@@ -34,7 +34,7 @@ function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Telegram-Bot-Api-Secret-Token",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Vary": "Origin"
   };
 }
@@ -435,14 +435,29 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
-  const model = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, instructions,
-      input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
-  });
-  const data = await response.json().catch(() => ({}));
+  const primaryModel = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
+  const fallbackModel = env.OPENAI_MODEL || "gpt-4o-mini";
+  const requestModel = async (model) => {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, instructions,
+        input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
+    });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  };
+  let { response, data } = await requestModel(primaryModel);
+  // If the configured VIP model is unavailable to this API key, retry with the standard model.
+  if (!response.ok && isVip && primaryModel !== fallbackModel && [400, 404, 422].includes(response.status)) {
+    const firstError = data?.error || {};
+    console.warn("VIP support model unavailable; retrying with standard model:", JSON.stringify({
+      model: primaryModel, http_status: response.status,
+      error_code: firstError.code || null, error_type: firstError.type || null
+    }));
+    ({ response, data } = await requestModel(fallbackModel));
+  }
+  const model = response.ok ? (data?.model || primaryModel) : primaryModel;
   if (!response.ok) {
     const apiError = data?.error || {};
     const diagnostic = {
@@ -3027,6 +3042,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         }
       }
       
+      if (path === "/api/support/chat" && method === "DELETE") {
+        const body = await readJson(request);
+        const conversationId = typeof body.conversation_id === "string" ? body.conversation_id.trim() : "";
+        if (!conversationId || conversationId.length > 80) return json({ error: "Некорректный идентификатор диалога." }, 400, origin);
+        const conversation = await env.DB.prepare("SELECT id FROM support_conversations WHERE id=? AND telegram_id=?")
+          .bind(conversationId, telegramId).first();
+        if (!conversation) return json({ error: "Диалог не найден или уже удалён." }, 404, origin);
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(telegramId, conversationId),
+          env.DB.prepare("DELETE FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId, telegramId)
+        ]);
+        return json({ ok: true, deleted: true, conversation_id: conversationId }, 200, origin);
+      }
+
       if (path === "/api/support/chat" && method === "GET") {
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();

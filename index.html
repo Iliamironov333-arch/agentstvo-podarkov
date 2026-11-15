@@ -3949,23 +3949,53 @@ function renderSupportConversations() {
   root.appendChild(empty);
  } else {
   supportConversations.forEach(chat => {
+   const row = document.createElement('div');
+   row.style.cssText = 'display:flex;align-items:stretch;gap:8px;min-width:0';
    const button = document.createElement('button');
    button.type = 'button'; button.className = 'secondary';
-   button.style.cssText = 'width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
+   button.style.cssText = 'flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
    if (chat.id === activeSupportConversationId) button.style.borderColor = 'var(--gold)';
    const label = document.createElement('span');
    label.textContent = chat.title || 'Новый диалог';
    label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
    const tag = document.createElement('small');
    tag.textContent = chat.assistant_type === 'vip' ? 'Расширенный режим' : 'ИИ помощник';
-   tag.style.color = 'var(--muted)';
+   tag.style.cssText = 'color:var(--muted);flex-shrink:0';
    button.append(label,tag);
    button.addEventListener('click', () => openSupportConversation(chat.id));
-   root.appendChild(button);
+   const remove = document.createElement('button');
+   remove.type = 'button'; remove.className = 'secondary';
+   remove.textContent = 'Удалить';
+   remove.style.cssText = 'flex-shrink:0;padding:10px 12px;color:var(--muted)';
+   remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));
+   remove.addEventListener('click', () => deleteSupportConversation(chat.id));
+   row.append(button,remove);
+   root.appendChild(row);
   });
  }
  const counter = document.getElementById('supportChatCounter');
  if (counter) counter.textContent = supportConversations.length + ' / ' + supportChatLimit + ' диалогов';
+}
+
+async function deleteSupportConversation(id) {
+ if (!id) return;
+ if (!window.confirm('Удалить этот диалог и всю его переписку? Это действие нельзя отменить.')) return;
+ const removeButtons = [...document.querySelectorAll('#supportConversationList button')];
+ removeButtons.forEach(button => button.disabled = true);
+ try {
+  await apiFetch('/api/support/chat',{method:'DELETE',body:JSON.stringify({conversation_id:id})});
+  if (activeSupportConversationId === id) {
+   activeSupportConversationId = null;
+   activeSupportAssistant = vipActive ? 'vip' : 'standard';
+  }
+  await loadSupportHistory(null);
+  const result = document.getElementById('supportResult');
+  if (result) result.textContent = 'Диалог удалён.';
+ } catch (error) {
+  const result = document.getElementById('supportResult');
+  if (result) result.textContent = error.message || 'Не удалось удалить диалог.';
+  removeButtons.forEach(button => button.disabled = false);
+ }
 }
 
 function updateSupportAssistantUi() {
