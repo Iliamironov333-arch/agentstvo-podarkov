@@ -1744,15 +1744,11 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             const labels = { new: "принят и ожидает обработки", in_progress: "находится в работе", ready: "готов", cancelled: "отменён" };
             const statusText = labels[status] || "обновлён";
             const message = "🎁 Агентство подарков\\n\\nСтатус вашего заказа № " + orderId + " изменён: " + statusText + ".\\nЕсли у вас есть вопросы, ответьте на это сообщение.";
+            notification.sent = false;
+            notification.disabled = true;
+            notification.delivery = "in_app_only";
             try {
-              await telegram(env, "sendMessage", { chat_id: String(order.telegram_id), text: message });
-              notification.sent = true;
-            } catch (error) {
-              notification.error = "Статус сохранён, но сообщение покупателю отправить не удалось.";
-              console.error("Order status notification failed:", String(error).slice(0,300));
-            }
-            try {
-              await notifyOwner(env, "📦 Заказ № " + orderId + ": статус изменён на «" + statusText + "». Покупатель " + String(order.telegram_id) + (notification.sent ? " уведомлён." : ". Уведомление покупателю не доставлено."));
+              await notifyOwner(env, "📦 Заказ № " + orderId + ": статус изменён на «" + statusText + "». Личные сообщения покупателю отключены; статус доступен в Mini App.");
             } catch (error) {
               console.error("Order owner notification failed:", String(error).slice(0,300));
             }
