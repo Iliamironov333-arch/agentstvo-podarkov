@@ -1105,6 +1105,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       const draft=await env.DB.prepare("SELECT id,chat_id,telegram_id,group_message_id,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('collecting','review','approved','paid')").bind(id).first();
       if(!draft)return aiJson({error:"Диалог заказа не найден."},404);
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      if(details.chat_deleted===true)return aiJson({error:"Этот чат удалён владельцем. Отправка сообщений заблокирована."},410);
       details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages:[];
       details.owner_messages.push({content:reply,created_at:new Date().toISOString(),sender:"owner",via:"ai"});details.owner_messages=details.owner_messages.slice(-20);
       details.conversation=Array.isArray(details.conversation)?details.conversation:[];details.conversation.push({role:"owner",content:reply,via:"ai"});details.conversation=details.conversation.slice(-24);
