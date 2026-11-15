@@ -1031,7 +1031,13 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       details.conversation=Array.isArray(details.conversation)?details.conversation:[];details.conversation.push({role:"owner",content:reply});details.conversation=details.conversation.slice(-24);
       await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();
       let delivered=false;
-      try{if(details.source==="group")await aiTelegram(env,"sendMessage",{chat_id:draft.chat_id,text:"💬 Ответ владельца Агентства по Вашему заказу\n\n"+reply,reply_to_message_id:draft.group_message_id||undefined,allow_sending_without_reply:true});else await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"💬 Сообщение владельца по Вашему заказу\n\n"+reply});delivered=true;}catch(error){console.error("AI order owner reply delivery failed:",String(error).slice(0,220));}
+      try{
+        if(details.source==="group"){
+          const sent=await aiTelegram(env,"sendMessage",{chat_id:draft.chat_id,text:"💬 Ответ владельца Агентства по Вашему заказу\n\n"+reply,reply_to_message_id:draft.group_message_id||undefined,allow_sending_without_reply:true});
+          if(typeof sent?.message_id==="number"){details.thread_message_ids=Array.isArray(details.thread_message_ids)?details.thread_message_ids:[];details.thread_message_ids.push(sent.message_id);details.thread_message_ids=details.thread_message_ids.slice(-30);await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details).slice(0,16000),id).run();}
+        }else await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"💬 Сообщение владельца по Вашему заказу\n\n"+reply});
+        delivered=true;
+      }catch(error){console.error("AI order owner reply delivery failed:",String(error).slice(0,220));}
       await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_owner_reply",details:{draft_id:id,delivered}});
       return aiJson({ok:true,delivered});
     }
