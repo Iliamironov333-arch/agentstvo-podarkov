@@ -1,0 +1,23 @@
+name: Validate application JavaScript
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Worker module syntax
+        run: |
+          node --input-type=module --check < worker.js
+          node --input-type=module --check < ai-moderator.js
+      - name: Check Mini App inline JavaScript
+        run: node scripts/check-inline-scripts.mjs index.html
