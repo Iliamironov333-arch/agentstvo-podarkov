@@ -2916,7 +2916,7 @@ async function openAdminCampaignReport(id){
  }catch(e){root.textContent=e.message||'Не удалось загрузить отчёт.';}
 }
 function updateCampaignAudienceUi(){const selected=document.getElementById('adminCampaignAudience')?.value==='selected';document.getElementById('adminCampaignIdsWrap')?.classList.toggle('hidden',!selected);}
-function parseCampaignIds(){return [...new Set((document.getElementById('adminCampaignIds')?.value||'').split(/[\\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);}
+function parseCampaignIds(){return [...new Set((document.getElementById('adminCampaignIds')?.value||'').split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);}
 function campaignFormData(){return {id:document.getElementById('adminCampaignId').value,title:document.getElementById('adminCampaignTitle').value.trim(),body:document.getElementById('adminCampaignBody').value.trim(),audience_type:document.getElementById('adminCampaignAudience').value,audience_ids:parseCampaignIds(),media_url:document.getElementById('adminCampaignMedia').value.trim(),button_text:document.getElementById('adminCampaignButtonText').value.trim(),button_url:document.getElementById('adminCampaignButtonUrl').value.trim()};}
 function resetAdminCampaignForm(){['adminCampaignId','adminCampaignTitle','adminCampaignBody','adminCampaignIds','adminCampaignMedia','adminCampaignButtonText','adminCampaignButtonUrl'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('adminCampaignAudience').value='all';document.getElementById('adminCampaignEditorTitle').textContent='Новая рассылка';document.getElementById('adminCampaignPreview').textContent='Перед запуском проверьте количество получателей.';document.getElementById('adminCampaignLivePreview').classList.add('hidden');updateCampaignAudienceUi();}
 async function previewAdminCampaign(){const status=document.getElementById('adminCampaignPreview');try{const data=campaignFormData();if(data.audience_type==='selected'&&!data.audience_ids.length)throw new Error('Добавьте Telegram ID получателей.');const result=await apiFetch('/api/admin/campaign-preview',{method:'POST',body:JSON.stringify({audience_type:data.audience_type,audience_ids:data.audience_ids})});status.textContent='Получателей: '+Number(result.recipient_count).toLocaleString('ru-RU')+(result.unknown_ids?' · неизвестных ID: '+result.unknown_ids:'')+'. Неактивные — пользователи, не открывавшие Mini App 30 дней.';const preview=document.getElementById('adminCampaignLivePreview');preview.replaceChildren();const title=document.createElement('b');title.textContent=data.title||'Название рассылки';const body=document.createElement('p');body.style.whiteSpace='pre-wrap';body.textContent=data.body||'Текст сообщения';preview.append(title,body);if(data.media_url){const media=document.createElement('p');media.textContent='Фото: '+data.media_url;preview.append(media);}if(data.button_text){const link=document.createElement('p');link.textContent='Кнопка: '+data.button_text+' · '+data.button_url;preview.append(link);}preview.classList.remove('hidden');}catch(e){status.textContent=e.message||'Не удалось проверить аудиторию.';}}
@@ -2937,7 +2937,7 @@ function updateAnnouncementAudienceUi() {
  document.getElementById('adminAnnouncementIdsWrap')?.classList.toggle('hidden',!selected);
 }
 function parseAnnouncementIds() {
- return [...new Set((document.getElementById('adminAnnouncementIds')?.value||'').split(/[\\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);
+ return [...new Set((document.getElementById('adminAnnouncementIds')?.value||'').split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);
 }
 function announcementFormData() {
  return {
@@ -3353,7 +3353,7 @@ function appendAdminOrderCard(key,order,card){
   const conversation=Array.isArray(details.conversation)?details.conversation:[];
   const userText=conversation.filter(m=>m&&m.role==='user').map(m=>String(m.content||'')).join(' ');
   const intentText=(userText+' '+String(details.summary||'')+' '+String(order.subject||'')).toLowerCase();
-  const orderIntent=details.order_intent===true||/хочу\\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\\s+(?:у вас\\s+)?заказ|хочу\\s+заказ(?:ать)?|готов(?:а|ы)?\\s+оформить|можно\\s+(?:оформить|сделать|разместить|заказать)|заказать\\s+у\\s+вас|приобрести\\s+(?:у вас\\s+)?/.test(intentText);
+  const orderIntent=details.order_intent===true||/хочу\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\s+(?:у вас\s+)?заказ|хочу\s+заказ(?:ать)?|готов(?:а|ы)?\s+оформить|можно\s+(?:оформить|сделать|разместить|заказать)|заказать\s+у\s+вас|приобрести\s+(?:у вас\s+)?/.test(intentText);
   let folderKey,folderTitle,openFolder;
   if(bucket==='paid'){folderKey='paid';folderTitle='⭐ Оплаченные';openFolder=false;}
   else if(bucket==='cancelled'){folderKey='cancelled';folderTitle='🔒 Отменённые';openFolder=false;}
