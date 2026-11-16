@@ -3069,6 +3069,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             return json({ok:true,reply:acceptedReply,ready:true,status:"review",questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
           }
           if(previous.proposal_pending_customer===true)previous.proposal_pending_customer=false;
+          const aiMessages=conversation.filter(m=>m&&["user","assistant","owner"].includes(m.role)).map(m=>({role:m.role==="owner"?"assistant":m.role,content:String(m.content||"").slice(0,1500)})).slice(-24);
           const result=await createCraftAnswer(env,aiMessages);
           let reply=String(result.reply||"").slice(0,5000);
           let offerPending=false;
