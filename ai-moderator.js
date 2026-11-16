@@ -783,6 +783,24 @@ async function aiInspectImage(env,message,settings={}){
   const parsed=JSON.parse(match[0]);
   return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное вложение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
 }
+async function aiAwardGroupMessageReputation(env,chatId,message,user){
+  const messageId=Number(message?.message_id)||0;
+  if(messageId<1||!user?.id||user.is_bot)return false;
+  const telegramDate=Number(message.date)||Math.floor(Date.now()/1000);
+  const createdAt=new Date(telegramDate*1000).toISOString().slice(0,19).replace("T"," ");
+  const inserted=await env.DB.prepare("INSERT OR IGNORE INTO reputation_group_message_activity(chat_id,message_id,telegram_id,created_at) VALUES(?,?,?,?)")
+    .bind(String(chatId),messageId,String(user.id),createdAt).run();
+  if(Number(inserted.meta?.changes||0)!==1)return false;
+  const activity=await env.DB.prepare("SELECT COUNT(*) AS total FROM reputation_group_message_activity WHERE chat_id=? AND telegram_id=? AND created_at>=datetime('now','-24 hours')")
+    .bind(String(chatId),String(user.id)).first();
+  if(Number(activity?.total||0)<=2)return false;
+  await env.DB.prepare("INSERT OR IGNORE INTO users(telegram_id,username,first_name) VALUES(?,?,?)")
+    .bind(String(user.id),user.username||null,user.first_name||null).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO reputation_profiles(telegram_id) VALUES(?)").bind(String(user.id)).run();
+  const reward=await env.DB.prepare("INSERT OR IGNORE INTO reputation_transactions(telegram_id,actor_telegram_id,amount,source,description,leaderboard_eligible,idempotency_key,created_at) VALUES(?,?,5,'group_message','Активность в группе: сообщение без нарушений',1,?,?)")
+    .bind(String(user.id),null,"group-message:"+String(chatId)+":"+messageId,createdAt).run();
+  return Number(reward.meta?.changes||0)===1;
+}
 async function handleAiTelegramUpdate(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
     await aiApproveOrder(env,update.callback_query);return true;
@@ -898,27 +916,6 @@ async function handleAiTelegramUpdate(update, env) {
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
-    // Репутация: учитываем только новые, неотредактированные сообщения,
-    // прошедшие проверку модерации. Первые два за скользящие 24 часа — без баллов.
-    const activityMessageId=Number(message.message_id)||0;
-    if(activityMessageId>0){
-      const activityTelegramDate=Number(message.date)||Math.floor(Date.now()/1000);
-      const activityCreatedAt=new Date(activityTelegramDate*1000).toISOString().slice(0,19).replace("T"," ");
-      const activityInsert=await env.DB.prepare("INSERT OR IGNORE INTO reputation_group_message_activity(chat_id,message_id,telegram_id,created_at) VALUES(?,?,?,?)")
-        .bind(chatId,activityMessageId,String(user.id),activityCreatedAt).run();
-      if(Number(activityInsert.meta?.changes||0)===1){
-        const activity=await env.DB.prepare("SELECT COUNT(*) AS total FROM reputation_group_message_activity WHERE chat_id=? AND telegram_id=? AND created_at>=datetime('now','-24 hours')")
-          .bind(chatId,String(user.id)).first();
-        if(Number(activity?.total||0)>2){
-          await env.DB.prepare("INSERT OR IGNORE INTO users(telegram_id,username,first_name) VALUES(?,?,?)")
-            .bind(String(user.id),user.username||null,user.first_name||null).run();
-          await env.DB.prepare("INSERT OR IGNORE INTO reputation_profiles(telegram_id) VALUES(?)").bind(String(user.id)).run();
-          await env.DB.prepare("INSERT OR IGNORE INTO reputation_transactions(telegram_id,actor_telegram_id,amount,source,description,leaderboard_eligible,idempotency_key,created_at) VALUES(?,?,5,'group_message','Активность в группе: сообщение без нарушений',1,?,?)")
-            .bind(String(user.id),null,"group-message:"+chatId+":"+activityMessageId,activityCreatedAt).run();
-        }
-      }
-    }
-    const activityTelegramDate=Number(message.date)||Math.floor(Date.now()/1000);
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
       .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
     const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
@@ -938,6 +935,7 @@ async function handleAiTelegramUpdate(update, env) {
       await aiNotifyOwner(env,"📣 Жалоба в группе\nОтправитель: "+aiSafeName(user)+" ("+user.id+")\nНа кого: "+label+(target?" ("+target.telegram_id+")":"\nУчастник пока не идентифицирован")+"\nТекст: "+text.slice(0,700));
       await aiGroupReply(env,chatId,user.id,target?"Благодарю за обращение. Жалоба передана владельцу для проверки. Само обращение не означает, что участник признан виновным.":"Благодарю за обращение. Уточните, пожалуйста, username участника или ответьте на его сообщение, чтобы мы могли правильно определить адресата.");
       await aiLog(env,{chat_id:chatId,actor:user.id,target:target?.telegram_id||null,type:"complaint_created",severity:"warning",details:{target_label:label}});
+      if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
       return true;
     }
     const existingWatch=moderationActive ? await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first() : null;
@@ -959,6 +957,7 @@ async function handleAiTelegramUpdate(update, env) {
         }
     }
   }
+  if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
   return true;
 }
 async function aiBuildWeeklyReport(env) {
