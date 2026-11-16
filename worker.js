@@ -3326,8 +3326,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const activeCraftDraft = await env.DB.prepare(
           "SELECT id,subject,details_json,estimated_stars,status FROM ai_order_drafts WHERE telegram_id=? AND status='collecting' AND json_valid(details_json)=1 AND json_extract(details_json,'$.source')='miniapp_support_chat' AND json_extract(details_json,'$.support_conversation_id')=? AND last_activity_at>=datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1"
         ).bind(String(telegramId),conversationId).first();
-        const startsCustomWorkOrder = /(?:\\b(?:я\\s+)?хочу\\s+(?:заказать|оформить|сделать|создать)\\b|\\b(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказать|оформить|сделать|создать)\\b|\\b(?:оформить|сделать|создать)\\s+(?:мне\\s+)?(?:индивидуальн\\w*\\s+)?заказ\\b|\\bзакажите\\s+мне\\b|\\b(?:нужен|нужна|нужно)\\s+(?:индивидуальн\\w*\\s+)?заказ\\b|\\bхочу\\s+(?:индивидуальн\\w*\\s+)?(?:работ\\w*|поделк\\w*|издели\\w*|подар\\w*|картин\\w*|открытк\\w*|рисунок)\\b)/i.test(message)
-          && !/(?:\\bне\\s+(?:хочу|надо|нужно|собираюсь|заказываю|оформляю)|\\bне\\s+нужен\\b)/i.test(message);
+        const startsCustomWorkOrder = /(?:^|[^\\p{L}\\p{N}_])(?:(?:я\\s+)?хочу\\s+(?:заказать|оформить|сделать|создать)|(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказать|оформить|сделать|создать)|(?:оформить|сделать|создать)\\s+(?:мне\\s+)?(?:индивидуальн\\w*\\s+)?заказ|закажите\\s+мне|(?:нужен|нужна|нужно)\\s+(?:индивидуальн\\w*\\s+)?заказ|хочу\\s+(?:индивидуальн\\w*\\s+)?(?:работ\\w*|поделк\\w*|издели\\w*|подар\\w*|картин\\w*|открытк\\w*|рисунок))(?=$|[^\\p{L}\\p{N}_])/iu.test(message)
+          && !/(?:^|[^\\p{L}\\p{N}_])не\\s+(?:хочу|надо|нужно|собираюсь|заказываю|оформляю)|(?:^|[^\\p{L}\\p{N}_])не\\s+нужен(?=$|[^\\p{L}\\p{N}_])/iu.test(message);
         if (activeCraftDraft || startsCustomWorkOrder) {
           try {
             const draftId = activeCraftDraft?.id || makeId();
