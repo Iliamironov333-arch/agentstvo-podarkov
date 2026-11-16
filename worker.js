@@ -2654,8 +2654,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           .bind(telegramId).all();
         const vip = await env.DB.prepare("SELECT plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1")
           .bind(telegramId).first();
-        const reputation = await env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payment_intents WHERE telegram_id=? AND status='paid'")
-          .bind(telegramId).first();
+        const reputation = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM reputation_transactions WHERE telegram_id=?").bind(telegramId).first().catch(()=>({total:0}));
         const rankRow = await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
         const customerRank = reputationRank(rankRow?.rank_code);
         const bonusRow = await tableExists(env,"user_bonus_balances")
