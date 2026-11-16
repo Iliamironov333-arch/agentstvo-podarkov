@@ -1291,4 +1291,4 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   return null;
 }
-export { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute };
+export { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft };
