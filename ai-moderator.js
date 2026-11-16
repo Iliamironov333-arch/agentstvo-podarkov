@@ -902,8 +902,8 @@ async function handleAiTelegramUpdate(update, env) {
     // прошедшие проверку модерации. Первые два за скользящие 24 часа — без баллов.
     const activityMessageId=Number(message.message_id)||0;
     if(activityMessageId>0){
-      const telegramMessageDate=Number(message.date)||Math.floor(Date.now()/1000);
-      const activityCreatedAt=new Date(telegramMessageDate*1000).toISOString().slice(0,19).replace("T"," ");
+      const activityTelegramDate=Number(message.date)||Math.floor(Date.now()/1000);
+      const activityCreatedAt=new Date(activityTelegramDate*1000).toISOString().slice(0,19).replace("T"," ");
       const activityInsert=await env.DB.prepare("INSERT OR IGNORE INTO reputation_group_message_activity(chat_id,message_id,telegram_id,created_at) VALUES(?,?,?,?)")
         .bind(chatId,activityMessageId,String(user.id),activityCreatedAt).run();
       if(Number(activityInsert.meta?.changes||0)===1){
@@ -918,7 +918,7 @@ async function handleAiTelegramUpdate(update, env) {
         }
       }
     }
-    const telegramMessageDate=Number(message.date)||Math.floor(Date.now()/1000);
+    const activityTelegramDate=Number(message.date)||Math.floor(Date.now()/1000);
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
       .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
     const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
