@@ -949,6 +949,8 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/ai-reports") return "reports_view";
   if (path.startsWith("/api/admin/staff")) return "staff_manage";
   if (path === "/api/admin/users" || path === "/api/admin/user") return "users_view";
+  if (path === "/api/admin/reputation") return "users_view";
+  if (path.startsWith("/api/admin/reputation/")) return "owner_only";
   if (path === "/api/admin/balance-adjust" || path === "/api/admin/user-bonuses") return "users_balance";
   if (path === "/api/admin/block-user") return "users_ban";
   if (path === "/api/admin/unblock-user") return "users_unban";
@@ -975,6 +977,21 @@ function adminPermissionForPath(path, method) {
 }
 function defaultAdminPermissions(role = "owner") {
   return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key) || role === "owner" || key === "ai_bot_manage"]));
+}
+
+const REPUTATION_RANKS = [
+  {code:"ordinary",label:"Обычный клиент",discount:0},
+  {code:"regular",label:"Постоянный клиент",discount:5},
+  {code:"vip",label:"VIP-клиент",discount:8},
+  {code:"god",label:"GOD-клиент",discount:10},
+  {code:"secret",label:"SECRET-клиент",discount:15}
+];
+function reputationRank(code){return REPUTATION_RANKS.find(rank=>rank.code===String(code))||REPUTATION_RANKS[0];}
+async function ensureReputationProfile(env,telegramId){
+  await env.DB.prepare("INSERT OR IGNORE INTO reputation_profiles(telegram_id) VALUES(?)").bind(String(telegramId)).run();
+}
+async function getReputationMonthRows(env,monthKey){
+  return await env.DB.prepare("SELECT u.telegram_id,u.username,u.first_name,p.rank_code,p.leaderboard_opt_in,COALESCE(SUM(CASE WHEN t.amount>0 THEN t.amount ELSE 0 END),0) AS monthly_points FROM reputation_profiles p INNER JOIN users u ON u.telegram_id=p.telegram_id LEFT JOIN reputation_transactions t ON t.telegram_id=p.telegram_id AND t.leaderboard_eligible=1 AND strftime('%Y-%m',datetime(t.created_at,'+5 hours'))=? GROUP BY u.telegram_id ORDER BY monthly_points DESC, u.created_at ASC LIMIT 100").bind(monthKey).all();
 }
 
 export default {
@@ -1073,6 +1090,15 @@ export default {
         const counts=await env.DB.prepare("SELECT option_index,COUNT(*) AS votes FROM announcement_votes WHERE announcement_id=? GROUP BY option_index").bind(announcementId).all();
         const map=new Map((counts.results||[]).map(row=>[Number(row.option_index),Number(row.votes||0)]));
         return json({ok:true,vote_results:options.map((_,i)=>map.get(i)||0),my_vote:optionIndex},200,origin);
+      }
+
+
+      if (path === "/api/leaderboard" && method === "GET") {
+        if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({ok:true,leaderboard:[],migration_pending:true},200,origin);
+        const monthKey=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date());
+        const rows=await getReputationMonthRows(env,monthKey);
+        const leaderboard=(rows.results||[]).filter(row=>Number(row.leaderboard_opt_in)!==0&&Number(row.monthly_points)>0).slice(0,10).map((row,index)=>({place:index+1,name:row.first_name|| (row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,monthly_points:Number(row.monthly_points)}));
+        return json({ok:true,month:monthKey,leaderboard},200,origin);
       }
 
       // Administrative access is restricted to the single confirmed project owner.
@@ -1503,6 +1529,89 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           }
           await env.DB.prepare("DELETE FROM products WHERE id=?").bind(id).run();
           return json({ ok: true, deleted: true }, 200, origin);
+        }
+
+        if (path === "/api/admin/reputation" && method === "GET") {
+          if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
+          const monthKey= new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date());
+          const rows=await getReputationMonthRows(env,monthKey);
+          const users=(rows.results||[]).map(row=>({...row,monthly_points:Number(row.monthly_points||0),rank:reputationRank(row.rank_code)}));
+          const totals=await env.DB.prepare("SELECT telegram_id,COALESCE(SUM(amount),0) AS total_points FROM reputation_transactions GROUP BY telegram_id").all();
+          const totalMap=new Map((totals.results||[]).map(row=>[String(row.telegram_id),Number(row.total_points||0)]));
+          for(const user of users)user.total_points=totalMap.get(String(user.telegram_id))||0;
+          const owner=users.find(item=>String(item.telegram_id)===ownerId);
+          return json({ok:true,month:monthKey,ranks:REPUTATION_RANKS,users,owner_opt_in:owner?Number(owner.leaderboard_opt_in)!==0:true},200,origin);
+        }
+        if (path === "/api/admin/reputation/points" && method === "POST") {
+          if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
+          const body=await readJson(request),targetId=String(body.telegram_id||"").trim().slice(0,64),amount=Number(body.amount),description=String(body.description||"Ручная корректировка владельцем").trim().slice(0,240);
+          if(!targetId||!Number.isSafeInteger(amount)||amount===0||Math.abs(amount)>1000000)return json({error:"Укажите пользователя и целое количество баллов от -1 000 000 до 1 000 000, кроме нуля."},400,origin);
+          const target=await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if(!target)return json({error:"Пользователь не найден."},404,origin);
+          await ensureReputationProfile(env,targetId);
+          const key="admin-reputation:"+makeId();
+          await env.DB.batch([
+            env.DB.prepare("INSERT INTO reputation_transactions(telegram_id,actor_telegram_id,amount,source,description,leaderboard_eligible,idempotency_key) VALUES(?,?,?,'admin_manual',?,?,?)").bind(targetId,telegramId,amount,description,amount>0?1:0,key),
+            env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,targetId,"reputation_points_adjusted",JSON.stringify({amount,description,idempotency_key:key}))
+          ]);
+          return json({ok:true,message:"Репутация обновлена.",amount},200,origin);
+        }
+        if (path === "/api/admin/reputation/rank" && method === "POST") {
+          if (!(await tableExists(env,"reputation_profiles"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
+          const body=await readJson(request),targetId=String(body.telegram_id||"").trim().slice(0,64),rankCode=String(body.rank_code||"");
+          if(!targetId||!REPUTATION_RANKS.some(rank=>rank.code===rankCode))return json({error:"Укажите пользователя и корректный ранг."},400,origin);
+          const target=await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if(!target)return json({error:"Пользователь не найден."},404,origin);
+          await env.DB.prepare("INSERT INTO reputation_profiles(telegram_id,rank_code) VALUES(?,?) ON CONFLICT(telegram_id) DO UPDATE SET rank_code=excluded.rank_code,updated_at=CURRENT_TIMESTAMP").bind(targetId,rankCode).run();
+          await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,targetId,"reputation_rank_changed",JSON.stringify({rank_code:rankCode,rank_label:reputationRank(rankCode).label})).run();
+          return json({ok:true,rank:reputationRank(rankCode)},200,origin);
+        }
+        if (path === "/api/admin/reputation/owner-visibility" && method === "POST") {
+          if (!(await tableExists(env,"reputation_profiles"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
+          const body=await readJson(request),enabled=body.enabled===true;
+          await ensureReputationProfile(env,ownerId);
+          await env.DB.prepare("UPDATE reputation_profiles SET leaderboard_opt_in=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(enabled?1:0,ownerId).run();
+          await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,ownerId,"leaderboard_owner_visibility_changed",JSON.stringify({enabled})).run();
+          return json({ok:true,enabled},200,origin);
+        }
+        if (path === "/api/admin/reputation/settle" && method === "POST") {
+          if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions")) || !(await tableExists(env,"reputation_monthly_settlements"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
+          if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Для купона нужна миграция 0027_user_bonus_system.sql."},503,origin);
+          const body=await readJson(request),monthKey=String(body.month||"");
+          if(!/^\\d{4}-\\d{2}$/.test(monthKey))return json({error:"Укажите месяц в формате YYYY-MM."},400,origin);
+          const previousMonth=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date(Date.now()-35*86400000));
+          if(monthKey!==previousMonth)return json({error:"Можно закрыть только последний завершившийся календарный месяц."},409,origin);
+          const existing=await env.DB.prepare("SELECT month_key FROM reputation_monthly_settlements WHERE month_key=?").bind(monthKey).first();
+          if(existing)return json({error:"Награды за этот месяц уже выданы."},409,origin);
+          const rows=await getReputationMonthRows(env,monthKey),eligible=(rows.results||[]).filter(row=>Number(row.leaderboard_opt_in)!==0);
+          const first=eligible[0]||null,second=eligible[1]||null,firstPoints=Number(first?.monthly_points||0),secondPoints=Number(second?.monthly_points||0);
+          const rewards={first:null,second:null};
+          const statements=[];
+          const settlementKey="reputation-month:"+monthKey;
+          statements.push(env.DB.prepare("INSERT INTO reputation_monthly_settlements(month_key,first_telegram_id,second_telegram_id,first_points,second_points,rewards_json) VALUES(?,?,?,?,?,?)").bind(monthKey,first?.telegram_id||null,second?.telegram_id||null,firstPoints,secondPoints,"{}"));
+          if(first&&firstPoints>=100){
+            rewards.first=firstPoints>=200?"rank_up_plus_150_stars":"150_stars";
+            statements.push(env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES(?,150,'reputation_reward',?,?,?)".replace("VALUES(?,150,'reputation_reward',?,?,?)","VALUES(?,150,'reputation_reward',?,?)")).bind(String(first.telegram_id),"Награда за "+monthKey+": "+(firstPoints>=200?"1-е место и повышение ранга":"1-е место"),"reputation-first:"+monthKey));
+            statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+150,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(String(first.telegram_id)));
+            if(firstPoints>=200){
+              const oldRank=reputationRank(first.rank_code),next=REPUTATION_RANKS[Math.min(REPUTATION_RANKS.length-1,REPUTATION_RANKS.findIndex(rank=>rank.code===oldRank.code)+1)];
+              if(next.code!==oldRank.code){
+                statements.push(env.DB.prepare("UPDATE reputation_profiles SET rank_code=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(next.code,String(first.telegram_id)));
+                rewards.first_rank=next.label;
+              } else rewards.first_rank="Максимальный ранг уже достигнут";
+            }
+          }
+          if(second&&secondPoints>=100){
+            rewards.second="50_stars_plus_priority_delivery_coupon";
+            statements.push(env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES(?,50,'reputation_reward',?,?)").bind(String(second.telegram_id),"Награда за "+monthKey+": 2-е место","reputation-second:"+monthKey));
+            statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+50,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(String(second.telegram_id)));
+            statements.push(env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons) VALUES(?,1) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=priority_order_coupons+1,updated_at=CURRENT_TIMESTAMP").bind(String(second.telegram_id)));
+            statements.push(env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) VALUES(?,NULL,'priority_order',1,'grant',0,?)").bind(String(second.telegram_id),"reputation-priority-coupon:"+monthKey));
+          }
+          statements[0]=env.DB.prepare("INSERT INTO reputation_monthly_settlements(month_key,first_telegram_id,second_telegram_id,first_points,second_points,rewards_json) VALUES(?,?,?,?,?,?)").bind(monthKey,first?.telegram_id||null,second?.telegram_id||null,firstPoints,secondPoints,JSON.stringify(rewards));
+          statements.push(env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,action_type,details) VALUES(?,?,?)").bind(telegramId,"reputation_month_settled",JSON.stringify({month:monthKey,first: first?{telegram_id:first.telegram_id,points:firstPoints}:null,second:second?{telegram_id:second.telegram_id,points:secondPoints}:null,rewards})));
+          await env.DB.batch(statements);
+          return json({ok:true,month:monthKey,first:rewards.first?{name:first?.first_name||first?.username||first?.telegram_id,points:firstPoints,reward:rewards.first,rank:rewards.first_rank||null}:null,second:rewards.second?{name:second?.first_name||second?.username||second?.telegram_id,points:secondPoints,reward:rewards.second}:null},200,origin);
         }
         if (path === "/api/admin/users" && method === "GET") {
           const url = new URL(request.url);
