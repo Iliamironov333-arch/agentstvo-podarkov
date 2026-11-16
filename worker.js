@@ -1,4 +1,4 @@
-import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute } from "./ai-moderator.js";
+import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft } from "./ai-moderator.js";
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 0;
@@ -782,7 +782,7 @@ async function handleWebhook(request, env) {
         statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
           .bind(earned, telegramId));
       }
-      statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
+      statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
       statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
       if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
@@ -3047,7 +3047,16 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const last=conversation[conversation.length-1];
           if(!last||last.role!=="user"||last.content!==latest.content)conversation.push({role:"user",content:String(latest.content||"").slice(0,700)});
           conversation=conversation.slice(-24);
-          const aiEnabled=!existing||previous.ai_enabled!==false;
+          if(existing){
+ const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,latest.content,previous,existing.estimated_stars||0);
+ if(promoResult){
+  conversation.push({role:"assistant",content:promoResult.reply});conversation=conversation.slice(-24);
+  const details={...previous,source:"miniapp_workshop",conversation,owner_messages:ownerMessages};
+  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(JSON.stringify(details),draftId,String(telegramId)).run();
+  return json({ok:true,reply:promoResult.reply,ready:false,status:"collecting",draft_id:draftId,estimated_stars:existing.estimated_stars||0,offer_pending:previous.proposal_pending_customer===true,conversation},200,origin);
+ }
+}
+const aiEnabled=!existing||previous.ai_enabled!==false;
           const firstRequest=conversation.find(m=>m.role==="user")?.content||"Индивидуальная работа";
           const subject=String(firstRequest).replace(/\s+/g," ").trim().slice(0,120)||"Индивидуальная работа";
           const ownerMessages=Array.isArray(previous.owner_messages)?previous.owner_messages:[];
@@ -3097,7 +3106,14 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог удалён и больше недоступен."},410,origin);
         if(!["collecting","review","approved","paid","cancelled"].includes(draft.status))return json({error:"Диалог больше недоступен."},410,origin);
-        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
+        const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,details,draft.estimated_stars||0);
+if(promoResult){
+ details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+ details.conversation.push({role:"user",content:message},{role:"assistant",content:promoResult.reply});details.conversation=details.conversation.slice(-24);
+ await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(JSON.stringify(details),draftId,String(telegramId)).run();
+ return json({ok:true,reply:promoResult.reply,conversation:details.conversation,status:"collecting",estimated_stars:draft.estimated_stars||0},200,origin);
+}
+const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
         const expired=!!(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first());
         if(expired)return json({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,closed:false,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
@@ -3316,6 +3332,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             let draftDetails = {};
             if (activeCraftDraft) { try { draftDetails = JSON.parse(activeCraftDraft.details_json || "{}"); } catch {} }
             const draftConversation = Array.isArray(draftDetails.conversation) ? draftDetails.conversation : [];
+if(activeCraftDraft){
+ const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,draftDetails,activeCraftDraft.estimated_stars||0);
+ if(promoResult){
+  draftConversation.push({role:"user",content:message.slice(0,700)},{role:"assistant",content:promoResult.reply});
+  draftDetails={...draftDetails,source:"miniapp_support_chat",support_conversation_id:conversationId,conversation:draftConversation.slice(-24)};
+  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(JSON.stringify(draftDetails),draftId,String(telegramId)).run();
+  await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')").bind(telegramId,conversationId,assistantType,promoResult.reply).run();
+  await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
+  return json({ok:true,reply:promoResult.reply,vip:!!vip,saved:true,conversation_id:conversationId,order_draft:true,draft_id:draftId,offer_pending:draftDetails.proposal_pending_customer===true,estimated_stars:activeCraftDraft.estimated_stars||0,status:"collecting"},200,origin);
+ }
+}
             draftConversation.push({ role: "user", content: message.slice(0,700) });
             const aiMessages = draftConversation.filter(item => item && ["user","assistant","owner"].includes(item.role))
               .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
