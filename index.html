@@ -2491,15 +2491,16 @@ async function openAdminUser(telegramId,box) {
 }
 
 async function adminGrantBonuses(telegramId) {
+ const profileBox=document.querySelector('.admin-user-detail[data-telegram-id="'+String(telegramId)+'"]');
+ if(!profileBox)return;
  const fields={priority_order_coupons:"adminBonusPriorityOrder",vip_days:"adminBonusVipDays",campaign_priority:"adminBonusCampaignPriority",extra_attempts:"adminBonusExtraAttempts"};
  const values={};
- for(const [key,id] of Object.entries(fields)){const value=Number(document.getElementById(id)?.value||0);if(!Number.isSafeInteger(value)||value<0){toast("Проверьте количество бонусов.");return;}values[key]=value;}
+ for(const [key,id] of Object.entries(fields)){const value=Number(profileBox.querySelector("#"+id)?.value||0);if(!Number.isSafeInteger(value)||value<0){toast("Проверьте количество бонусов.");return;}values[key]=value;}
  if(!Object.values(values).some(value=>value>0)){toast("Укажите хотя бы один бонус.");return;}
  if(!window.confirm("Выдать выбранные бонусы этому покупателю?"))return;
- const button=document.getElementById("adminGrantBonusesButton");if(button)button.disabled=true;
- try{await apiFetch("/api/admin/user-bonuses",{method:"POST",body:JSON.stringify({telegram_id:String(telegramId),...values})});toast("Бонусы отправлены покупателю.");await openAdminUser(telegramId,document.querySelector('.admin-user-detail[data-telegram-id="'+String(telegramId)+'"]'));}
- catch(e){toast(e.message||"Не удалось выдать бонусы.");}
- finally{if(button)button.disabled=false;}
+ const button=profileBox.querySelector("#adminGrantBonusesButton");if(button)button.disabled=true;
+ try{await apiFetch("/api/admin/user-bonuses",{method:"POST",body:JSON.stringify({telegram_id:String(telegramId),...values})});toast("Бонусы отправлены покупателю.");await openAdminUser(telegramId,profileBox);}
+ catch(e){toast(e.message||"Не удалось выдать бонусы.");if(button)button.disabled=false;}
 }
 
 async function adminSetUserBlock(telegramId) {
