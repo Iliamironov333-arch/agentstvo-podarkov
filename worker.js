@@ -2974,7 +2974,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         }
         const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.qty, 0);
         if (!Number.isSafeInteger(subtotal) || subtotal < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
-        let discount = 0, promoCode = null, discountPercent = 0;
+        let promoCode = null, promoPercent = 0, promoEligibleOriginal = 0;
         const requestedPromo = typeof body.promo_code === "string" ? body.promo_code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32) : "";
         const promoSchemaReady = await tableExists(env,"promo_codes") && await tableExists(env,"promo_redemptions");
         if(requestedPromo){
@@ -2987,10 +2987,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(promo.starts_at&&Date.parse(promo.starts_at)>Date.now())return json({error:"Срок действия промокода ещё не начался."},400,origin);
           if(promo.ends_at&&Date.parse(promo.ends_at)<Date.now())return json({error:"Срок действия промокода закончился."},400,origin);
           if(promo.max_uses!==null&&Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)>=Number(promo.max_uses))return json({error:"Лимит использований промокода исчерпан."},409,origin);
-          const eligibleSubtotal=promoEligibleSubtotal(catalog,quantities,promo);
-          if(eligibleSubtotal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
-          promoCode=promo.code;discountPercent=Number(promo.discount_percent);discount=Math.min(eligibleSubtotal-1,Math.floor(eligibleSubtotal*discountPercent/100));
+          promoEligibleOriginal=promoEligibleSubtotal(catalog,quantities,promo);
+          if(promoEligibleOriginal<1)return json({error:"Промокод не действует на товары в этой корзине."},400,origin);
+          promoCode=promo.code;promoPercent=Number(promo.discount_percent);
         }
+        const discountBase=subtotal+builderExtraTotal;
+        const rankRow=await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
+        const rankPercent=reputationRank(rankRow?.rank_code).discount;
+        const seasonalDiscount=Math.floor(discountBase*Math.max(0,Math.min(90,DISCOUNT_PERCENT))/100);
+        const rankDiscount=Math.floor((discountBase-seasonalDiscount)*rankPercent/100);
+        const afterGlobalDiscounts=discountBase-seasonalDiscount-rankDiscount;
+        const promoEligibleAfterGlobal=promoEligibleOriginal>0&&discountBase>0?Math.floor(promoEligibleOriginal*afterGlobalDiscounts/discountBase):0;
+        const promoDiscount=promoPercent>0?Math.min(Math.max(0,promoEligibleAfterGlobal-1),Math.floor(promoEligibleAfterGlobal*promoPercent/100)):0;
+        const discount=seasonalDiscount+rankDiscount+promoDiscount;
+        const discountPercent=discountBase>0?Math.round(discount*100/discountBase):0;
         let delivery;
         if (deliveryMethod === "pickup") {
           delivery = {
@@ -3011,7 +3021,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             return json({error:message},clientInputError?422:503,origin);
           }
         }
-        const goodsTotal = subtotal-discount;
+        const goodsTotal = subtotal+builderExtraTotal-discount;
         const total = goodsTotal+builderExtraTotal+delivery.total_delivery_stars;
         if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
