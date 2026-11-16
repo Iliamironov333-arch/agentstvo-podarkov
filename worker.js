@@ -564,7 +564,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   const prompt = [
     "Оцени предварительную стоимость готовой авторской художественной работы для заказа в Агентстве подарков.",
     "Верни только JSON без Markdown: {\"price_stars\": число, \"note\": \"короткое объяснение\"}.",
-    "Цена только в целых Telegram Stars, диапазон 250..100000. Оцени сложность, размер, материалы, детализацию и срочность. Не используй курс рубля и не придумывай конвертацию бюджета.",
+    "Цена только в целых Telegram Stars от 100 до 800. Обычно ориентируйся на 150–350 Stars для небольших и средних работ; 400–600 — только для действительно трудоёмких и детализированных работ; 700–800 — исключительная редкость для очень сложного, большого или многосоставного заказа. Не завышай цену, учитывай бюджет клиента. Не используй курс рубля и не придумывай конвертацию бюджета.",
     "Это ориентир, не окончательная цена: владелец подтвердит или изменит её вручную.",
     "Данные заказа: " + JSON.stringify(answers).slice(0,3500)
   ].join("\n");
@@ -581,13 +581,23 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
     const match = output.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("AI estimate JSON missing");
     const parsed = JSON.parse(match[0]);
-    const price = Number(parsed.price_stars);
-    if (!Number.isSafeInteger(price) || price < 250 || price > 100000) throw new Error("AI estimate outside allowed range");
+    const rawPrice = Number(parsed.price_stars);
+    if (!Number.isFinite(rawPrice) || rawPrice < 1) throw new Error("AI estimate outside allowed range");
+    const price = Math.max(100, Math.min(800, Math.round(rawPrice)));
     return { price_stars: price, source: "ai", note: String(parsed.note || "Предварительная оценка ИИ").slice(0,300) };
   } catch (error) {
     console.error("Custom order AI estimate failed:", String(error).slice(0,300));
     return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
   }
+}
+
+function isCraftOrderAcceptance(message) {
+ const value=String(message||"").trim().toLowerCase().replace(/ё/g,"е").replace(/[!.,;:]+$/g,"").trim();
+ return /^(?:да|ага|угу|(?:да,?\s*)?(?:я\s+)?согласен(?:на)?|подтверждаю|оформляй(?:те)?|беру|подходит|все подходит|давайте оформим|давайте закажем|хочу оформить|да,? хочу оформить|можно оформлять|да,? оформляем|да,? заказываем|да,? все подходит|все отлично,? давайте оформим)$/i.test(value);
+}
+function buildCraftOfferReply(reply, priceStars) {
+ return String(reply||"Предлагаю этот вариант индивидуальной работы.").trim().slice(0,5000)
+  + "\n\nПредварительная оценка: " + Number(priceStars) + " ⭐. Это не окончательная цена — её проверит владелец Агентства.\nЕсли вариант и оценка Вам подходят, напишите «Да, оформляем». Если хотите что-то изменить, просто расскажите что именно.";
 }
 
 async function getGlobalAiToneInstruction(env){
@@ -608,30 +618,26 @@ async function createCraftAnswer(env,messages){
  if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
  const questionsUsed=Math.max(0,assistantTurns-1);
- const forceFinal=questionsUsed>=16;
  const instructions=[
   await getGlobalAiToneInstruction(env),
-  "Ты — консультант по индивидуальным заказам Агентства подарков. Твоя задача — помочь клиенту выбрать и заказать готовую авторскую работу у Агентства, а НЕ научить клиента делать поделку самостоятельно.",
-  "Главная цель диалога: понять задумку и бюджет клиента, предложить подходящие варианты готовых работ, рассчитать предварительную стоимость заказа и подготовить понятное резюме для владельца.",
-  "Сначала уточни идею, для кого подарок и по какому поводу. Затем последовательно уточни бюджет только в рублях, размер, стиль, желаемые цвета, материалы/технику, уровень детализации, важные элементы и желаемый срок. Не спрашивай, в какой валюте считать, и не предлагай выбирать между рублями и Telegram Stars: бюджет индивидуальной работы обсуждается в рублях. Не задавай вопрос, если ответ уже есть в переписке.",
-  "Задавай строго ОДИН короткий вопрос за сообщение. Если клиент не знает, чего хочет, предложи 2–3 конкретные идеи на выбор. Не превращай беседу в анкету: вопросы должны быть естественными и относиться к заказу.",
-  "Не более 16 вопросов консультанта за весь диалог. Первое приветствие не считается вопросом. Если уже задано 16 вопросов, больше ничего не спрашивай — сразу подготовь итог по имеющимся данным и явно отметь неизвестные детали.",
-  "Когда данных достаточно, предложи 2–3 варианта заказа: название/концепция, что будет входить в готовую работу, чем варианты отличаются и предварительная цена каждого. Сравни цены с бюджетом клиента и выбери лучший вариант в пределах бюджета. Если ни один не помещается, предложи более доступный вариант или честно сообщи о разнице.",
-  "Рассчитывай предварительную стоимость готовой работы в Telegram Stars по сложности, размеру, детализации, материалам и срочности. Это ориентир ИИ, а не официальный прайс; не выдумывай закупочные цены и не конвертируй бюджет в рублях в Stars по выдуманному курсу. Покажи диапазон в Stars и объясни факторы. Окончательную цену подтверждает владелец; владелец может назначить её вручную в карточке индивидуального заказа.",
-  "ВАЖНО: не пиши инструкцию по изготовлению, список пошаговых действий, мастер-класс, шаблон самостоятельной сборки или советы «сделай сам». Не расписывай этапы изготовления. Вместо этого описывай результат, комплектацию готовой работы и то, что получит заказчик.",
-  "Если бюджет неизвестен — сначала спроси его. Если клиент не хочет называть бюджет, можно продолжить с несколькими ценовыми уровнями, не блокируя консультацию.",
-  "Когда итоговый подбор готов, начни ответ строго с [READY]. Пока уточняешь пожелания, начни строго с [ASK]. Не используй [READY], пока не предложил подходящий вариант и не оценил стоимость.",
-  forceFinal ? "ОБЯЗАТЕЛЬНО: лимит из 16 вопросов уже достигнут. Никаких новых вопросов. Сейчас выдай итоговый подбор с имеющимися данными, вариантами и предварительными ценами, начни с [READY]." : "",
+  "Ты — консультант по индивидуальным заказам Агентства подарков. Помоги клиенту выбрать готовую авторскую работу, а не учи делать её самостоятельно.",
+  "Сначала естественно выясни: что именно нужно; для кого и по какому поводу; бюджет в рублях (или явный отказ назвать бюджет); желаемый размер; стиль и цвета; материалы/технику; уровень детализации; важные элементы; желаемый срок. Не повторяй вопросы, на которые уже ответили.",
+  "Считай информацию достаточной, когда понятна сама идея, назначение/получатель, бюджет или отказ его называть, основные параметры внешнего вида и сложности, а срок известен либо клиенту он не важен. Если какой-то параметр клиент оставляет на усмотрение мастера, считай его уточнённым. Не выдумывай ответы за клиента.",
+  "Задавай строго один короткий уместный вопрос за сообщение. Не превращай разговор в анкету. Если клиент затрудняется, предложи 2–3 понятных варианта ответа.",
+  "Пока важных сведений не хватает — продолжай уточнять и начинай ответ с [ASK]. Не предлагай оформить заказ преждевременно.",
+  "Когда информации достаточно, предложи 1–3 подходящие концепции готовой работы, опиши результат и отличия вариантов, выбери наиболее подходящий с учётом пожеланий и начни ответ строго с [READY]. Не объявляй заказ оформленным и не говори, что он уже передан владельцу. Не называй никаких цен: система добавит отдельную предварительную оценку с ограничением до 800 Stars и попросит клиента явно согласиться.",
+  "Если клиент просит изменить предложенную концепцию, не считай это согласием. Уточни нужные изменения и при необходимости подготовь обновлённое предложение.",
+  "Не пиши мастер-классы, инструкции по изготовлению или советы «сделай сам». Описывай только готовый результат и то, что получит заказчик.",
+  "Не дави на клиента и не торопи с покупкой. Согласие на оформление должно быть добровольным и явным.",
   "Учитывай безопасность: не предлагай опасные материалы, огонь, токсичные вещества, опасные конструкции или рискованные действия.",
-  "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ уже принят или оплачен."
- ].filter(Boolean).join("\n");
+  "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ принят или оплачен."
+ ].join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
  const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
- let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("ИИ-мастерская не вернула ответ.");
- a=a.trim();let ready=a.startsWith("[READY]");a=a.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,7000);
- if(forceFinal&&!ready)throw new Error("Не удалось завершить подбор после 16 вопросов. Попробуй отправить последнее сообщение ещё раз.");
- return {reply:a,ready,questions_used:questionsUsed};
+ let answer=typeof d.output_text==="string"?d.output_text:"";if(!answer&&Array.isArray(d.output))answer=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!answer.trim())throw new Error("ИИ-мастерская не вернула ответ.");
+ answer=answer.trim();const ready=answer.startsWith("[READY]");answer=answer.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,5000);
+ return {reply:answer,ready,questions_used:questionsUsed};
 }
 async function createVipSupportAnswer(env,message){
  const instructions=[await getGlobalAiToneInstruction(env),"Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
@@ -3054,31 +3060,34 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             await notifyOwner(env,"💬 Новое сообщение в заказе ИИ-помощника (автоответы выключены)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+String(latest.content||"").slice(0,700)+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");
             return json({ok:true,reply:handoff,ready:false,questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:false,handoff:true,conversation},200,origin);
           }
-          const aiMessages=conversation.filter(m=>m&&["user","assistant","owner"].includes(m.role)).map(m=>({role:m.role==="owner"?"assistant":m.role,content:String(m.content||"").slice(0,700)})).slice(-24);
+          if(existing&&previous.proposal_pending_customer===true&&isCraftOrderAcceptance(latest.content)){
+            const acceptedReply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
+            conversation.push({role:"assistant",content:acceptedReply});conversation=conversation.slice(-24);
+            const details={...previous,source:"miniapp_workshop",ai_enabled:true,proposal_pending_customer:false,customer_accepted:true,customer_accepted_at:new Date().toISOString(),conversation,owner_messages:ownerMessages};
+            await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
+            await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
+            return json({ok:true,reply:acceptedReply,ready:true,status:"review",questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
+          }
+          if(previous.proposal_pending_customer===true)previous.proposal_pending_customer=false;
+          const aiMessages=conversation.filter(m=>m&&["user","assistant","owner"].includes(m.role)).map(m=>({role:m.role==="owner"?"assistant":m.role,content:String(m.content||"").slice(0,1500)})).slice(-24);
           const result=await createCraftAnswer(env,aiMessages);
-          conversation.push({role:"assistant",content:String(result.reply||"").slice(0,1200)});conversation=conversation.slice(-24);
-          const details={...previous,source:"miniapp_workshop",ai_enabled:true,summary:String(result.reply||"").slice(0,2000),conversation,owner_messages:ownerMessages,estimate_note:String(previous.estimate_note||"").slice(0,180)};
+          let reply=String(result.reply||"").slice(0,5000);
+          let offerPending=false;
           if(result.ready){
-            const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:aiMessages,proposal:result.reply},250);
-            estimatedStars=estimate.price_stars;
-            details.estimate_note=String(estimate.note||"").slice(0,180);
-            if(existing){
-              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,draftId,String(telegramId)).run();
-            }else{
-              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'review')")
-                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
-            }
-            if(!existing||existing.status==="collecting")await notifyOwner(env,"🧵 НОВЫЙ ЗАПРОС ИЗ ИИ-ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+(user.username?" (@"+user.username+")":"")+"\nTelegram ID: "+telegramId+"\n\n"+result.reply.slice(0,2600)+"\n\nПредварительная оценка ИИ: "+estimatedStars+" ⭐\nОткройте Админ-панель → ИИ-заказы, чтобы изменить цену, ответить клиенту и подтвердить заказ.");
+            const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:aiMessages,proposal:result.reply},200);
+            estimatedStars=estimate.price_stars;reply=buildCraftOfferReply(reply,estimatedStars);offerPending=true;
+            previous.estimate_note=String(estimate.note||"").slice(0,180);
+          }
+          conversation.push({role:"assistant",content:reply.slice(0,1200)});conversation=conversation.slice(-24);
+          const details={...previous,source:"miniapp_workshop",ai_enabled:true,summary:reply.slice(0,2000),proposal_pending_customer:offerPending,conversation,owner_messages:ownerMessages,estimate_note:String(previous.estimate_note||"").slice(0,180)};
+          if(existing){
+            await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,draftId,String(telegramId)).run();
           }else{
-            if(existing){
-              await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(subject,JSON.stringify(details),draftId,String(telegramId)).run();
-            }else{
-              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,0,'collecting')")
-                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details)).run();
-            }
+            await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'collecting')")
+              .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
           }
           if(!existing)await notifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИИ-ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\n\nПокупатель начал диалог с ИИ. До завершения консультации и подтверждения владельцем счёт не отправляется.");
-          return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
+          return json({ok:true,reply,ready:false,offer_pending:offerPending,status:"collecting",questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
         }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог ИИ-помощника."},503,origin);}
       }
       if (path === "/api/craft/messages" && method === "GET") {
@@ -3106,20 +3115,33 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
-        let reply=null,handoff=false;
-        if(details.ai_enabled!==false){try{
-          const aiMessages=details.conversation.filter(x=>x&&["user","assistant","owner"].includes(x.role)).slice(-24).map(x=>({role:x.role==="owner"?"assistant":x.role,content:x.content}));
+        let reply=null,handoff=false,nextStatus=draft.status,estimatedStars=Number(draft.estimated_stars||0);
+        if(draft.status==="collecting"&&details.proposal_pending_customer===true&&isCraftOrderAcceptance(message)){
+          reply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
+          details.proposal_pending_customer=false;details.customer_accepted=true;details.customer_accepted_at=new Date().toISOString();nextStatus="review";
+          await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
+          details.conversation.push({role:"assistant",content:reply});details.conversation=details.conversation.slice(-24);
+        }else if(details.ai_enabled!==false){try{
           if(draft.status==="collecting"){
+            if(details.proposal_pending_customer===true)details.proposal_pending_customer=false;
+            const aiMessages=details.conversation.filter(x=>x&&["user","assistant","owner"].includes(x.role)).slice(-24).map(x=>({role:x.role==="owner"?"assistant":x.role,content:x.content}));
             const answer=await createCraftAnswer(env,aiMessages);reply=answer.reply;
+            if(answer.ready){
+              const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_workshop",conversation:aiMessages,proposal:answer.reply},200);
+              estimatedStars=estimate.price_stars;reply=buildCraftOfferReply(reply,estimatedStars);details.proposal_pending_customer=true;
+              details.estimate_note=String(estimate.note||"").slice(0,180);
+            }else details.proposal_pending_customer=false;
           }else{
+            const aiMessages=details.conversation.filter(x=>x&&["user","assistant","owner"].includes(x.role)).slice(-24).map(x=>({role:x.role==="owner"?"assistant":x.role,content:x.content}));
             const customerContext={order_chat:true,order_subject:draft.subject||"Индивидуальный заказ",order_status:draft.status,order_summary:details.summary||"",ai_estimate_stars:draft.estimated_stars||null,owner_confirmed_price_stars:draft.approved_stars||null,order_chat_instruction:"Это отдельный чат только по указанному заказу. Не смешивай его с другими заказами клиента. Учитывай сообщения владельца как подтверждённый контекст. Не изменяй цену, статус, оплату или заказ."};
             reply=await createSupportAnswer(env,aiMessages,false,customerContext,[]);
           }
-          details.conversation.push({role:"assistant",content:reply});details.conversation=details.conversation.slice(-24);
+          details.conversation.push({role:"assistant",content:String(reply||"").slice(0,1200)});details.conversation=details.conversation.slice(-24);
         }catch(error){handoff=true;reply="Автоматический ответ сейчас недоступен. Сообщение сохранено — владелец сможет ответить вручную.";await notifyOwner(env,"⚠️ ИИ не смог ответить в чате заказа "+draftId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\nОшибка: "+String(error).slice(0,180));}}
         else{handoff=true;reply="Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную.";await notifyOwner(env,"💬 Новое сообщение в заказе (ИИ выключен)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");}
-        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(JSON.stringify(details),draftId,String(telegramId)).run();
-        return json({ok:true,reply,conversation:details.conversation,handoff,ai_enabled:details.ai_enabled!==false},200,origin);
+        if(draft.status==="collecting"&&nextStatus==="collecting")details.summary=String(details.conversation.filter(m=>m.role==="assistant").slice(-1)[0]?.content||details.summary||"").slice(0,2000);
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status=?,estimated_stars=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(JSON.stringify(details),nextStatus,estimatedStars,draftId,String(telegramId)).run();
+        return json({ok:true,reply,conversation:details.conversation,handoff,ai_enabled:details.ai_enabled!==false,status:nextStatus,estimated_stars:estimatedStars},200,origin);
       }
       if (path === "/api/vip/support" && method === "POST") {
         // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
@@ -3297,20 +3319,29 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             draftConversation.push({ role: "user", content: message.slice(0,700) });
             const aiMessages = draftConversation.filter(item => item && ["user","assistant","owner"].includes(item.role))
               .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
-            const craftResult = await createCraftAnswer(env, aiMessages);
-            draftConversation.push({ role: "assistant", content: String(craftResult.reply || "").slice(0,1200) });
+            let craftReply = "";
+            let offerReady = false;
+            const customerAccepted = !!(activeCraftDraft&&draftDetails.proposal_pending_customer===true&&isCraftOrderAcceptance(message));
+            let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
+            let status = "collecting";
+            if(customerAccepted){
+              craftReply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
+              draftDetails.proposal_pending_customer=false;draftDetails.customer_accepted=true;draftDetails.customer_accepted_at=new Date().toISOString();status="review";
+            }else{
+              if(draftDetails.proposal_pending_customer===true)draftDetails.proposal_pending_customer=false;
+              const craftResult = await createCraftAnswer(env, aiMessages);
+              craftReply=String(craftResult.reply||"");
+              if(craftResult.ready){
+                const estimate=await estimateCustomOrderPrice(env,{source:"miniapp_support_chat",conversation:aiMessages,proposal:craftReply},200);
+                estimatedStars=estimate.price_stars;draftDetails.estimate_note=String(estimate.note||"").slice(0,180);
+                craftReply=buildCraftOfferReply(craftReply,estimatedStars);offerReady=true;draftDetails.proposal_pending_customer=true;
+              }
+            }
+            draftConversation.push({ role: "assistant", content: craftReply.slice(0,1200) });
             const subject = String(draftConversation.find(item => item.role === "user")?.content || "Индивидуальная работа")
               .replace(/\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
             draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
-              ai_enabled: true, conversation: draftConversation.slice(-24), summary: String(craftResult.reply || "").slice(0,2000) };
-            let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
-            let status = "collecting";
-            if (craftResult.ready) {
-              const estimate = await estimateCustomOrderPrice(env,{source:"miniapp_support_chat",conversation:aiMessages,proposal:craftResult.reply},250);
-              estimatedStars = estimate.price_stars;
-              draftDetails.estimate_note = String(estimate.note || "").slice(0,180);
-              status = "review";
-            }
+              ai_enabled: true, conversation: draftConversation.slice(-24), summary: customerAccepted ? String(draftDetails.summary||"").slice(0,2000) : craftReply.slice(0,2000) };
             if (activeCraftDraft) {
               await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'")
                 .bind(subject,JSON.stringify(draftDetails),estimatedStars,status,draftId,String(telegramId)).run();
@@ -3318,20 +3349,20 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(draftDetails),estimatedStars,status).run();
             }
-            const reply = String(craftResult.reply || "Давайте уточним Вашу задумку. Что именно Вы хотели бы заказать?").slice(0,3000);
+            const reply = String(craftReply || "Давайте уточним Вашу задумку. Что именно Вы хотели бы заказать?").slice(0,3000);
             await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')")
               .bind(telegramId,conversationId,assistantType,reply).run();
             await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
             if (!activeCraftDraft) {
               await notifyOwner(env,"🟢 НОВЫЙ ЧЕРНОВИК ИНДИВИДУАЛЬНОЙ РАБОТЫ ИЗ ЧАТА ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\nДиалог Mini App: "+conversationId+"\n\nПокупатель явно попросил заказать индивидуальную работу. Черновик сохранён в Админ-панели → ИИ-заказы.");
             }
-            if (craftResult.ready) {
-              await notifyOwner(env,"🎁 ИНДИВИДУАЛЬНЫЙ ЗАПРОС ГОТОВ К ПРОВЕРКЕ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nОткройте Админ-панель → ИИ-заказы и проверьте запрос перед подтверждением цены.");
+            if(customerAccepted){
+              await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
             }
             const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
               .bind(telegramId,chatLimit).all();
             return json({ok:true,reply,vip:!!vip,saved:true,conversation_id:conversationId,conversations:refreshed.results||[],chat_limit:chatLimit,
-              order_draft:true,draft_id:draftId,ready:craftResult.ready,estimated_stars:estimatedStars},200,origin);
+              order_draft:true,draft_id:draftId,ready:customerAccepted,offer_pending:offerReady,estimated_stars:estimatedStars,status},200,origin);
           } catch (error) {
             console.error("Support custom-order draft failed:",String(error));
             return json({error:error.message||"Не удалось создать черновик индивидуальной работы. Сообщение сохранено."},503,origin);

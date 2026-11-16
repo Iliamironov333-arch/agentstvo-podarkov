@@ -245,8 +245,8 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
 async function aiEstimateGroupOrderPrice(env,summary){
   const instructions=[
     "Ты оцениваешь предварительную стоимость индивидуальной handmade-работы для Агентства подарков.",
-    "Оцени трудоёмкость, сложность, количество и объём персонализации по описанию заказа.",
-    "Верни только JSON: {\"price_stars\": целое число от 1 до 100000, \"note\": \"короткое объяснение до 160 символов\"}.",
+    "Оцени трудоёмкость, сложность, количество и объём персонализации по описанию заказа. Обычно предлагай 150–350 Stars для небольших и средних работ; 400–600 — только для сложных; 700–800 — исключительно редко для очень трудоёмких заказов. Не завышай цену.",
+    "Верни только JSON: {\"price_stars\": целое число от 100 до 800, \"note\": \"короткое объяснение до 160 символов\"}.",
     "Это только предварительная оценка для владельца. Не утверждай, что цена окончательная, и не обещай сроки.",
     "Не придумывай дополнительные материалы или услуги, которых нет в описании."
   ].join("\n");
@@ -254,8 +254,9 @@ async function aiEstimateGroupOrderPrice(env,summary){
   const match=raw.match(/\{[\s\S]*\}/);
   if(!match)throw new Error("ИИ не вернул структурированную оценку цены.");
   const parsed=JSON.parse(match[0]);
-  const price=Math.round(Number(parsed.price_stars));
-  if(!Number.isSafeInteger(price)||price<1||price>100000)throw new Error("ИИ вернул недопустимую оценку цены.");
+  const rawPrice=Number(parsed.price_stars);
+  if(!Number.isFinite(rawPrice)||rawPrice<1)throw new Error("ИИ вернул недопустимую оценку цены.");
+  const price=Math.max(100,Math.min(800,Math.round(rawPrice)));
   return {price_stars:price,note:String(parsed.note||"Предварительная оценка ИИ.").slice(0,160)};
 }
 async function aiInspectText(env,text,settings){
@@ -537,11 +538,15 @@ async function aiApproveOrder(env, callback) {
   const id=String(callback.data||"").slice("ai_order_approve:".length);
   const draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE id=? AND status='review'").bind(id).first();
   if(!draft){if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже обработан или не найден.",show_alert:true});return;}
-  if(!draft.approved_stars || Number(draft.approved_stars)<1) {
+  if(!draft.approved_stars || Number(draft.approved_stars)<1 || Number(draft.approved_stars)>800) {
     if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Сначала укажите итоговую цену в Mini App → ИИ-заказы.",show_alert:true});return;
   }
   let draftDetails={};
   try{draftDetails=JSON.parse(draft.details_json||"{}");}catch{}
+  if(draftDetails.source!=="group"&&draftDetails.customer_accepted!==true){
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Покупатель ещё не согласился с предложением. Подтверждение заказа пока недоступно.",show_alert:true});
+    return false;
+  }
   const isGroupOrder=draftDetails.source==="group";
   if(isGroupOrder){
     try{
@@ -1176,7 +1181,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       const draft=await env.DB.prepare("SELECT * FROM ai_order_drafts WHERE id=? AND status='review'").bind(id).first();
       if(!draft)return aiJson({error:"Заказ не найден или уже подтверждён."},404);
       const price=Number(body.approved_stars);
-      if(!Number.isSafeInteger(price)||price<1||price>100000)return aiJson({error:"Укажите цену от 1 до 100000 Stars."},400);
+      if(!Number.isSafeInteger(price)||price<1||price>800)return aiJson({error:"Итоговая цена индивидуального заказа должна быть от 1 до 800 Stars."},400);
       const subject=String(body.subject||draft.subject).trim().slice(0,120);
       let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
       if(body.summary!==undefined)details.summary=String(body.summary).slice(0,3000);
