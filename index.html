@@ -2364,6 +2364,7 @@ function changeQty(id,d) {
 }
 
 
+function previousEkaterinburgMonth(){const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit'}).formatToParts(new Date());const y=Number(p.find(x=>x.type==='year')?.value),m=Number(p.find(x=>x.type==='month')?.value),d=new Date(Date.UTC(y,m-2,1));return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');}
 async function loadAdminReputation(){
  const status=document.getElementById('adminReputationStatus'),list=document.getElementById('adminReputationList'),select=document.getElementById('adminReputationUser');
  if(!status||!list||!select)return;
@@ -2395,7 +2396,7 @@ async function setOwnerLeaderboardVisibility(enabled){
 }
 async function settleAdminReputationMonth(){
  if(!confirm('Выдать награды за завершившийся календарный месяц? Это действие нельзя повторить.'))return;
- try{const month=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit'}).format(new Date(Date.now()-35*86400000));const data=await apiFetch('/api/admin/reputation/settle',{method:'POST',body:JSON.stringify({month})});toast('Награды за '+data.month+' выданы.');await loadAdminReputation();}catch(e){toast(e.message||'Не удалось закрыть месяц.');}
+ try{const month=previousEkaterinburgMonth();const data=await apiFetch('/api/admin/reputation/settle',{method:'POST',body:JSON.stringify({month})});toast('Награды за '+data.month+' выданы.');await loadAdminReputation();}catch(e){toast(e.message||'Не удалось закрыть месяц.');}
 }
 async function loadPublicLeaderboard(){
  const root=document.getElementById('publicLeaderboardList'),status=document.getElementById('publicLeaderboardStatus');if(!root||!status)return;
