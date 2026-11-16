@@ -987,6 +987,7 @@ const REPUTATION_RANKS = [
   {code:"secret",label:"SECRET-клиент",discount:15}
 ];
 function reputationRank(code){return REPUTATION_RANKS.find(rank=>rank.code===String(code))||REPUTATION_RANKS[0];}
+function ekaterinburgMonthKey(date=new Date(),monthOffset=0){const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).formatToParts(date);const year=Number(parts.find(x=>x.type==="year")?.value),month=Number(parts.find(x=>x.type==="month")?.value);const shifted=new Date(Date.UTC(year,month-1+monthOffset,1));return shifted.getUTCFullYear()+"-"+String(shifted.getUTCMonth()+1).padStart(2,"0");}
 async function ensureReputationProfile(env,telegramId){
   await env.DB.prepare("INSERT OR IGNORE INTO reputation_profiles(telegram_id) VALUES(?)").bind(String(telegramId)).run();
 }
@@ -1095,7 +1096,7 @@ export default {
 
       if (path === "/api/leaderboard" && method === "GET") {
         if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({ok:true,leaderboard:[],migration_pending:true},200,origin);
-        const monthKey=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date());
+        const monthKey=ekaterinburgMonthKey();
         const rows=await getReputationMonthRows(env,monthKey);
         const leaderboard=(rows.results||[]).filter(row=>Number(row.leaderboard_opt_in)!==0&&Number(row.monthly_points)>0).slice(0,10).map((row,index)=>({place:index+1,name:row.first_name|| (row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,monthly_points:Number(row.monthly_points)}));
         return json({ok:true,month:monthKey,leaderboard},200,origin);
@@ -1533,7 +1534,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
 
         if (path === "/api/admin/reputation" && method === "GET") {
           if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({error:"Требуется миграция 0028_reputation_ranks_leaderboard.sql."},503,origin);
-          const monthKey= new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date());
+          const monthKey=ekaterinburgMonthKey();
           const rows=await getReputationMonthRows(env,monthKey);
           const users=(rows.results||[]).map(row=>({...row,monthly_points:Number(row.monthly_points||0),rank:reputationRank(row.rank_code)}));
           const totals=await env.DB.prepare("SELECT telegram_id,COALESCE(SUM(amount),0) AS total_points FROM reputation_transactions GROUP BY telegram_id").all();
@@ -1579,7 +1580,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Для купона нужна миграция 0027_user_bonus_system.sql."},503,origin);
           const body=await readJson(request),monthKey=String(body.month||"");
           if(!/^\\d{4}-\\d{2}$/.test(monthKey))return json({error:"Укажите месяц в формате YYYY-MM."},400,origin);
-          const previousMonth=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Yekaterinburg",year:"numeric",month:"2-digit"}).format(new Date(Date.now()-35*86400000));
+          const previousMonth=ekaterinburgMonthKey(new Date(),-1);
           if(monthKey!==previousMonth)return json({error:"Можно закрыть только последний завершившийся календарный месяц."},409,origin);
           const existing=await env.DB.prepare("SELECT month_key FROM reputation_monthly_settlements WHERE month_key=?").bind(monthKey).first();
           if(existing)return json({error:"Награды за этот месяц уже выданы."},409,origin);
