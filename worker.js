@@ -1,7 +1,7 @@
 import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft } from "./ai-moderator.js";
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
-const DISCOUNT_PERCENT = 0;
+const DISCOUNT_PERCENT = 10;
 const VIP_PRICES = { subscription: 500, lifetime: 2000 };
 // Пополнение доступно на любую целую сумму от 1 до 10 000 Stars.
 const CUSTOM_PRICE_OPTIONS = {"style":{"classic":0,"watercolor":80,"perspective":120,"autumn":40,"realistic":150,"artist_choice":0},"format":{"postcard":0,"a5":40,"a4":90,"large":140},"palette":{"natural":0,"bright":25,"pastel":35,"custom":55},"complexity":{"simple":0,"medium":45,"detailed":90},"deadline":{"standard":0,"priority":100}};
