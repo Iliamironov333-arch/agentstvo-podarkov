@@ -3347,23 +3347,10 @@ function appendAdminOrderCard(key,order,card){
  const bucket=adminOrderBucket(order);section._orderCounts[bucket]++;
  if(key==='assistant'){
   const details=(()=>{try{return JSON.parse(order.details_json||'{}')}catch{return {}}})();
-  const conversation=Array.isArray(details.conversation)?details.conversation:[];
-  const userText=conversation.filter(m=>m&&m.role==='user').map(m=>String(m.content||'')).join(' ');
-  const intentText=(userText+' '+String(details.summary||'')+' '+String(order.subject||'')).toLowerCase();
-  const orderIntent=details.order_intent===true||/хочу\s+(?:оформить|сделать|разместить|заказать|купить)|(?:оформить|разместить|сделать)\s+(?:у вас\s+)?заказ|хочу\s+заказ(?:ать)?|готов(?:а|ы)?\s+оформить|можно\s+(?:оформить|сделать|разместить|заказать)|заказать\s+у\s+вас|приобрести\s+(?:у вас\s+)?/.test(intentText);
   let folderKey,folderTitle,openFolder;
   if(bucket==='paid'){folderKey='paid';folderTitle='⭐ Оплаченные';openFolder=false;}
   else if(bucket==='cancelled'){folderKey='cancelled';folderTitle='🔒 Отменённые';openFolder=false;}
-  else if(orderIntent||['review','approved'].includes(String(order.status||''))){folderKey='unfinished';folderTitle='🛒 Незавершённые заказы';openFolder=false;}
-  else{
-   let created=String(order.created_at||'').trim();
-   if(created&&!created.includes('T'))created=created.replace(' ','T')+'Z';
-   const createdAt=created?Date.parse(created):NaN;
-   const recent=Number.isFinite(createdAt)&&(Date.now()-createdAt)<=3*24*60*60*1000&&(Date.now()-createdAt)>=0;
-   folderKey=recent?'recent':'older';
-   folderTitle=recent?'🆕 Новые диалоги · за последние 3 дня':'🗂️ Старые диалоги · более 3 дней';
-   openFolder=false;
-  }
+  else{folderKey='unfinished';folderTitle='🛒 Незавершённые и ожидающие';openFolder=false;}
   let folder=section.querySelector('[data-assistant-folder="'+folderKey+'"]');
   if(!folder){
    folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantFolder=folderKey;folder.open=openFolder;
@@ -3389,7 +3376,7 @@ function finishAdminOrderCategory(key){
  if(count)count.textContent='Всего: '+total+' · активных: '+counts.active;
  if(key==='assistant'){
   const folderCounts=section._assistantFolderCounts||{};
-  const labels={unfinished:'🛒 Незавершённые заказы',recent:'🆕 Новые диалоги · за последние 3 дня',older:'🗂️ Старые диалоги · более 3 дней',paid:'⭐ Оплаченные',cancelled:'🔒 Отменённые'};
+  const labels={unfinished:'🛒 Незавершённые и ожидающие',paid:'⭐ Оплаченные',cancelled:'🔒 Отменённые'};
   Object.entries(labels).forEach(([folderKey,label])=>{
    let folder=section.querySelector('[data-assistant-folder="'+folderKey+'"]');
    if(!folder&&folderCounts[folderKey]){folder=document.createElement('details');folder.className='admin-detail-line';folder.dataset.assistantFolder=folderKey;folder.open=false;const summary=document.createElement('summary');summary.textContent=label+' · '+folderCounts[folderKey];summary.style.cssText='cursor:pointer;font-weight:700;padding:10px 0';const list=document.createElement('div');list.className='admin-assistant-folder-list';folder.append(summary,list);section.append(folder);}
