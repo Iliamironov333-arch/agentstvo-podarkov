@@ -898,6 +898,26 @@ async function handleAiTelegramUpdate(update, env) {
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
+    // Репутация: учитываем только новые, неотредактированные сообщения,
+    // прошедшие проверку модерации. Первые два за скользящие 24 часа — без баллов.
+    const activityMessageId=Number(message.message_id)||0;
+    if(activityMessageId>0){
+      const telegramMessageDate=Number(message.date)||Math.floor(Date.now()/1000);
+      const activityCreatedAt=new Date(telegramMessageDate*1000).toISOString().slice(0,19).replace("T"," ");
+      const activityInsert=await env.DB.prepare("INSERT OR IGNORE INTO reputation_group_message_activity(chat_id,message_id,telegram_id,created_at) VALUES(?,?,?,?)")
+        .bind(chatId,activityMessageId,String(user.id),activityCreatedAt).run();
+      if(Number(activityInsert.meta?.changes||0)===1){
+        const activity=await env.DB.prepare("SELECT COUNT(*) AS total FROM reputation_group_message_activity WHERE chat_id=? AND telegram_id=? AND created_at>=datetime('now','-24 hours')")
+          .bind(chatId,String(user.id)).first();
+        if(Number(activity?.total||0)>2){
+          await env.DB.prepare("INSERT OR IGNORE INTO users(telegram_id,username,first_name) VALUES(?,?,?)")
+            .bind(String(user.id),user.username||null,user.first_name||null).run();
+          await env.DB.prepare("INSERT OR IGNORE INTO reputation_profiles(telegram_id) VALUES(?)").bind(String(user.id)).run();
+          await env.DB.prepare("INSERT OR IGNORE INTO reputation_transactions(telegram_id,actor_telegram_id,amount,source,description,leaderboard_eligible,idempotency_key,created_at) VALUES(?,?,5,'group_message','Активность в группе: сообщение без нарушений',1,?,?)")
+            .bind(String(user.id),null,"group-message:"+chatId+":"+activityMessageId,activityCreatedAt).run();
+        }
+      }
+    }
     const telegramMessageDate=Number(message.date)||Math.floor(Date.now()/1000);
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
       .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
