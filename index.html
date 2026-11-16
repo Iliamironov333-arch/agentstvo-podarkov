@@ -4253,14 +4253,14 @@ async function sendCraftMessage(){
    status.textContent=d.handoff?'Сообщение сохранено. Автоответы ИИ выключены — владелец сможет ответить вручную. 💬':'ИИ ответил в чате этого заказа. 💬';
    renderCraftChat();return;
   }
-  if(craftQuestionCount>=16){status.textContent='Лимит вопросов достигнут. Готовим итоговый подбор…';}
   craftMessages.push({role:'user',content:message});
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   if(Array.isArray(d.conversation))craftMessages=d.conversation;else craftMessages.push({role:d.handoff?'system':'assistant',content:d.reply||'Помощник не вернул сообщение.'});
   craftDraftId=d.draft_id||craftDraftId;craftAiEnabled=d.ai_enabled!==false;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}if(craftDraftId)startCraftPolling();
-  if(d.ready){craftConversationReady=true;status.textContent='Предложение сохранено и передано владельцу. Предварительная оценка ИИ: '+Number(d.estimated_stars||0)+' ⭐. Владелец может изменить итоговую цену перед отправкой счёта. Теперь можно продолжить диалог с ним здесь.';input.placeholder='Напишите сообщение по этому заказу…';startCraftPolling();}
+  if(d.ready){craftConversationReady=true;status.textContent='Вы согласились с предложением. Запрос передан владельцу для проверки. Счёт не отправлен — сначала владелец проверит описание и цену.';input.placeholder='Напишите сообщение по этому заказу…';startCraftPolling();}
   else if(d.handoff){status.textContent='Сообщение сохранено. Автоответы ИИ выключены — владелец сможет ответить вручную. 💬';}
-  else{craftQuestionCount=Math.min(16,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
+  else if(d.offer_pending){status.textContent='Подбор готов! Предварительная оценка: '+Number(d.estimated_stars||0)+' ⭐. Если всё подходит, напишите «Да, оформляем». Если хотите изменить идею — расскажите что поправить.';}
+  else{craftQuestionCount=Math.min(100,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();
  }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуйте ещё раз.';input.value=message;}
  finally{button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
@@ -4663,7 +4663,7 @@ async function loadAiOrders(){
    card.append(aiAdminNode('p','Клиент: '+(o.first_name||'Участник')+' · Telegram ID: '+o.telegram_id+' · '+formatDate(o.created_at)+' · Статус: '+(o.status==='cancelled'?'Отменён':o.payment_status==='paid'||o.status==='paid'?'Оплачен':o.status==='collecting'?'Заполняется':o.status==='review'?'Ожидает решения владельца':o.status==='approved'?'Ожидает оплаты':o.status),'muted'));
    const summary=aiAdminNode('textarea');summary.rows=4;summary.value=(details.summary||(details.messages||[]).join('\n'))+(details.change_requests?.length?'\n\nИзменения после согласования:\n'+details.change_requests.map(x=>x.text).join('\n'):'');summary.placeholder='Пожелания клиента';card.append(summary);
    const subject=aiAdminNode('input');subject.value=o.subject||'';subject.placeholder='Название заказа';card.append(subject);
-   const price=aiAdminNode('input');price.type='number';price.min='1';price.max='100000';price.value=o.approved_stars||o.estimated_stars||'';price.placeholder='Итоговая цена в Stars';card.append(price);
+   const price=aiAdminNode('input');price.type='number';price.min='1';price.max='800';price.value=o.approved_stars||o.estimated_stars||'';price.placeholder='Итоговая цена в Stars';card.append(price);
    const aiToggle=aiAdminNode('label',undefined,'admin-detail-line');aiToggle.style.cssText='display:flex;align-items:center;gap:9px;margin:8px 0';
    const aiCheck=document.createElement('input');aiCheck.type='checkbox';aiCheck.checked=details.ai_enabled!==false;aiCheck.disabled=!!o.chat_closed||details.chat_deleted===true;aiCheck.setAttribute('aria-label','Автоматические ответы ИИ по этому заказу');
    const aiText=aiAdminNode('span',aiCheck.checked?'🤖 Автоответы ИИ включены':'⏸ Автоответы ИИ выключены');
