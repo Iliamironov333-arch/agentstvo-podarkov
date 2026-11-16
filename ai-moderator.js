@@ -318,6 +318,37 @@ async function aiGroupOrderReply(env,chatId,userId,draftId,details,text,replyToM
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(details),draftId).run();
   return true;
 }
+function aiOrderAcceptance(message){
+ const value=String(message||"").trim().toLowerCase().replace(/ё/g,"е").replace(/[!.,;:]+$/g,"").trim();
+ return /^(?:да|ага|угу|согласен(?:на)?|подтверждаю|оформляем|заказываем|беру|подходит|все подходит|мне подходит|мне все подходит|меня устраивает|мне все устраивает|да,?\s*(?:мне\s+)?(?:все\s+)?(?:подходит|устраивает)|да,?\s*давайте\s*(?:оформим|закажем)|да,?\s*оформляем|да,?\s*заказываем)$/i.test(value);
+}
+async function aiApplyPromoToDraft(env,draftId,telegramId,message,details,estimatedStars=0){
+ const match=String(message||"").trim().match(/^(?:промокод|промо[- ]?код|код)\s*[:№-]?\s*([A-Z0-9_-]{3,32})$/i);
+ if(!match)return null;
+ const code=match[1].toUpperCase();
+ try{
+  const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(code).first();
+  if(!promo||!promo.is_active)return {ok:false,reply:"Этот промокод не найден или уже отключён. Проверьте написание."};
+  const valid=await env.DB.prepare("SELECT 1 AS ok WHERE (? IS NULL OR datetime(?)<=datetime('now')) AND (? IS NULL OR datetime(?)>datetime('now')) AND (? IS NULL OR CAST(? AS INTEGER)+CAST(? AS INTEGER)<CAST(? AS INTEGER))")
+   .bind(promo.starts_at,promo.starts_at,promo.ends_at,promo.ends_at,promo.max_uses,promo.reserved_count||0,promo.redeemed_count||0,promo.max_uses).first();
+  if(!valid)return {ok:false,reply:"Срок действия промокода закончился или лимит использований уже исчерпан."};
+  const columns=await env.DB.prepare("PRAGMA table_info(promo_codes)").all();
+  const names=new Set((columns.results||[]).map(x=>x.name));
+  if(names.has("product_ids")||names.has("category_ids")){
+   const scoped=await env.DB.prepare("SELECT product_ids,category_ids FROM promo_codes WHERE code=?").bind(code).first();
+   const productIds=String(scoped?.product_ids||"[]").trim(),categoryIds=String(scoped?.category_ids||"[]").trim();
+   if((productIds!=="[]"&&productIds!=="")||(categoryIds!=="[]"&&categoryIds!==""))return {ok:false,reply:"Этот промокод действует только на товары каталога, а не на индивидуальные заказы."};
+  }
+  details.promo_code=code;details.promo_discount_percent=Number(promo.discount_percent);details.promo_added_at=new Date().toISOString();
+  await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'")
+   .bind(JSON.stringify(details),String(draftId),String(telegramId)).run();
+  const preview=Number(estimatedStars)>0?Math.min(Number(estimatedStars)-1,Math.floor(Number(estimatedStars)*Number(promo.discount_percent)/100)):0;
+  return {ok:true,reply:"🎟️ Промокод "+code+" принят: скидка "+Number(promo.discount_percent)+"% будет учтена при подтверждении заказа владельцем."+(preview>0?" По текущей предварительной оценке это примерно −"+preview+" ⭐.":"")};
+ }catch(error){
+  console.error("AI order promo validation failed:",String(error).slice(0,200));
+  return {ok:false,reply:"Сейчас не удалось проверить промокод. Попробуйте ещё раз чуть позже."};
+ }
+}
 async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId=null){
   const lower=String(text||"").toLowerCase().trim();
   const orientationQuestion=/^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower)&&/[?？]/.test(text);
@@ -409,6 +440,24 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
     return true;
   }
   details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+  if(details.proposal_pending_customer===true&&aiOrderAcceptance(text)){
+    details.conversation.push({role:"user",content:String(text).slice(0,1000)});
+    details.customer_accepted=true;details.customer_accepted_at=new Date().toISOString();details.proposal_pending_customer=false;
+    const acceptedReply="Спасибо! Ваше согласие записано. Я передал заказ владельцу Агентства для проверки и окончательного подтверждения. ✨";
+    details.conversation.push({role:"assistant",content:acceptedReply});
+    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
+    await aiNotifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ С ПРЕДЛОЖЕНИЕМ ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\nПроверьте описание и итоговую цену в Mini App → ИИ-заказы.");
+    await aiGroupReply(env,chatId,user.id,acceptedReply,replyToMessageId);
+    return true;
+  }
+  const promoResult=await aiApplyPromoToDraft(env,active.id,user.id,text,details,active.estimated_stars||0);
+  if(promoResult){
+    details.conversation.push({role:"user",content:String(text).slice(0,1000)});
+    details.conversation.push({role:"assistant",content:promoResult.reply});
+    details.conversation=details.conversation.slice(-24);
+    await aiGroupOrderReply(env,chatId,user.id,active.id,details,promoResult.reply,replyToMessageId);
+    return true;
+  }
   details.conversation.push({role:"user",content:String(text).slice(0,1000)});
   details.order_fields=details.order_fields||{};
   if(details.ai_enabled===false&&!/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
@@ -445,11 +494,12 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
         await aiLog(env,{chat_id:chatId,actor:"ai_order_estimator",target:user.id,type:"group_order_estimate_failed",details:{draft_id:active.id,error:String(error).slice(0,180)}});
       }
       details.estimated_stars=estimatedStars;
-      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='review',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,active.id).run();
-      const estimateNotice=estimatedStars?"\nПредварительная оценка ИИ: "+estimatedStars+" ⭐ (можно изменить).":"\nИИ не смог рассчитать предварительную цену — укажите её вручную.";
-      await aiNotifyOwner(env,"🎁 ГОТОВЫЙ ЗАПРОС ИЗ ГРУППЫ\nID: "+active.id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")"+(user.username?" @"+user.username:"")+"\n\n"+details.summary+estimateNotice+"\n\nОткройте Mini App → ИИ-заказы, проверьте описание и подтвердите итоговую цену. До Вашего подтверждения счёт не отправляется.");
-      await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Спасибо! Я передал Ваш запрос владельцу Агентства. Он проверит детали и назначит цену. После подтверждения Вы получите сообщение и, если потребуется, счёт в личном чате с ботом. ✨",replyToMessageId);
-      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_submitted",details:{draft_id:active.id}});return true;
+      details.proposal_pending_customer=true;details.customer_accepted=false;
+      await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status='collecting',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(subject,JSON.stringify(details),estimatedStars,active.id).run();
+      const estimateNotice=estimatedStars?"\nПредварительная оценка: "+estimatedStars+" ⭐.":"\nВладелец уточнит цену после проверки.";
+      const promoNotice=details.promo_code?"\nПромокод "+details.promo_code+" · скидка "+details.promo_discount_percent+"% будет учтена при подтверждении.":"";
+      await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Проверьте итоговое предложение:\n\n"+details.summary+estimateNotice+promoNotice+"\n\nЕсли всё подходит, напишите «Да, оформляем». Если хотите изменить детали — напишите, что поправить. Счёт появится только после Вашего согласия и подтверждения владельцем. ✨",replyToMessageId);
+      await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"group_order_proposal_sent",details:{draft_id:active.id}});return true;
     }
     details.step="item";details.order_fields={};
     await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
@@ -509,6 +559,11 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
 }
 async function aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder}){
   await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND status='pending'").bind(orderId).run();
+  const promoReservation=await env.DB.prepare("SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved'").bind(orderId).first();
+  if(promoReservation)await env.DB.batch([
+    env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoReservation.code),
+    env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId)
+  ]);
   await env.DB.batch([
     env.DB.prepare("UPDATE ai_order_drafts SET status='review',order_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?").bind(id,orderId),
     env.DB.prepare("DELETE FROM custom_orders WHERE id=?").bind(orderId),
@@ -543,7 +598,7 @@ async function aiApproveOrder(env, callback) {
   }
   let draftDetails={};
   try{draftDetails=JSON.parse(draft.details_json||"{}");}catch{}
-  if(draftDetails.source!=="group"&&draftDetails.customer_accepted!==true){
+  if(draftDetails.customer_accepted!==true){
     if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Покупатель ещё не согласился с предложением. Подтверждение заказа пока недоступно.",show_alert:true});
     return false;
   }
@@ -561,16 +616,33 @@ async function aiApproveOrder(env, callback) {
   }
   const orderId=crypto.randomUUID();
   const title=String(draft.subject||"Индивидуальный заказ").slice(0,120);
-  const amount=Number(draft.approved_stars);
+  const baseAmount=Number(draft.approved_stars);
+  const promoCode=String(draftDetails.promo_code||"").trim().toUpperCase();
+  let promo=null,discountStars=0;
+  if(promoCode){
+    promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(promoCode).first();
+    const valid=promo&&promo.is_active&&(!promo.starts_at||!!(await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)<=datetime('now')").bind(promo.starts_at).first()))&&(!promo.ends_at||!!(await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)>datetime('now')").bind(promo.ends_at).first()))&&(promo.max_uses===null||Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)<Number(promo.max_uses));
+    if(!valid){await aiNotifyOwner(env,"⚠️ Промокод "+promoCode+" в ИИ-заказе "+id+" больше не действует. Проверьте код перед подтверждением.");if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Промокод больше не действует. Обновите предложение для клиента.",show_alert:true});return false;}
+    discountStars=Math.min(baseAmount-1,Math.floor(baseAmount*Number(promo.discount_percent)/100));
+  }
+  const amount=baseAmount-discountStars;
+  let promoReserved=false;
+  if(promo){
+    const reserve=await env.DB.prepare("UPDATE promo_codes SET reserved_count=reserved_count+1,updated_at=CURRENT_TIMESTAMP WHERE code=? AND is_active=1 AND (max_uses IS NULL OR reserved_count+redeemed_count<max_uses) AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR datetime(ends_at)>datetime('now'))").bind(promoCode).run();
+    if(Number(reserve.meta?.changes||0)!==1){if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Лимит промокода только что исчерпан. Обновите предложение.",show_alert:true});return false;}
+    promoReserved=true;
+  }
   const created=await env.DB.batch([
     env.DB.prepare("UPDATE ai_order_drafts SET status='approved',order_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review' AND approved_stars>0")
       .bind(orderId,id),
-    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status) SELECT ?,?,NULL,?,1,?,0,?,'pending','awaiting_payment' WHERE changes()=1")
-      .bind(orderId,String(draft.telegram_id),title,amount,amount),
+    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) SELECT ?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',?,? WHERE changes()=1")
+      .bind(orderId,String(draft.telegram_id),title,baseAmount,amount,promoCode||null,discountStars),
     env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) SELECT ?,?,?,?,?,?, ?,'pending' WHERE changes()=1")
-      .bind(orderId,String(draft.telegram_id),draft.username,draft.first_name,title,draft.details_json,amount)
+      .bind(orderId,String(draft.telegram_id),draft.username,draft.first_name,title,draft.details_json,amount),
+    ...(promo?[env.DB.prepare("INSERT INTO promo_redemptions(order_id,code,telegram_id,discount_stars,status) SELECT ?,?,?,?,'reserved' WHERE changes()=1").bind(orderId,promoCode,String(draft.telegram_id),discountStars)]:[])
   ]);
-  if(!created[0]?.meta?.changes || created[0].meta.changes!==1 || !created[1]?.meta?.changes || created[1].meta.changes!==1 || !created[2]?.meta?.changes || created[2].meta.changes!==1){
+  if(!created[0]?.meta?.changes || created[0].meta.changes!==1 || !created[1]?.meta?.changes || created[1].meta.changes!==1 || !created[2]?.meta?.changes || created[2].meta.changes!==1 || (promo&&(!created[3]?.meta?.changes||created[3].meta.changes!==1))){
+    if(promoReserved)await env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1) WHERE code=?").bind(promoCode).run();
     if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Заказ уже подтверждён или изменён. Обновите раздел ИИ-заказов.",show_alert:true});
     return false;
   }
@@ -590,6 +662,12 @@ async function aiApproveOrder(env, callback) {
   await env.DB.prepare("UPDATE custom_orders SET status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(balanceUsed,orderId).run();
   await env.DB.prepare("UPDATE ai_order_drafts SET status=CASE WHEN ?=0 THEN 'paid' ELSE 'approved' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?")
     .bind(due,id,orderId).run();
+  if(due===0&&promo){
+    await env.DB.batch([
+      env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
+      env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved'").bind(orderId)
+    ]);
+  }
   let invoiceUrl="";
   if(due>0){
     const payload="ai_order_"+crypto.randomUUID();
