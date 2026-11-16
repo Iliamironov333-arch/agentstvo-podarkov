@@ -560,7 +560,7 @@ async function buildSupportNavigationActions(env, message) {
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
-  if (!env.OPENAI_API_KEY) return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
+  if (!env.OPENAI_API_KEY) return { price_stars: Math.max(280,Math.min(800,Math.round(Number(fallbackStars)||280))), source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
   const prompt = [
     "Оцени предварительную стоимость готовой авторской художественной работы для заказа в Агентстве подарков.",
     "Верни только JSON без Markdown: {\"price_stars\": число, \"note\": \"короткое объяснение\"}.",
@@ -587,7 +587,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
     return { price_stars: price, source: "ai", note: String(parsed.note || "Предварительная оценка ИИ").slice(0,300) };
   } catch (error) {
     console.error("Custom order AI estimate failed:", String(error).slice(0,300));
-    return { price_stars: fallbackStars, source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
+    return { price_stars: Math.max(280,Math.min(800,Math.round(Number(fallbackStars)||280))), source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
   }
 }
 
