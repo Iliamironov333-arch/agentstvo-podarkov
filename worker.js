@@ -3106,14 +3106,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
         if(details.chat_deleted===true)return json({error:"Этот диалог удалён и больше недоступен."},410,origin);
         if(!["collecting","review","approved","paid","cancelled"].includes(draft.status))return json({error:"Диалог больше недоступен."},410,origin);
-        const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,details,draft.estimated_stars||0);
-if(promoResult){
- details.conversation=Array.isArray(details.conversation)?details.conversation:[];
- details.conversation.push({role:"user",content:message},{role:"assistant",content:promoResult.reply});details.conversation=details.conversation.slice(-24);
- await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(JSON.stringify(details),draftId,String(telegramId)).run();
- return json({ok:true,reply:promoResult.reply,conversation:details.conversation,status:"collecting",estimated_stars:draft.estimated_stars||0},200,origin);
-}
-const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
+        const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.status==="cancelled"?(details.terminal_at||draft.updated_at):(draft.last_activity_at||draft.updated_at);
         const expired=!!(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first());
         if(expired)return json({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410,origin);
         return json({ok:true,messages:Array.isArray(details.owner_messages)?details.owner_messages:[],conversation:Array.isArray(details.conversation)?details.conversation:[],status:draft.status,closed:false,subject:draft.subject,estimated_stars:draft.estimated_stars,approved_stars:draft.approved_stars,ai_enabled:details.ai_enabled!==false},200,origin);
@@ -3129,7 +3122,16 @@ const expiryBase=draft.status==="paid"?(draft.paid_at||draft.updated_at):draft.s
         if(await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(expiryBase).first())return json({error:"Чат заказа закрыт: прошло более трёх дней без активности или после завершения заказа."},410,origin);
         if(!["collecting","review","approved"].includes(draft.status))return json({error:"Заказ завершён. Новые сообщения больше не принимаются."},410,origin);
         details.conversation=Array.isArray(details.conversation)?details.conversation:[];
-        details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
+        if(draft.status==="collecting"){
+           const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,details,draft.estimated_stars||0);
+           if(promoResult){
+             details.conversation=Array.isArray(details.conversation)?details.conversation:[];
+             details.conversation.push({role:"user",content:message},{role:"assistant",content:promoResult.reply});details.conversation=details.conversation.slice(-24);
+             await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'").bind(JSON.stringify(details),draftId,String(telegramId)).run();
+             return json({ok:true,reply:promoResult.reply,conversation:details.conversation,status:"collecting",estimated_stars:draft.estimated_stars||0},200,origin);
+           }
+         }
+         details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
         let reply=null,handoff=false,nextStatus=draft.status,estimatedStars=Number(draft.estimated_stars||0);
         if(draft.status==="collecting"&&details.proposal_pending_customer===true&&isCraftOrderAcceptance(message)){
