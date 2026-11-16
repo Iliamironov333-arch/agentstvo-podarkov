@@ -1,4 +1,5 @@
 import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft } from "./ai-moderator.js";
+// CI syntax validation for the AI custom-order workflow.
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 0;
