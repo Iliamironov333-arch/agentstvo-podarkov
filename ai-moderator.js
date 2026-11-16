@@ -323,9 +323,15 @@ function aiOrderAcceptance(message){
  return /^(?:да|ага|угу|согласен(?:на)?|подтверждаю|оформляем|заказываем|беру|подходит|все подходит|мне подходит|мне все подходит|меня устраивает|мне все устраивает|да,?\s*(?:мне\s+)?(?:все\s+)?(?:подходит|устраивает)|да,?\s*давайте\s*(?:оформим|закажем)|да,?\s*оформляем|да,?\s*заказываем)$/i.test(value);
 }
 async function aiApplyPromoToDraft(env,draftId,telegramId,message,details,estimatedStars=0){
- const match=String(message||"").trim().match(/^(?:промокод|промо[- ]?код|код)\s*[:№-]?\s*([A-Z0-9_-]{3,32})$/i);
- if(!match)return null;
- const code=match[1].toUpperCase();
+ const raw=String(message||"").trim();
+  let match=raw.match(/^(?:промокод|промо[- ]?код|код)\s*[:№-]?\s*([A-Z0-9_-]{3,32})$/i);
+  if(!match&&/^[A-Z0-9_-]{3,32}$/i.test(raw)){
+    const candidate=raw.toUpperCase();
+    const exists=await env.DB.prepare("SELECT 1 AS ok FROM promo_codes WHERE code=?").bind(candidate).first().catch(()=>null);
+    if(exists)match=[raw,candidate];
+  }
+  if(!match)return null;
+  const code=String(match[1]).toUpperCase();
  try{
   const promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(code).first();
   if(!promo||!promo.is_active)return {ok:false,reply:"Этот промокод не найден или уже отключён. Проверьте написание."};
