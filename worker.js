@@ -1997,12 +1997,12 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const likeUsername = "%" + term.replace(/^@/, "") + "%";
           const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
           const rows = await env.DB.prepare(
-            "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,CASE WHEN COALESCE(c.updated_at,MAX(s.created_at))<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
+            "SELECT s.telegram_id,s.conversation_id,COALESCE(c.title,'Старый диалог') AS conversation_title,COALESCE(c.assistant_type,'standard') AS assistant_type,CASE WHEN c.deleted_at IS NOT NULL OR COALESCE(c.updated_at,MAX(s.created_at))<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed,CASE WHEN c.deleted_at IS NOT NULL THEN 1 ELSE 0 END AS deleted,u.first_name,u.username,COUNT(*) AS message_count,MAX(s.created_at) AS last_message_at,(SELECT content FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_message,(SELECT role FROM support_chat_messages x WHERE x.telegram_id=s.telegram_id AND x.conversation_id=s.conversation_id ORDER BY x.id DESC LIMIT 1) AS last_role,(SELECT COUNT(*) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS ticket_count,(SELECT MAX(t.created_at) FROM support_messages t WHERE t.telegram_id=s.telegram_id) AS last_ticket_at FROM support_chat_messages s LEFT JOIN users u ON u.telegram_id=s.telegram_id LEFT JOIN support_conversations c ON c.id=s.conversation_id AND c.telegram_id=s.telegram_id WHERE (?='' OR s.telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) GROUP BY s.telegram_id,s.conversation_id ORDER BY last_message_at DESC LIMIT ?"
           ).bind(term, likeTerm, likeUsername, likeTerm, limit).all();
           let deletedRows=[];
           if(await tableExists(env,"admin_action_log")){
             const deleted=await env.DB.prepare("SELECT l.target_telegram_id AS telegram_id,l.details,l.created_at AS deleted_at,u.first_name,u.username FROM admin_action_log l LEFT JOIN users u ON u.telegram_id=l.target_telegram_id WHERE l.action_type='support_conversation_deleted' AND (?='' OR l.target_telegram_id LIKE ? OR u.username LIKE ? OR u.first_name LIKE ?) ORDER BY l.id DESC LIMIT ?").bind(term,likeTerm,likeUsername,likeTerm,limit).all();
-            deletedRows=(deleted.results||[]).map(row=>{let details={};try{details=JSON.parse(row.details||"{}");}catch{}return {telegram_id:row.telegram_id,conversation_id:details.conversation_id||"",conversation_title:"Удалённый диалог",assistant_type:"standard",first_name:row.first_name,username:row.username,message_count:0,last_message_at:row.deleted_at,last_message:"",last_role:"",ticket_count:0,last_ticket_at:null,deleted:true,closed:true,deleted_at:row.deleted_at};}).filter(row=>row.conversation_id);
+            deletedRows=(deleted.results||[]).map(row=>{let details={};try{details=JSON.parse(row.details||"{}");}catch{}return {telegram_id:row.telegram_id,conversation_id:details.conversation_id||"",conversation_title:"Удалённый диалог",assistant_type:"standard",first_name:row.first_name,username:row.username,message_count:0,last_message_at:row.deleted_at,last_message:"",last_role:"",ticket_count:0,last_ticket_at:null,deleted:true,closed:true,deleted_at:row.deleted_at};}).filter(row=>row.conversation_id && !(rows.results||[]).some(existing=>existing.conversation_id===row.conversation_id));
           }
           const conversations=[...(rows.results||[]),...deletedRows].sort((a,b)=>String(b.last_message_at||"").localeCompare(String(a.last_message_at||""))).slice(0,limit);
           return json({ ok: true, conversations }, 200, origin);
@@ -2014,10 +2014,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if (!targetId || !conversationId) return json({ error: "Укажите покупателя и диалог." }, 400, origin);
           const conversation = await env.DB.prepare("SELECT id FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId).first();
           if (!conversation) return json({ error: "Диалог не найден или уже удалён." }, 404, origin);
-          await env.DB.batch([
-            env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(targetId,conversationId),
-            env.DB.prepare("DELETE FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId)
-          ]);
+          await env.DB.prepare("UPDATE support_conversations SET deleted_at=COALESCE(deleted_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+            .bind(conversationId,targetId).run();
           if (await tableExists(env,"admin_action_log")) await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)").bind(telegramId,targetId,"support_conversation_deleted",JSON.stringify({conversation_id:conversationId})).run();
           return json({ok:true,deleted:true},200,origin);
         }
@@ -2036,7 +2034,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             conversationId && actionLogReady
               ? env.DB.prepare("SELECT created_at FROM admin_action_log WHERE target_telegram_id=? AND action_type='support_conversation_deleted' AND details LIKE ? ORDER BY id DESC LIMIT 1").bind(targetId,"%"+conversationId+"%").first()
               : Promise.resolve(null),
-            conversationId ? env.DB.prepare("SELECT id,updated_at,CASE WHEN updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId).first() : Promise.resolve(null)
+            conversationId ? env.DB.prepare("SELECT id,updated_at,deleted_at,CASE WHEN deleted_at IS NOT NULL OR updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId,targetId).first() : Promise.resolve(null)
           ]);
           const messageQuery = senderTypeReady && conversationColumnReady
             ? (conversationId
@@ -2063,10 +2061,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
-            conversation_id: conversationId || null, deleted: !!deletedRecord, deleted_at: deletedRecord?.created_at || null,
-            closed: !!deletedRecord || !!conversationRecord?.closed, closed_at: deletedRecord?.created_at || (conversationRecord?.closed ? conversationRecord.updated_at : null),
+            conversation_id: conversationId || null, deleted: !!deletedRecord || !!conversationRecord?.deleted_at, deleted_at: conversationRecord?.deleted_at || deletedRecord?.created_at || null,
+            closed: !!deletedRecord || !!conversationRecord?.closed, closed_at: conversationRecord?.deleted_at || deletedRecord?.created_at || (conversationRecord?.closed ? conversationRecord.updated_at : null),
             conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
-            messages: deletedRecord ? [] : (messages.results || []).reverse(), orders, tickets: tickets.results || [],
+            messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
           }, 200, origin);
@@ -3185,10 +3183,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const conversation = await env.DB.prepare("SELECT id FROM support_conversations WHERE id=? AND telegram_id=?")
           .bind(conversationId, telegramId).first();
         if (!conversation) return json({ error: "Диалог не найден или уже удалён." }, 404, origin);
-        await env.DB.batch([
-          env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?").bind(telegramId, conversationId),
-          env.DB.prepare("DELETE FROM support_conversations WHERE id=? AND telegram_id=?").bind(conversationId, telegramId)
-        ]);
+        await env.DB.prepare("UPDATE support_conversations SET deleted_at=COALESCE(deleted_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+          .bind(conversationId,telegramId).run();
         if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,telegramId,"support_conversation_deleted",JSON.stringify({conversation_id:conversationId,deleted_by:"buyer"})).run();
         return json({ ok: true, deleted: true, conversation_id: conversationId }, 200, origin);
       }
@@ -3198,7 +3194,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
           .bind(telegramId).first();
         const chatLimit = vip ? 5 : 3;
         const conversationsResult = await env.DB.prepare(
-          "SELECT id,assistant_type,title,created_at,updated_at,CASE WHEN updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 100"
+          "SELECT id,assistant_type,title,created_at,updated_at,CASE WHEN deleted_at IS NOT NULL OR updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 100"
         ).bind(telegramId, vip ? 1 : 0).all();
         const conversations = conversationsResult.results || [];
         const requestedId = (new URL(request.url).searchParams.get("conversation_id") || "").trim();
@@ -3314,7 +3310,9 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
           .bind(message.slice(0, 42), conversationId, telegramId).run();
 
-        if (conversationControl?.mode === "human") {
+        const startsCustomWorkOrder = /(?:хочу\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\\s+(?:мне\\s+)?(?:индивидуальн[а-яё]*\\s+)?заказ|закаж[а-яё]*\\s+мне|(?:нужен|нужна|нужно)\\s+(?:индивидуальн[а-яё]*\\s+)?заказ|хочу\\s+(?:индивидуальн[а-яё]*\\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
+          && !/^(?:я\\s+)?не\\s+(?:хочу|надо|нужно|собираюсь)/iu.test(message);
+        if (conversationControl?.mode === "human" && !startsCustomWorkOrder) {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
           const reply = "Сообщение передано владельцу. ИИ-помощник временно приостановлен.";
           await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES (?,?,?,'assistant',?,'ai')")
@@ -3326,8 +3324,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const activeCraftDraft = await env.DB.prepare(
           "SELECT id,subject,details_json,estimated_stars,status FROM ai_order_drafts WHERE telegram_id=? AND status='collecting' AND json_valid(details_json)=1 AND json_extract(details_json,'$.source')='miniapp_support_chat' AND json_extract(details_json,'$.support_conversation_id')=? AND last_activity_at>=datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1"
         ).bind(String(telegramId),conversationId).first();
-        const startsCustomWorkOrder = /(?:хочу\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\\s+(?:мне\\s+)?(?:индивидуальн[а-яё]*\\s+)?заказ|закаж[а-яё]*\\s+мне|(?:нужен|нужна|нужно)\\s+(?:индивидуальн[а-яё]*\\s+)?заказ|хочу\\s+(?:индивидуальн[а-яё]*\\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
-          && !/^(?:я\\s+)?не\\s+(?:хочу|надо|нужно|собираюсь)/iu.test(message);
+
         if (activeCraftDraft || startsCustomWorkOrder) {
           try {
             const draftId = activeCraftDraft?.id || makeId();
