@@ -662,13 +662,8 @@ async function aiApproveOrder(env, callback) {
   await env.DB.prepare("UPDATE custom_orders SET status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(balanceUsed,orderId).run();
   await env.DB.prepare("UPDATE ai_order_drafts SET status=CASE WHEN ?=0 THEN 'paid' ELSE 'approved' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?")
     .bind(due,id,orderId).run();
-  if(due===0&&promo){
-    await env.DB.batch([
-      env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
-      env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved'").bind(orderId)
-    ]);
-  }
-  let invoiceUrl="";
+  const discountLine=promo?"\nПромокод "+promoCode+" · скидка "+Number(promo.discount_percent)+"% (−"+discountStars+" ⭐).":"";
+   let invoiceUrl="";
   if(due>0){
     const payload="ai_order_"+crypto.randomUUID();
     await env.DB.prepare("INSERT INTO payment_intents(payload,telegram_id,kind,reference_id,amount_stars,bonus_points,plan_type,status) VALUES(?,?,'order',?,?,0,NULL,'pending')")
@@ -682,7 +677,12 @@ async function aiApproveOrder(env, callback) {
         env.DB.prepare("DELETE FROM custom_orders WHERE id=? AND status='pending'").bind(orderId),
         env.DB.prepare("DELETE FROM orders WHERE id=? AND payment_status='pending'").bind(orderId)
       ]);
-      if(balanceUsed>0){
+      const promoReservation=await env.DB.prepare("SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved'").bind(orderId).first();
+       if(promoReservation)await env.DB.batch([
+         env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoReservation.code),
+         env.DB.prepare("UPDATE promo_redemptions SET status='released' WHERE order_id=? AND status='reserved'").bind(orderId)
+       ]);
+       if(balanceUsed>0){
         await env.DB.batch([
           env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(balanceUsed,String(draft.telegram_id)),
           env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES(?,?,'custom_order_refund',?,?)").bind(String(draft.telegram_id),balanceUsed,"Возврат баланса при ошибке счёта "+orderId,"ai-order-refund:"+orderId)
@@ -693,16 +693,22 @@ async function aiApproveOrder(env, callback) {
       return false;
     }
     try{
-      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
+      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐"+discountLine+"\nСписано с баланса: "+balanceUsed+" ⭐\nОсталось оплатить: "+due+" ⭐\nДля оплаты нажмите кнопку ниже.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
     }catch(error){return await aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder});}
     await aiNotifyOwner(env,"⭐ ИИ-заказ подтверждён\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nЦена: "+amount+" ⭐\nСписано с баланса: "+balanceUsed+" ⭐\nСчёт: "+due+" ⭐");
   }else{
     try{
-      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
+      await aiTelegram(env,"sendMessage",{chat_id:String(draft.telegram_id),text:"✅ Владелец подтвердил Ваш индивидуальный заказ!\n\n"+title+"\nИтого: "+amount+" ⭐"+discountLine+"\nЗаказ полностью оплачен с внутреннего баланса. Счёт отправлять не нужно."});
     }catch(error){return await aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder});}
     await aiNotifyOwner(env,"💰 ИИ-заказ полностью оплачен с баланса\nID: "+orderId+"\nКлиент: "+draft.telegram_id+"\nСписано: "+balanceUsed+" ⭐");
   }
-  await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
+  if(due===0&&promo){
+     await env.DB.batch([
+       env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=?").bind(promoCode),
+       env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved'").bind(orderId)
+     ]);
+   }
+   await aiLog(env,{chat_id:draft.chat_id,actor:owner,target:draft.telegram_id,type:"ai_order_approved",details:{draft_id:id,order_id:orderId,amount_stars:amount}});
   return true;
 }
 function aiBase64(buffer){
