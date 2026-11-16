@@ -1771,19 +1771,25 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           return json({ ok: true, order_id: orderId, notified: false, saved: true, delivery: "in_app_only" }, 200, origin);
         }
         if (path === "/api/admin/custom-order-price" && method === "POST") {
-          const b=await readJson(request),id=typeof b.order_id==="string"?b.order_id.trim().slice(0,100):"",price=Number(b.price_stars);
-          if(!id||!Number.isSafeInteger(price)||price<1||price>100000)return json({error:"Укажите итоговую цену от 1 до 100 000 Stars."},400,origin);
+          const b=await readJson(request),id=typeof b.order_id==="string"?b.order_id.trim().slice(0,100):"",originalPrice=Number(b.price_stars);
+          if(!id||!Number.isSafeInteger(originalPrice)||originalPrice<1||originalPrice>100000)return json({error:"Укажите итоговую цену от 1 до 100 000 Stars."},400,origin);
           const c=await env.DB.prepare("SELECT id,telegram_id,subject,status FROM custom_orders WHERE id=?").bind(id).first();
           if(!c)return json({error:"Индивидуальный заказ не найден."},404,origin);
           if(["cancelled","canceled"].includes(String(c.status)))return json({error:"Отменённый заказ нельзя выставить на оплату."},409,origin);
+          const rankRow=await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(String(c.telegram_id)).first().catch(()=>null);
+          const rankPercent=reputationRank(rankRow?.rank_code).discount;
+          const seasonalPercent=Math.max(0,Math.min(90,DISCOUNT_PERCENT));
+          const afterSeason=Math.floor(originalPrice*(100-seasonalPercent)/100);
+          const finalPrice=Math.max(1,Math.floor(afterSeason*(100-rankPercent)/100));
+          const discountStars=originalPrice-finalPrice,discountPercent=Math.round(discountStars*100/originalPrice);
           const old=await env.DB.prepare("SELECT payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(id,String(c.telegram_id)).first();
           if(old?.payment_status==="paid")return json({error:"Заказ уже оплачен. Изменять цену нельзя."},409,origin);
           if(old&&Number(old.balance_applied_stars||0)>0)return json({error:"По заказу уже списана часть баланса. Сначала отмените неоплаченный заказ, чтобы вернуть списанные баллы."},409,origin);
           if(old){
             await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE kind='order' AND reference_id=? AND telegram_id=? AND status='pending'").bind(id,String(c.telegram_id)).run();
-            await env.DB.prepare("UPDATE orders SET price_stars=?,total_stars=?,product_title=? WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(price,price,"Индивидуальная работа: "+c.subject,id,String(c.telegram_id)).run();
+            await env.DB.prepare("UPDATE orders SET price_stars=?,discount_percent=?,discount_stars=?,total_stars=?,product_title=? WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(originalPrice,discountPercent,discountStars,finalPrice,"Индивидуальная работа: "+c.subject,id,String(c.telegram_id)).run();
             const u=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(String(c.telegram_id)).first();
-            const want=Math.min(price,Math.max(0,Number(u?.balance_stars||0)));let used=0;
+            const want=Math.min(finalPrice,Math.max(0,Number(u?.balance_stars||0)));let used=0;
             if(want>0){
               const d=await env.DB.batch([
                 env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?").bind(want,String(c.telegram_id),want),
@@ -1792,11 +1798,11 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               if(d[0]?.meta?.changes===1)used=want;
             }
             await env.DB.prepare("UPDATE orders SET balance_applied_stars=?,payment_status=CASE WHEN ?=total_stars THEN 'paid' ELSE 'pending' END,fulfillment_status=CASE WHEN ?=total_stars THEN 'awaiting_delivery' ELSE 'awaiting_payment' END,paid_at=CASE WHEN ?=total_stars THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=? AND telegram_id=? AND payment_status='pending' AND balance_applied_stars=0").bind(used,used,used,used,id,String(c.telegram_id)).run();
-            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(price,used,id).run();
+            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(finalPrice,used,id).run();
           }else{
-            await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,balance_applied_stars) VALUES (?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',0)").bind(id,String(c.telegram_id),"Индивидуальная работа: "+c.subject,price,price).run();
+            await env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,balance_applied_stars,discount_stars) VALUES (?,?,NULL,?,1,?,?,?,'pending','awaiting_payment',0,?)").bind(id,String(c.telegram_id),"Индивидуальная работа: "+c.subject,originalPrice,discountPercent,finalPrice,discountStars).run();
             const u=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(String(c.telegram_id)).first();
-            const want=Math.min(price,Math.max(0,Number(u?.balance_stars||0)));let used=0;
+            const want=Math.min(finalPrice,Math.max(0,Number(u?.balance_stars||0)));let used=0;
             if(want>0){
               const d=await env.DB.batch([
                 env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=?").bind(want,String(c.telegram_id),want),
@@ -1805,10 +1811,10 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               if(d[0]?.meta?.changes===1)used=want;
             }
             await env.DB.prepare("UPDATE orders SET balance_applied_stars=?,payment_status=CASE WHEN ?=total_stars THEN 'paid' ELSE 'pending' END,fulfillment_status=CASE WHEN ?=total_stars THEN 'awaiting_delivery' ELSE 'awaiting_payment' END,paid_at=CASE WHEN ?=total_stars THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=? AND telegram_id=?").bind(used,used,used,used,id,String(c.telegram_id)).run();
-            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(price,used,id).run();
+            await env.DB.prepare("UPDATE custom_orders SET total_stars=?,status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(finalPrice,used,id).run();
           }
           const final=await env.DB.prepare("SELECT payment_status,balance_applied_stars FROM orders WHERE id=? AND telegram_id=?").bind(id,String(c.telegram_id)).first();
-          const due=Math.max(0,price-Number(final?.balance_applied_stars||0));
+          const due=Math.max(0,finalPrice-Number(final?.balance_applied_stars||0));
           let invoiceUrl="";
           if(due>0){
             const payload="custom_order_"+makeId();
@@ -1816,7 +1822,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               .bind(payload,String(c.telegram_id),id,due).run();
             try{
               invoiceUrl=await createInvoice(env,"Индивидуальный заказ","Оплата индивидуальной работы Агентства подарков",payload,due);
-              await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Ваша индивидуальная работа согласована!\n\n"+c.subject+"\nИтоговая цена: "+price+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось оплатить: "+due+" ⭐. Нажмите кнопку ниже для оплаты.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
+              await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Ваша индивидуальная работа согласована!\n\n"+c.subject+"\nЦена до скидок: "+originalPrice+" ⭐\nСкидка ранга/сезона: "+discountStars+" ⭐\nК оплате: "+finalPrice+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось оплатить: "+due+" ⭐.",reply_markup:{inline_keyboard:[[{text:"Оплатить заказ · "+due+" ⭐",url:invoiceUrl}]]}});
             }catch(error){
               await env.DB.prepare("UPDATE payment_intents SET status='failed' WHERE payload=? AND status='pending'").bind(payload).run();
               console.error("Custom order invoice delivery failed:",String(error).slice(0,250));
@@ -1825,9 +1831,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           } else {
             await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Ваша индивидуальная работа полностью оплачена с внутреннего баланса. Заказ передан владельцу Агентства подарков."});
           }
-          await notifyOwner(env,"🎨 Цена индивидуального заказа назначена\nID: "+id+"\nПокупатель: "+c.telegram_id+"\nИтог: "+price+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось: "+due+" ⭐");
-          try{await telegram(env,"sendMessage",{chat_id:String(c.telegram_id),text:"🎨 Агентство подарков\n\nИтоговая стоимость индивидуальной работы: "+price+" ⭐.\n"+(due===0?"Заказ полностью оплачен с внутреннего баланса.":"Списано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐. Осталось оплатить: "+due+" ⭐. Откройте Mini App → Заказы → Оплатить.")});}catch(e){console.error("Custom price notification failed:",String(e).slice(0,250));}
-          return json({ok:true,order_id:id,price_stars:price,payment_status:final?.payment_status,balance_used_stars:Number(final?.balance_applied_stars||0),invoice_amount_stars:due},200,origin);
+          await notifyOwner(env,"🎨 Цена индивидуального заказа назначена\nID: "+id+"\nПокупатель: "+c.telegram_id+"\nЦена до скидок: "+originalPrice+" ⭐\nСкидка: "+discountStars+" ⭐\nК оплате: "+finalPrice+" ⭐\nСписано с баланса: "+Number(final?.balance_applied_stars||0)+" ⭐\nОсталось: "+due+" ⭐");
+          return json({ok:true,order_id:id,original_price_stars:originalPrice,discount_percent:discountPercent,discount_stars:discountStars,price_stars:finalPrice,payment_status:final?.payment_status,balance_used_stars:Number(final?.balance_applied_stars||0),invoice_amount_stars:due},200,origin);
         }
 
         if (path === "/api/admin/order-update" && method === "POST") {
