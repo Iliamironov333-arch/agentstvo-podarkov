@@ -3027,7 +3027,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           }
         }
         const goodsTotal = subtotal+builderExtraTotal-discount;
-        const total = goodsTotal+builderExtraTotal+delivery.total_delivery_stars;
+        const total = goodsTotal+delivery.total_delivery_stars;
         if (!Number.isSafeInteger(total) || total < 1) return json({ error: "Некорректная сумма заказа" }, 400, origin);
         const userBalance = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
         const requestedBalanceUse = Math.min(total,Math.max(0,Number(userBalance?.balance_stars||0)));
