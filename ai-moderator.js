@@ -788,6 +788,7 @@ async function aiAwardGroupMessageReputation(env,chatId,message,user){
   if(messageId<1||!user?.id||user.is_bot)return false;
   const telegramDate=Number(message.date)||Math.floor(Date.now()/1000);
   const createdAt=new Date(telegramDate*1000).toISOString().slice(0,19).replace("T"," ");
+  await env.DB.prepare("DELETE FROM reputation_group_message_activity WHERE created_at < datetime('now','-48 hours')").run();
   const inserted=await env.DB.prepare("INSERT OR IGNORE INTO reputation_group_message_activity(chat_id,message_id,telegram_id,created_at) VALUES(?,?,?,?)")
     .bind(String(chatId),messageId,String(user.id),createdAt).run();
   if(Number(inserted.meta?.changes||0)!==1)return false;
@@ -935,7 +936,7 @@ async function handleAiTelegramUpdate(update, env) {
       await aiNotifyOwner(env,"📣 Жалоба в группе\nОтправитель: "+aiSafeName(user)+" ("+user.id+")\nНа кого: "+label+(target?" ("+target.telegram_id+")":"\nУчастник пока не идентифицирован")+"\nТекст: "+text.slice(0,700));
       await aiGroupReply(env,chatId,user.id,target?"Благодарю за обращение. Жалоба передана владельцу для проверки. Само обращение не означает, что участник признан виновным.":"Благодарю за обращение. Уточните, пожалуйста, username участника или ответьте на его сообщение, чтобы мы могли правильно определить адресата.");
       await aiLog(env,{chat_id:chatId,actor:user.id,target:target?.telegram_id||null,type:"complaint_created",severity:"warning",details:{target_label:label}});
-      if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
+      if(moderationActive&&!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
       return true;
     }
     const existingWatch=moderationActive ? await env.DB.prepare("SELECT id FROM ai_watchlist WHERE chat_id=? AND telegram_id=? AND status='active' AND expires_at>CURRENT_TIMESTAMP ORDER BY id DESC LIMIT 1").bind(chatId,String(user.id)).first() : null;
