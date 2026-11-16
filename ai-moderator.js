@@ -779,6 +779,7 @@ async function handleAiTelegramUpdate(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
     await aiApproveOrder(env,update.callback_query);return true;
   }
+  const isEdited=!!update.edited_message;
   const message=update.message||update.edited_message;
   if(!message || message.successful_payment || !aiIsGroup(message.chat)) return false;
   const chatId=String(message.chat.id),user=message.from;
@@ -883,12 +884,15 @@ async function handleAiTelegramUpdate(update, env) {
       if(watched)await aiWatch(env,chatId,user.id,violation,"continued_suspicion");
       await aiWarn(env,chatId,message,violation,aiCategoryFromReason(violation));return true;
     }
+    // Edited messages are checked for violations above, but are not new chat activity.
+    if(isEdited) return true;
     if(moderationActive && settings.spam && await aiIsFlood(env,chatId,user.id,settings)) {await aiWarn(env,chatId,message,"Слишком частая отправка сообщений (флуд)","spam");return true;}
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
-    await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?, 'user', ?)")
-      .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500)).run();
+    const telegramMessageDate=Number(message.date)||Math.floor(Date.now()/1000);
+    await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
+      .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
     const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
     if(settings.owner_suggestions && suggestionPattern.test(text)){
       await aiNotifyOwner(env,"💡 Предложение участника по улучшению Агентства\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nСообщение: "+text.slice(0,900));
