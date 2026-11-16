@@ -636,7 +636,7 @@ async function createCraftAnswer(env,messages){
  const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
  let answer=typeof d.output_text==="string"?d.output_text:"";if(!answer&&Array.isArray(d.output))answer=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!answer.trim())throw new Error("ИИ-мастерская не вернула ответ.");
- answer=answer.trim();const ready=answer.startsWith("[READY]");answer=answer.replace(/^\\[(?:READY|ASK)\\]\\s*/,"").slice(0,5000);
+ answer=answer.trim();const ready=answer.startsWith("[READY]");answer=answer.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,5000);
  return {reply:answer,ready,questions_used:questionsUsed};
 }
 async function createVipSupportAnswer(env,message){
