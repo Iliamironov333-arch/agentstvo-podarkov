@@ -1422,10 +1422,12 @@ html body>#seasonDecorations .festive-firework{
   <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и авторские работы в одном месте</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card" onclick="showView('leaderboardView')"><strong>🏆 Таблица лидеров</strong><span>Репутация за текущий месяц</span></button>
   <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Open admin panel"><span>ADMIN</span></button>
   <div id="ownerAccessDiagnostic" class="notice hidden" role="status" aria-live="polite"></div>
  </div>
 </section>
+<section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Таблица лидеров</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Здесь учитываются баллы репутации, заработанные за текущий календарный месяц.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div id="publicLeaderboardList" class="panel"></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
@@ -1873,7 +1875,7 @@ let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
 try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));window.pendingGiftBundlePriority=localStorage.getItem('gift-pending-bundle-priority')==='1';}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
-const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','dealsView','aboutView'];
+const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','dealsView','aboutView','leaderboardView'];
 
 // Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
 document.addEventListener('click', event => {
@@ -1887,14 +1889,14 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','🤖 ИИ-заказы','Переписки, обращения и заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['reputation','🏆 Ранги и репутация','Ранги, баллы и таблица лидеров'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','🤖 ИИ-заказы','Переписки, обращения и заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
   const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
  });
  hero.after(nav);
- let anchor=nav;for(const key of ['store','photos','cheats','marketing','operations','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
+ let anchor=nav;for(const key of ['store','photos','cheats','marketing','operations','reputation','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
  const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
  const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
  original.forEach(node=>{
@@ -1971,6 +1973,9 @@ function initAdminCategories(){
  sections.ai.appendChild(aiPanel);
  const ordersPanel=document.createElement('div');ordersPanel.id='adminAiOrdersPanel';ordersPanel.innerHTML='<div class="panel" id="aiOrderChatGuide"><h3>🤖 ИИ-заказы</h3><p class="muted">Переписки, обращения и ИИ-заказы собраны в одном разделе панели владельца. Контекст заказа, покупателя или группы сохраняется в карточке обращения, чтобы сообщения не теряли привязку.</p><ol class="muted"><li><b>Открыть чат заказа</b> — раскройте переписку внутри нужной карточки, чтобы увидеть сообщения именно по этому заказу.</li><li><b>Автоответы ИИ</b> — переключатель в карточке включает или выключает ИИ только для этого заказа. При выключении покупатель по-прежнему может писать: сообщения сохраняются, а владелец отвечает вручную.</li><li><b>Ответ владельца</b> — введите текст под перепиской. Ответ сохраняется в истории чата Mini App; личные сообщения Telegram не отправляются.</li><li><b>Пожелания и цена</b> — редактируйте описание, название и цену в карточке. Цена и подтверждение остаются за владельцем.</li><li><b>Подтвердить и отправить счёт</b> — используйте только после проверки пожеланий и окончательной цены. Счёт отправляется покупателю в Telegram.</li><li><b>Отклонить заказ</b> — отменяет заявку; не используйте для обычного отключения ИИ.</li></ol><p class="notice">Все папки ИИ-заказов по умолчанию закрыты. Откройте нужную папку вручную. Для ручной переписки выключение ИИ не требуется — владелец может ответить и при включённом ИИ.</p></div><p id="aiOrdersStatus" class="notice" aria-live="polite">Загрузка ИИ-заказов…</p><details class="admin-detail-line" id="aiMessagesDisclosure"><summary style="cursor:pointer;font-weight:700;padding:10px 0">💬 Сообщения и уведомления владельца · хранение 7 дней</summary><div class="sectionhead"><span class="muted">Открывайте, чтобы просмотреть сообщения. Старые записи удаляются автоматически через неделю.</span><button class="secondary" type="button" onclick="loadAiOrders()">↻ Обновить</button></div><div id="aiOwnerNotifications" class="notice">Загрузка сообщений…</div><button class="secondary" id="aiDeleteAllMessages" type="button" style="margin-top:8px">Удалить все сообщения</button></details>';const allOrdersPanel=root.querySelector('#adminOrdersList')?.closest('.panel');if(allOrdersPanel){const heading=allOrdersPanel.querySelector('h3');if(heading)heading.textContent='📦 Все заказы';const aiStatus=ordersPanel.querySelector('#aiOrdersStatus');const adminStatus=allOrdersPanel.querySelector('#adminOrdersStatus');if(aiStatus)allOrdersPanel.insertBefore(aiStatus,adminStatus?.nextSibling||allOrdersPanel.querySelector('#adminOrdersList'));const messagesDisclosure=ordersPanel.querySelector('#aiMessagesDisclosure');if(messagesDisclosure)sections.aiorders.appendChild(messagesDisclosure);sections.aiorders.appendChild(allOrdersPanel);}
  const reportsPanel=document.createElement('div');reportsPanel.className='panel';reportsPanel.id='adminAiReportsPanel';reportsPanel.innerHTML='<h3>📊 Еженедельные отчёты</h3><p class="muted">Отчёт отправляется каждую субботу в 08:00 по Екатеринбургу и сохраняется здесь.</p><div id="aiReportsStatus" class="notice">Загрузка отчётов…</div><div id="aiReportsList"></div>';sections.reports.appendChild(reportsPanel);
+ const reputationPanel=document.createElement('div');reputationPanel.className='panel';reputationPanel.id='adminReputationPanel';
+ reputationPanel.innerHTML='<div class="sectionhead"><h3>🏆 Ранги и репутация</h3><button class="secondary" type="button" onclick="loadAdminReputation()">↻ Обновить</button></div><p class="muted">Месячный рейтинг считает только заработанные положительные баллы за текущий календарный месяц. Ручные списания не стирают уже заработанное за месяц.</p><div id="adminReputationStatus" class="notice" aria-live="polite">Загружаем репутацию…</div><div class="admin-user-detail"><h4>⚙️ Участие владельца в таблице лидеров</h4><label style="display:flex;grid-template-columns:24px 1fr;align-items:center;gap:10px"><input id="adminOwnerLeaderboardOptIn" type="checkbox" style="width:18px;height:18px" checked onchange="setOwnerLeaderboardVisibility(this.checked)"> Показывать владельца в таблице</label><small class="muted">Выключатель скрывает только владельца из таблицы. Начисление репутации продолжится.</small></div><div class="admin-user-detail"><h4>✍️ Ручное управление</h4><label>Пользователь<select id="adminReputationUser"><option value="">Выберите пользователя</option></select></label><div class="ai-two-fields"><label>Начислить / снять баллы<input id="adminReputationAmount" type="number" step="1" min="-1000000" max="1000000" placeholder="Например: 25 или -10"></label><label>Установить ранг<select id="adminReputationRank"><option value="ordinary">Обычный клиент · 0%</option><option value="regular">Постоянный клиент · 5%</option><option value="vip">VIP-клиент · 8%</option><option value="god">GOD-клиент · 10%</option><option value="secret">SECRET-клиент · 15%</option></select></label></div><label>Причина изменения<textarea id="adminReputationReason" rows="2" maxlength="240" placeholder="За что начислены или сняты баллы"></textarea></label><div class="admin-product-actions"><button class="primary" type="button" onclick="adjustAdminReputationPoints()">Применить баллы</button><button class="secondary" type="button" onclick="setAdminReputationRank()">Сохранить ранг</button></div></div><div class="sectionhead"><h4>📅 Рейтинг за текущий месяц</h4></div><div id="adminReputationList"></div><div class="admin-user-detail"><h4>🎁 Завершение прошлого месяца</h4><p class="muted">Награды выдаются один раз после завершения месяца. 1-е место: от 100 до 199 — 150 ⭐; от 200 — повышение на один ранг и 150 ⭐. 2-е место: от 100 — 50 ⭐ и купон на приоритетную доставку. Иначе награды нет.</p><button class="primary" type="button" onclick="settleAdminReputationMonth()">Закрыть прошлый месяц и выдать награды</button></div>';
+ sections.reputation.appendChild(reputationPanel);
  if(returnButton)root.appendChild(returnButton);
  root.dataset.categoriesReady='1';showAdminCategory('operations');applyAdminPermissionVisibility();
 }
@@ -2007,7 +2012,8 @@ function showView(id) {
  
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView') loadVip();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'leaderboardView') loadPublicLeaderboard();
+ if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
 }
 
@@ -2355,6 +2361,49 @@ function changeQty(id,d) {
  persistCart();
  drawProducts();
  drawCart();
+}
+
+
+async function loadAdminReputation(){
+ const status=document.getElementById('adminReputationStatus'),list=document.getElementById('adminReputationList'),select=document.getElementById('adminReputationUser');
+ if(!status||!list||!select)return;
+ status.textContent='Загружаем баллы и ранги…';list.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/reputation');
+  const users=Array.isArray(data.users)?data.users:[];
+  const opt=document.getElementById('adminOwnerLeaderboardOptIn');if(opt)opt.checked=data.owner_opt_in!==false;
+  select.innerHTML='<option value="">Выберите пользователя</option>'+users.map(u=>'<option value="'+String(u.telegram_id).replace(/[^0-9]/g,'')+'">'+String(u.first_name||u.username||u.telegram_id).replace(/[&<>"]/g,'')+' · '+String(u.telegram_id)+'</option>').join('');
+  status.textContent='Месяц: '+data.month+'. Участников в базе: '+users.length+'.';
+  users.sort((a,b)=>Number(b.monthly_points)-Number(a.monthly_points));
+  users.forEach((u,index)=>{const row=document.createElement('div');row.className='admin-user-row';const info=document.createElement('div');const name=document.createElement('strong');name.textContent=(index+1)+'. '+(u.first_name||u.username||'Пользователь');const meta=document.createElement('small');meta.textContent=(u.username?'@'+u.username:'Без username')+' · '+u.rank.label+' · За месяц: '+Number(u.monthly_points||0)+' · Всего: '+Number(u.total_points||0);info.append(name,meta);row.append(info);list.append(row);});
+  if(!users.length)list.textContent='Пока нет пользователей с профилем репутации.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить репутацию.';}
+}
+async function adjustAdminReputationPoints(){
+ const telegram_id=document.getElementById('adminReputationUser')?.value||'',amount=Number(document.getElementById('adminReputationAmount')?.value),description=document.getElementById('adminReputationReason')?.value.trim()||'Ручная корректировка владельцем';
+ if(!telegram_id)return toast('Сначала выберите пользователя.');
+ if(!Number.isSafeInteger(amount)||amount===0)return toast('Введите целое ненулевое количество баллов. Для списания используйте минус.');
+ try{await apiFetch('/api/admin/reputation/points',{method:'POST',body:JSON.stringify({telegram_id,amount,description})});toast('Репутация обновлена.');document.getElementById('adminReputationAmount').value='';await loadAdminReputation();}catch(e){toast(e.message||'Не удалось изменить репутацию.');}
+}
+async function setAdminReputationRank(){
+ const telegram_id=document.getElementById('adminReputationUser')?.value||'',rank_code=document.getElementById('adminReputationRank')?.value||'ordinary';
+ if(!telegram_id)return toast('Сначала выберите пользователя.');
+ try{await apiFetch('/api/admin/reputation/rank',{method:'POST',body:JSON.stringify({telegram_id,rank_code})});toast('Ранг сохранён.');await loadAdminReputation();}catch(e){toast(e.message||'Не удалось изменить ранг.');}
+}
+async function setOwnerLeaderboardVisibility(enabled){
+ try{await apiFetch('/api/admin/reputation/owner-visibility',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'Владелец снова отображается в таблице.':'Владелец скрыт из таблицы.');}catch(e){toast(e.message||'Не удалось изменить настройку.');const input=document.getElementById('adminOwnerLeaderboardOptIn');if(input)input.checked=!enabled;}
+}
+async function settleAdminReputationMonth(){
+ if(!confirm('Выдать награды за завершившийся календарный месяц? Это действие нельзя повторить.'))return;
+ try{const month=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit'}).format(new Date(Date.now()-35*86400000));const data=await apiFetch('/api/admin/reputation/settle',{method:'POST',body:JSON.stringify({month})});toast('Награды за '+data.month+' выданы.');await loadAdminReputation();}catch(e){toast(e.message||'Не удалось закрыть месяц.');}
+}
+async function loadPublicLeaderboard(){
+ const root=document.getElementById('publicLeaderboardList'),status=document.getElementById('publicLeaderboardStatus');if(!root||!status)return;
+ status.textContent='Загружаем рейтинг…';root.replaceChildren();
+ try{const data=await apiFetch('/api/leaderboard');const rows=data.leaderboard||[];status.textContent='Рейтинг за '+data.month+'. Баллы обнуляются для нового месяца, общая репутация сохраняется.';
+  if(!rows.length){root.textContent='В этом месяце пока нет участников с заработанными баллами.';return;}
+  rows.forEach(item=>{const row=document.createElement('div');row.className='admin-user-row';const label=document.createElement('strong');label.textContent=item.place+'. '+item.name;const points=document.createElement('span');points.textContent=Number(item.monthly_points)+' баллов · '+item.rank;row.append(label,points);root.append(row);});
+ }catch(e){status.textContent=e.message||'Не удалось загрузить таблицу лидеров.';}
 }
 
 async function loadAdminUsers() {
