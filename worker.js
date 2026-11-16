@@ -2061,8 +2061,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           ].sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,50);
           return json({
             ok: true, user: profile, mode: control?.mode || "ai", mode_updated_at: control?.updated_at || null,
-            conversation_id: conversationId || null, deleted: !!deletedRecord || !!conversationRecord?.deleted_at, deleted_at: conversationRecord?.deleted_at || deletedRecord?.created_at || null,
-            closed: !!deletedRecord || !!conversationRecord?.closed, closed_at: conversationRecord?.deleted_at || deletedRecord?.created_at || (conversationRecord?.closed ? conversationRecord.updated_at : null),
+            conversation_id: conversationId || null, deleted: !!conversationRecord?.deleted_at || (!conversationRecord && !!deletedRecord), deleted_at: conversationRecord?.deleted_at || (!conversationRecord ? deletedRecord?.created_at || null : null),
+            closed: !!conversationRecord?.deleted_at || (!conversationRecord && !!deletedRecord) || !!conversationRecord?.closed, closed_at: conversationRecord?.deleted_at || (!conversationRecord ? deletedRecord?.created_at || null : (conversationRecord?.closed ? conversationRecord.updated_at : null)),
             conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
             messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
