@@ -949,7 +949,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/ai-reports") return "reports_view";
   if (path.startsWith("/api/admin/staff")) return "staff_manage";
   if (path === "/api/admin/users" || path === "/api/admin/user") return "users_view";
-  if (path === "/api/admin/balance-adjust") return "users_balance";
+  if (path === "/api/admin/balance-adjust" || path === "/api/admin/user-bonuses") return "users_balance";
   if (path === "/api/admin/block-user") return "users_ban";
   if (path === "/api/admin/unblock-user") return "users_unban";
   if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
@@ -1528,10 +1528,41 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
             optionalTableRows(env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId), "user_blocks"),
-            optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND created_at>=datetime('now','-90 days') ORDER BY id DESC LIMIT 100").bind(targetId), "admin_action_log")
+            optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND created_at>=datetime('now','-90 days') ORDER BY id DESC LIMIT 100").bind(targetId), "admin_action_log"),
+            optionalTableRows(env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId), "user_bonus_balances")
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          return json({ ok: true, user: profile, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending) }, 200, origin);
+          const bonuses = bonusBalances.results?.[0] || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
+          return json({ ok: true, user: profile, bonuses, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending || bonusBalances.migration_pending) }, 200, origin);
+        }
+        if (path === "/api/admin/user-bonuses" && method === "POST") {
+          if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Сначала примените миграцию 0027_user_bonus_system.sql."},503,origin);
+          const body=await readJson(request);
+          const targetId=typeof body.telegram_id==="string"?body.telegram_id.trim().slice(0,64):"";
+          const fields={priority_order_coupons:"priority_order",vip_days:"vip_days",campaign_priority:"campaign_priority",extra_attempts:"extra_attempt"};
+          const values={};
+          for(const key of Object.keys(fields)){
+            const value=body[key]===undefined?0:Number(body[key]);
+            const max=key==="vip_days"?3650:10000;
+            if(!Number.isSafeInteger(value)||value<0||value>max)return json({error:"Количество бонусов должно быть целым числом от 0 до "+max+"."},400,origin);
+            values[key]=value;
+          }
+          if(!targetId)return json({error:"Не выбран пользователь."},400,origin);
+          if(!Object.values(values).some(value=>value>0))return json({error:"Укажите хотя бы один бонус для выдачи."},400,origin);
+          const target=await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
+          if(!target)return json({error:"Пользователь не найден."},404,origin);
+          const operationId=makeId();
+          const results=await env.DB.batch([
+            env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons,vip_days,campaign_priority,extra_attempts,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=user_bonus_balances.priority_order_coupons+excluded.priority_order_coupons,vip_days=user_bonus_balances.vip_days+excluded.vip_days,campaign_priority=user_bonus_balances.campaign_priority+excluded.campaign_priority,extra_attempts=user_bonus_balances.extra_attempts+excluded.extra_attempts,updated_at=CURRENT_TIMESTAMP")
+              .bind(targetId,values.priority_order_coupons,values.vip_days,values.campaign_priority,values.extra_attempts),
+            ...Object.entries(fields).map(([key,type])=>env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) SELECT ?,?, ?,?,'grant',0,? WHERE ?>0")
+              .bind(targetId,telegramId,type,values[key],"bonus-grant:"+operationId+":"+type,values[key])),
+            env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)")
+              .bind(telegramId,targetId,"bonuses_granted",JSON.stringify({operation_id:operationId,bonuses:values}))
+          ]);
+          if(results[0]?.meta?.changes!==1)return json({error:"Не удалось выдать бонусы. Данные не изменены."},409,origin);
+          const current=await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId).first();
+          return json({ok:true,telegram_id:targetId,bonuses:current},200,origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
           if (!(await tableExists(env, "admin_action_log"))) return json({ error: "Требуется применить миграцию 0006_admin_action_log.sql перед управлением баллами." }, 503, origin);
@@ -2508,13 +2539,16 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           .bind(telegramId).all();
         const vip = await env.DB.prepare("SELECT plan_type,status,starts_at,expires_at FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1")
           .bind(telegramId).first();
-        // Reputation equals lifetime Telegram Stars actually paid. Top-ups count; internal-balance spending does not count again.
         const reputation = await env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payment_intents WHERE telegram_id=? AND status='paid'")
           .bind(telegramId).first();
+        const bonusRow = await tableExists(env,"user_bonus_balances")
+          ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+          : null;
+        const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
-          orders: orders.results || [], vip: vip || null }, 200, origin);
+          orders: orders.results || [], vip: vip || null, bonuses }, 200, origin);
       }
 
       if (path === "/api/order-chat" && method === "GET") {
@@ -2948,6 +2982,44 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         return json({ balance_stars: Number(me?.balance_stars || 0), transactions: transactions.results || [] }, 200, origin);
       }
 
+      if (path === "/api/bonuses/sell" && method === "POST") {
+        if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Система бонусов ещё не подключена."},503,origin);
+        const body=await readJson(request);
+        const type=String(body.bonus_type||"");
+        const quantity=Number(body.quantity);
+        const key=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,100):"";
+        const definitions={
+          priority_order:{column:"priority_order_coupons",label:"Купон на приоритетный заказ",price:50,unit:"шт."},
+          vip_days:{column:"vip_days",label:"Подарочная VIP-подписка",price:10,unit:"дн."},
+          campaign_priority:{column:"campaign_priority",label:"Приоритетное начало в акции",price:60,unit:"шт."},
+          extra_attempt:{column:"extra_attempts",label:"Дополнительная попытка",price:50,unit:"шт."}
+        };
+        const bonus=definitions[type];
+        if(!bonus)return json({error:"Выберите корректный бонус."},400,origin);
+        if(!Number.isSafeInteger(quantity)||quantity<1||quantity>3650)return json({error:"Введите целое количество от 1 до 3650."},400,origin);
+        if(!/^[a-zA-Z0-9_-]{8,100}$/.test(key))return json({error:"Не удалось подтвердить операцию. Повторите попытку."},400,origin);
+        const amount=quantity*bonus.price;
+        if(!Number.isSafeInteger(amount)||amount<1||amount>1000000)return json({error:"Сумма продажи превышает допустимое значение."},400,origin);
+        const existing=await env.DB.prepare("SELECT id FROM bonus_transactions WHERE idempotency_key=?").bind("bonus-sale:"+key).first();
+        if(existing)return json({error:"Эта продажа уже обработана. Обновите профиль."},409,origin);
+        const results=await env.DB.batch([
+          env.DB.prepare("UPDATE user_bonus_balances SET "+bonus.column+"="+bonus.column+"-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND "+bonus.column+">=?").bind(quantity,telegramId,quantity),
+          env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) SELECT ?,NULL,?,?, 'sale',?,? WHERE changes()=1")
+            .bind(telegramId,type,quantity,amount,"bonus-sale:"+key),
+          env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'bonus_sale',?,? WHERE changes()=1")
+            .bind(telegramId,amount,"Продажа бонуса: "+bonus.label+" · "+quantity+" "+bonus.unit,"bonus-sale-balance:"+key),
+          env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
+            .bind(amount,telegramId)
+        ]);
+        if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно бонусов для продажи. Обновите профиль."},409,origin);
+        const [latest,inventory]=await Promise.all([
+          env.DB.prepare("SELECT balance_stars,first_name,username FROM users WHERE telegram_id=?").bind(telegramId).first(),
+          env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+        ]);
+        const buyerName=latest?.first_name||user.first_name||"Покупатель";
+        await notifyOwner(env,"💰 ПРОДАЖА БОНУСОВ\nПокупатель: "+buyerName+(latest?.username?" (@"+latest.username+")":"")+"\nTelegram ID: "+telegramId+"\nБонус: "+bonus.label+"\nКоличество: "+quantity+" "+bonus.unit+"\nНачислено: "+amount+" ⭐");
+        return json({ok:true,sold:true,bonus_type:type,quantity,stars_amount:amount,balance_stars:Number(latest?.balance_stars||0),bonuses:inventory},200,origin);
+      }
       if (path === "/api/balance/topup" && method === "POST") {
         const body = await readJson(request);
         const amount = Number(body.amount_stars);
