@@ -1523,7 +1523,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)")
               .bind(telegramId,targetId,"profile_viewed",JSON.stringify({source:"admin_users_profile"})).run();
           } catch (error) { if (!isMissingTableError(error,"admin_action_log")) console.error("Profile view audit failed:",String(error).slice(0,250)); }
-          const [profile, orders, transactions, blocks, adminHistory] = await Promise.all([
+          const [profile, orders, transactions, blocks, adminHistory, bonusBalances] = await Promise.all([
             env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?").bind(targetId).first(),
             env.DB.prepare("SELECT id,product_title,total_stars,payment_status,fulfillment_status,created_at,paid_at FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 50").bind(targetId).all(),
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
