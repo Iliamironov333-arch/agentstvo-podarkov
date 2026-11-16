@@ -1733,6 +1733,7 @@ html body>#seasonDecorations .festive-firework{
 <section id="profileView" class="hidden">
  <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
  <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill profile-vip-pill hidden" aria-label="VIP-участник">👑 VIP-УЧАСТНИК</span></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Баллы репутации</span><b id="profileReputation" style="display:inline-flex;align-items:center;gap:7px"><span style="display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:linear-gradient(145deg,#9b5cff,#5925b7);color:#fff;font-size:15px;box-shadow:0 2px 9px #7838d855">ϟ</span><span>—</span></b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">За каждую оплаченную Telegram Star начисляется 1 балл репутации. Пополнения внутреннего баланса учитываются; повторное списание внутреннего баланса баллы не добавляет.</p><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
+ <div class="panel"><div class="sectionhead"><h3>🎁 Мои бонусы</h3><span>обмен на Stars</span></div><p class="muted">Бонусы выдаются владельцем Агентства. Неиспользованные бонусы можно обменять на баллы внутреннего баланса.</p><div id="bonusInventory"><p class="muted">Загружаем бонусы…</p></div></div>
 </section>
 <section id="vipView" class="hidden">
  <div class="hero"><small>Единая подписка</small><h2>👑 VIP для покупателя</h2><p>Одна подписка включает расширенный режим ИИ помощника и дополнительные возможности Агентства.</p></div>
@@ -2398,6 +2399,12 @@ async function openAdminUser(telegramId,box) {
   addLine('Telegram ID',u.telegram_id);addLine('Регистрация',u.created_at);
   addLine('Баланс',Number(u.balance_stars||0)+' баллов');
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
+  const bonusPanel=document.createElement('div');bonusPanel.className='admin-balance-controls';bonusPanel.style.marginTop='12px';
+  const bonusHeading=document.createElement('h4');bonusHeading.textContent='🎁 Отправить бонусы';bonusPanel.append(bonusHeading);
+  const bonusDefinitions=[['priority_order_coupons','Купоны приоритетного заказа','adminBonusPriorityOrder'],['vip_days','VIP-дни','adminBonusVipDays'],['campaign_priority','Приоритетное начало акции','adminBonusCampaignPriority'],['extra_attempts','Дополнительные попытки','adminBonusExtraAttempts']];
+  bonusDefinitions.forEach(([key,label,id])=>{const field=document.createElement('label');field.textContent=label;const input=document.createElement('input');input.type='number';input.min='0';input.max=key==='vip_days'?'3650':'10000';input.step='1';input.inputMode='numeric';input.placeholder='0';input.id=id;field.append(input);bonusPanel.append(field);});
+  const currentBonus=document.createElement('p');currentBonus.className='notice';const current=data.bonuses||{};currentBonus.textContent='Сейчас: купоны '+Number(current.priority_order_coupons||0)+' · VIP-дни '+Number(current.vip_days||0)+' · приоритет акции '+Number(current.campaign_priority||0)+' · попытки '+Number(current.extra_attempts||0);bonusPanel.append(currentBonus);
+  const grantButton=document.createElement('button');grantButton.type='button';grantButton.className='primary';grantButton.id='adminGrantBonusesButton';grantButton.textContent='Отправить бонусы';grantButton.addEventListener('click',()=>adminGrantBonuses(telegramId));bonusPanel.append(grantButton);box.append(bonusPanel);
   const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(telegramId,'',crmDetail));box.append(crmButton,crmDetail);
   const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
   const historySummary=document.createElement('summary');historySummary.textContent='📚 История покупок и действий · журнал 90 дней';historySummary.style.cssText='cursor:pointer;font-weight:800;padding:10px 0';
@@ -2481,6 +2488,18 @@ async function openAdminUser(telegramId,box) {
    }
    const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть профиль';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось открыть профиль.';}
+}
+
+async function adminGrantBonuses(telegramId) {
+ const fields={priority_order_coupons:"adminBonusPriorityOrder",vip_days:"adminBonusVipDays",campaign_priority:"adminBonusCampaignPriority",extra_attempts:"adminBonusExtraAttempts"};
+ const values={};
+ for(const [key,id] of Object.entries(fields)){const value=Number(document.getElementById(id)?.value||0);if(!Number.isSafeInteger(value)||value<0){toast("Проверьте количество бонусов.");return;}values[key]=value;}
+ if(!Object.values(values).some(value=>value>0)){toast("Укажите хотя бы один бонус.");return;}
+ if(!window.confirm("Выдать выбранные бонусы этому покупателю?"))return;
+ const button=document.getElementById("adminGrantBonusesButton");if(button)button.disabled=true;
+ try{await apiFetch("/api/admin/user-bonuses",{method:"POST",body:JSON.stringify({telegram_id:String(telegramId),...values})});toast("Бонусы отправлены покупателю.");await openAdminUser(telegramId,document.querySelector('.admin-user-detail[data-telegram-id="'+String(telegramId)+'"]'));}
+ catch(e){toast(e.message||"Не удалось выдать бонусы.");}
+ finally{if(button)button.disabled=false;}
 }
 
 async function adminSetUserBlock(telegramId) {
@@ -4419,6 +4438,34 @@ async function sendOrderChatMessage(){
  finally{button.disabled=false;button.textContent='Отправить';}
 }
 
+const BONUS_INVENTORY_DEFINITIONS=[
+ {type:"priority_order",key:"priority_order_coupons",title:"🎟️ Купон на приоритетный заказ",unit:"шт.",price:50,description:"Даёт преимущество при обработке заказа в Агентстве."},
+ {type:"vip_days",key:"vip_days",title:"👑 Подарочная VIP-подписка",unit:"дней",price:10,description:"Каждая единица — один день VIP-подписки."},
+ {type:"campaign_priority",key:"campaign_priority",title:"🏁 Приоритетное начало в акции",unit:"шт.",price:60,description:"Используется при участии в акции, которую владелец проводит в офисе."},
+ {type:"extra_attempt",key:"extra_attempts",title:"🔄 Дополнительная попытка",unit:"шт.",price:50,description:"Дополнительная попытка в акции при проигрыше."}
+];
+function renderBonusInventory(bonuses) {
+ const root=document.getElementById("bonusInventory");if(!root)return;root.replaceChildren();
+ BONUS_INVENTORY_DEFINITIONS.forEach(def=>{
+  const available=Math.max(0,Number(bonuses?.[def.key]||0));
+  const card=document.createElement("div");card.className="admin-user-detail";card.style.margin="10px 0";card.style.padding="12px";
+  const title=document.createElement("strong");title.textContent=def.title;
+  const count=document.createElement("div");count.className="lineitem";const countLabel=document.createElement("span");countLabel.textContent="Доступно";const countValue=document.createElement("b");countValue.textContent=available.toLocaleString("ru-RU")+" "+def.unit;count.append(countLabel,countValue);
+  const description=document.createElement("p");description.className="muted";description.textContent=def.description;
+  const sellButton=document.createElement("button");sellButton.type="button";sellButton.className="secondary";sellButton.textContent=available>0?"Продать":"Нет бонусов";sellButton.disabled=available<1;
+  const form=document.createElement("div");form.className="hidden";form.style.marginTop="10px";
+  const label=document.createElement("label");label.textContent="Сколько продать?";
+  const input=document.createElement("input");input.type="number";input.min="1";input.max=String(available);input.step="1";input.inputMode="numeric";input.placeholder="Введите количество";input.disabled=available<1;label.append(input);
+  const total=document.createElement("p");total.className="notice";total.textContent="К начислению: 0 ⭐";
+  const confirm=document.createElement("button");confirm.type="button";confirm.className="primary";confirm.textContent="Подтвердить продажу";confirm.disabled=true;
+  input.addEventListener("input",()=>{const n=Number(input.value);const valid=Number.isSafeInteger(n)&&n>=1&&n<=available;total.textContent="К начислению: "+(valid?n*def.price:0).toLocaleString("ru-RU")+" ⭐";confirm.disabled=!valid;});
+  sellButton.addEventListener("click",()=>{form.classList.toggle("hidden");if(!form.classList.contains("hidden"))input.focus();});
+  confirm.addEventListener("click",async()=>{const quantity=Number(input.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>available)return;confirm.disabled=true;confirm.textContent="Обрабатываем…";try{const key=(crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2));const result=await apiFetch("/api/bonuses/sell",{method:"POST",body:JSON.stringify({bonus_type:def.type,quantity,idempotency_key:key})});toast("Продано! На баланс начислено "+Number(result.stars_amount||0).toLocaleString("ru-RU")+" ⭐");await loadMe();await loadBalance();}catch(e){toast(e.message||"Не удалось продать бонус.");confirm.disabled=false;confirm.textContent="Подтвердить продажу";}});
+  card.append(title,count,description,sellButton,form);form.append(label,total,confirm);root.append(card);
+ });
+ if(!BONUS_INVENTORY_DEFINITIONS.some(def=>Number(bonuses?.[def.key]||0)>0)){const note=document.createElement("p");note.className="muted";note.textContent="Пока нет доступных бонусов. Когда владелец отправит их, они появятся здесь.";root.prepend(note);}
+}
+
 async function loadMe() {
  if(!initData)return;
  try{
@@ -4432,6 +4479,7 @@ async function loadMe() {
   const pn=document.getElementById('profileName');if(pn)pn.textContent=me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   setVipUi(!!me.vip,true);
+  renderBonusInventory(me.bonuses||{});
  }catch(e){
   console.warn('Не удалось загрузить профиль и баланс:',e);
   try{const vipData=await apiFetch('/api/vip');setVipUi(!!vipData.vip,true);}
