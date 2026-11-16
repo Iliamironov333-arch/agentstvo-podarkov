@@ -2055,6 +2055,13 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 20").bind(targetId).all()
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
+          let conversationMessages = messages.results || [];
+          if (conversationId && !conversationMessages.length) {
+            const fallbackMessages = await env.DB.prepare(
+              "SELECT role,content,sender_type,assistant_type,created_at FROM support_chat_messages WHERE CAST(telegram_id AS TEXT)=? AND CAST(conversation_id AS TEXT)=? ORDER BY id DESC LIMIT 200"
+            ).bind(String(targetId),String(conversationId)).all();
+            conversationMessages = fallbackMessages.results || [];
+          }
           const orders = [
             ...(productOrders.results || []).map(row => ({...row, order_type:"product"})),
             ...(customOrders.results || []).map(row => ({...row, order_type:"custom"}))
@@ -2064,7 +2071,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             conversation_id: conversationId || null, deleted: !!conversationRecord?.deleted_at || (!conversationRecord && !!deletedRecord), deleted_at: conversationRecord?.deleted_at || (!conversationRecord ? deletedRecord?.created_at || null : null),
             closed: !!conversationRecord?.deleted_at || (!conversationRecord && !!deletedRecord) || !!conversationRecord?.closed, closed_at: conversationRecord?.deleted_at || (!conversationRecord ? deletedRecord?.created_at || null : (conversationRecord?.closed ? conversationRecord.updated_at : null)),
             conversation_migration_pending: !controlsReady || !senderTypeReady || !conversationColumnReady,
-            messages: (messages.results || []).reverse(), orders, tickets: tickets.results || [],
+            messages: conversationMessages.reverse(), message_count: conversationMessages.length, orders, tickets: tickets.results || [],
             notes: notes.results || [], notes_migration_pending: !!notes.migration_pending,
             balance_history: balanceHistory.results || []
           }, 200, origin);
