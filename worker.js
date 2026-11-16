@@ -564,7 +564,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   const prompt = [
     "Оцени предварительную стоимость готовой авторской художественной работы для заказа в Агентстве подарков.",
     "Верни только JSON без Markdown: {\"price_stars\": число, \"note\": \"короткое объяснение\"}.",
-    "Цена только в целых Telegram Stars от 100 до 800. Обычно ориентируйся на 150–350 Stars для небольших и средних работ; 400–600 — только для действительно трудоёмких и детализированных работ; 700–800 — исключительная редкость для очень сложного, большого или многосоставного заказа. Не завышай цену, учитывай бюджет клиента. Не используй курс рубля и не придумывай конвертацию бюджета.",
+    "Цена только в целых Telegram Stars от 280 до 800. Обычные небольшие и средние работы оценивай от 280 до 450 Stars; 500–650 — только для действительно сложных и трудоёмких работ; 700–800 — исключительно редко для очень больших, сложных или многосоставных заказов. Не завышай цену, учитывай бюджет клиента. Не используй курс рубля и не придумывай конвертацию бюджета.",
     "Это ориентир, не окончательная цена: владелец подтвердит или изменит её вручную.",
     "Данные заказа: " + JSON.stringify(answers).slice(0,3500)
   ].join("\n");
@@ -583,7 +583,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
     const parsed = JSON.parse(match[0]);
     const rawPrice = Number(parsed.price_stars);
     if (!Number.isFinite(rawPrice) || rawPrice < 1) throw new Error("AI estimate outside allowed range");
-    const price = Math.max(100, Math.min(800, Math.round(rawPrice)));
+    const price = Math.max(280, Math.min(800, Math.round(rawPrice)));
     return { price_stars: price, source: "ai", note: String(parsed.note || "Предварительная оценка ИИ").slice(0,300) };
   } catch (error) {
     console.error("Custom order AI estimate failed:", String(error).slice(0,300));
