@@ -3326,8 +3326,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const activeCraftDraft = await env.DB.prepare(
           "SELECT id,subject,details_json,estimated_stars,status FROM ai_order_drafts WHERE telegram_id=? AND status='collecting' AND json_valid(details_json)=1 AND json_extract(details_json,'$.source')='miniapp_support_chat' AND json_extract(details_json,'$.support_conversation_id')=? AND last_activity_at>=datetime('now','-3 days') ORDER BY created_at DESC LIMIT 1"
         ).bind(String(telegramId),conversationId).first();
-        const startsCustomWorkOrder = /(?:хочу|мне\s+(?:нужно|надо)|давайте)\s+(?:заказать|оформить)\s+(?:(?:индивидуальн\w*|авторск\w*)\s+)?(?:работ\w*|поделк\w*|издели\w*|подар\w*)|хочу\s+(?:индивидуальн\w*\s+)?заказ/i.test(message)
-          && !/(?:не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(message);
+        const startsCustomWorkOrder = /(?:\\b(?:я\\s+)?хочу\\s+(?:заказать|оформить|сделать|создать)\\b|\\b(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказать|оформить|сделать|создать)\\b|\\b(?:оформить|сделать|создать)\\s+(?:мне\\s+)?(?:индивидуальн\\w*\\s+)?заказ\\b|\\bзакажите\\s+мне\\b|\\b(?:нужен|нужна|нужно)\\s+(?:индивидуальн\\w*\\s+)?заказ\\b|\\bхочу\\s+(?:индивидуальн\\w*\\s+)?(?:работ\\w*|поделк\\w*|издели\\w*|подар\\w*|картин\\w*|открытк\\w*|рисунок)\\b)/i.test(message)
+          && !/(?:\\bне\\s+(?:хочу|надо|нужно|собираюсь|заказываю|оформляю)|\\bне\\s+нужен\\b)/i.test(message);
         if (activeCraftDraft || startsCustomWorkOrder) {
           try {
             const draftId = activeCraftDraft?.id || makeId();
@@ -3346,6 +3346,17 @@ if(activeCraftDraft){
  }
 }
             draftConversation.push({ role: "user", content: message.slice(0,700) });
+            // Сначала сохраняем черновик, затем вызываем ИИ: даже при временной ошибке модели
+            // явный запрос покупателя останется в разделе «Незавершённые».
+            let createdCraftDraft = false;
+            if (!activeCraftDraft) {
+              const initialSubject = String(message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+              draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
+                ai_enabled: true, order_intent: true, summary: message.slice(0,2000), conversation: draftConversation.slice(-24) };
+              await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'collecting')")
+                .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,initialSubject,JSON.stringify(draftDetails),0).run();
+              createdCraftDraft = true;
+            }
             const aiMessages = draftConversation.filter(item => item && ["user","assistant","owner"].includes(item.role))
               .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
             let craftReply = "";
@@ -3371,7 +3382,7 @@ if(activeCraftDraft){
               .replace(/\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
             draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
               ai_enabled: true, conversation: draftConversation.slice(-24), summary: customerAccepted ? String(draftDetails.summary||"").slice(0,2000) : craftReply.slice(0,2000) };
-            if (activeCraftDraft) {
+            if (activeCraftDraft || createdCraftDraft) {
               await env.DB.prepare("UPDATE ai_order_drafts SET subject=?,details_json=?,estimated_stars=?,status=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status='collecting'")
                 .bind(subject,JSON.stringify(draftDetails),estimatedStars,status,draftId,String(telegramId)).run();
             } else {
