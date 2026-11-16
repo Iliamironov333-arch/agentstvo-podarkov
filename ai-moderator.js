@@ -1303,4 +1303,5 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
   }
   return null;
 }
+// CI syntax validation for admin order status mapping.
 export { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft };
