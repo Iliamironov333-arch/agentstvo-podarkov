@@ -2834,12 +2834,28 @@ async function openAdminConversation(telegramId, conversationId, targetBox=null)
    send.addEventListener('click',async()=>{const message=reply.value.trim();if(!message){toast('Напишите сообщение.');return;}send.disabled=true;try{await apiFetch('/api/admin/support/reply',{method:'POST',body:JSON.stringify({telegram_id:telegramId,conversation_id:conversationId,message})});toast('Ответ сохранён в переписке Mini App. Личное сообщение Telegram не отправлялось.');await openAdminConversation(telegramId,conversationId,box);}catch(e){toast(e.message||'Не удалось отправить сообщение.');}finally{send.disabled=false;}});
    box.append(reply,send);
   }
-  (data.messages||[]).forEach(message=>{
-   const item=document.createElement('div');item.className='admin-detail-line';
-   const head=document.createElement('b');head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':(message.assistant_type==='vip'?'🤖 ИИ помощник · VIP':'🤖 ИИ помощник')):'👤 Покупатель')+' · '+(message.created_at||'');
-   const body=document.createElement('div');body.style.whiteSpace='pre-wrap';body.textContent=message.content||'';
-   item.append(head,body);box.append(item);
+  const messageList=document.createElement('section');
+  messageList.className='admin-conversation-messages';
+  messageList.style.cssText='display:grid;gap:9px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);min-width:0';
+  const messageRows=Array.isArray(data.messages)?data.messages:[];
+  const messageHeading=document.createElement('strong');
+  messageHeading.textContent='Сообщения переписки · '+messageRows.length;
+  messageList.append(messageHeading);
+  if(!messageRows.length){
+   const empty=document.createElement('p');empty.className='notice';
+   empty.textContent='Сервер не вернул сообщения для этого диалога. Проверьте выбранный ID диалога и ответ API.';
+   messageList.append(empty);
+  }
+  messageRows.forEach(message=>{
+   const item=document.createElement('article');
+   item.style.cssText='padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);min-width:0;overflow-wrap:anywhere';
+   const head=document.createElement('b');
+   head.textContent=(message.role==='assistant'?(message.sender_type==='human'?'👨‍💼 Владелец':(message.assistant_type==='vip'?'🤖 ИИ помощник · VIP':'🤖 ИИ помощник')):'👤 Покупатель')+' · '+(message.created_at||'');
+   const body=document.createElement('div');body.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px';
+   body.textContent=String(message.content??message.message??'');
+   item.append(head,body);messageList.append(item);
   });
+  box.append(messageList);
   const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='Закрыть переписку';close.addEventListener('click',()=>box.classList.add('hidden'));box.append(close);
  }catch(e){box.textContent=e.message||'Не удалось загрузить историю.';}
 }
