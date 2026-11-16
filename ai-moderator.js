@@ -624,13 +624,21 @@ async function aiApproveOrder(env, callback) {
   const title=String(draft.subject||"Индивидуальный заказ").slice(0,120);
   const baseAmount=Number(draft.approved_stars);
   const promoCode=String(draftDetails.promo_code||"").trim().toUpperCase();
-  let promo=null,discountStars=0;
+  let promo=null,promoDiscountStars=0,discountStars=0;
   if(promoCode){
     promo=await env.DB.prepare("SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active FROM promo_codes WHERE code=?").bind(promoCode).first();
     const valid=promo&&promo.is_active&&(!promo.starts_at||!!(await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)<=datetime('now')").bind(promo.starts_at).first()))&&(!promo.ends_at||!!(await env.DB.prepare("SELECT 1 AS ok WHERE datetime(?)>datetime('now')").bind(promo.ends_at).first()))&&(promo.max_uses===null||Number(promo.reserved_count||0)+Number(promo.redeemed_count||0)<Number(promo.max_uses));
     if(!valid){await aiNotifyOwner(env,"⚠️ Промокод "+promoCode+" в ИИ-заказе "+id+" больше не действует. Проверьте код перед подтверждением.");if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Промокод больше не действует. Обновите предложение для клиента.",show_alert:true});return false;}
-    discountStars=Math.min(baseAmount-1,Math.floor(baseAmount*Number(promo.discount_percent)/100));
   }
+  const rankRow=await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(String(draft.telegram_id)).first().catch(()=>null);
+  const rankPercent=({ordinary:0,regular:5,vip:8,god:10,secret:15})[String(rankRow?.rank_code||"ordinary")]||0;
+  const seasonalPercent=10;
+  const seasonalDiscount=Math.floor(baseAmount*seasonalPercent/100);
+  const rankDiscount=Math.floor((baseAmount-seasonalDiscount)*rankPercent/100);
+  const afterGlobalDiscounts=baseAmount-seasonalDiscount-rankDiscount;
+  if(promo)promoDiscountStars=Math.min(Math.max(0,afterGlobalDiscounts-1),Math.floor(afterGlobalDiscounts*Number(promo.discount_percent)/100));
+  discountStars=seasonalDiscount+rankDiscount+promoDiscountStars;
+  const discountPercent=Math.round(discountStars*100/baseAmount);
   const amount=baseAmount-discountStars;
   let promoReserved=false;
   if(promo){
@@ -641,11 +649,11 @@ async function aiApproveOrder(env, callback) {
   const created=await env.DB.batch([
     env.DB.prepare("UPDATE ai_order_drafts SET status='approved',order_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='review' AND approved_stars>0")
       .bind(orderId,id),
-    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) SELECT ?,?,NULL,?,1,?,0,?,'pending','awaiting_payment',?,? WHERE changes()=1")
-      .bind(orderId,String(draft.telegram_id),title,baseAmount,amount,promoCode||null,discountStars),
+    env.DB.prepare("INSERT INTO orders(id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,promo_code,discount_stars) SELECT ?,?,NULL,?,1,?,?,?,'pending','awaiting_payment',?,? WHERE changes()=1")
+      .bind(orderId,String(draft.telegram_id),title,baseAmount,discountPercent,amount,promoCode||null,discountStars),
     env.DB.prepare("INSERT INTO custom_orders(id,telegram_id,username,first_name,subject,answers_json,total_stars,status) SELECT ?,?,?,?,?,?, ?,'pending' WHERE changes()=1")
       .bind(orderId,String(draft.telegram_id),draft.username,draft.first_name,title,draft.details_json,amount),
-    ...(promo?[env.DB.prepare("INSERT INTO promo_redemptions(order_id,code,telegram_id,discount_stars,status) SELECT ?,?,?,?,'reserved' WHERE changes()=1").bind(orderId,promoCode,String(draft.telegram_id),discountStars)]:[])
+    ...(promo?[env.DB.prepare("INSERT INTO promo_redemptions(order_id,code,telegram_id,discount_stars,status) SELECT ?,?,?,?,'reserved' WHERE changes()=1").bind(orderId,promoCode,String(draft.telegram_id),promoDiscountStars)]:[])
   ]);
   if(!created[0]?.meta?.changes || created[0].meta.changes!==1 || !created[1]?.meta?.changes || created[1].meta.changes!==1 || !created[2]?.meta?.changes || created[2].meta.changes!==1 || (promo&&(!created[3]?.meta?.changes||created[3].meta.changes!==1))){
     if(promoReserved)await env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1) WHERE code=?").bind(promoCode).run();
@@ -668,7 +676,7 @@ async function aiApproveOrder(env, callback) {
   await env.DB.prepare("UPDATE custom_orders SET status=CASE WHEN ?=total_stars THEN 'new' ELSE 'pending' END WHERE id=?").bind(balanceUsed,orderId).run();
   await env.DB.prepare("UPDATE ai_order_drafts SET status=CASE WHEN ?=0 THEN 'paid' ELSE 'approved' END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND order_id=?")
     .bind(due,id,orderId).run();
-  const discountLine=promo?"\nПромокод "+promoCode+" · скидка "+Number(promo.discount_percent)+"% (−"+discountStars+" ⭐).":"";
+  const discountLine="\nСкидка сезона и ранга: −"+(seasonalDiscount+rankDiscount)+" ⭐."+(promo?"\nПромокод "+promoCode+" · скидка "+Number(promo.discount_percent)+"% (−"+promoDiscountStars+" ⭐).":"");
    let invoiceUrl="";
   if(due>0){
     const payload="ai_order_"+crypto.randomUUID();
