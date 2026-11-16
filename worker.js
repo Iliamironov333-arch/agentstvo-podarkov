@@ -3086,7 +3086,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(details),estimatedStars).run();
           }
           if(!existing)await notifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИИ-ПОМОЩНИКА\nID: "+draftId+"\nКлиент: "+(user.first_name||"Покупатель")+" · Telegram ID: "+telegramId+"\n\nПокупатель начал диалог с ИИ. До завершения консультации и подтверждения владельцем счёт не отправляется.");
-          return json({ok:true,reply:result.reply,ready:result.ready,questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
+          return json({ok:true,reply,ready:false,offer_pending:offerPending,status:"collecting",questions_used:result.questions_used,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:true,handoff:false,conversation},200,origin);
         }catch(e){console.error("Craft assistant failed:",String(e));return json({error:e.message||"Не удалось продолжить диалог ИИ-помощника."},503,origin);}
       }
       if (path === "/api/craft/messages" && method === "GET") {
