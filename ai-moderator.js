@@ -543,6 +543,10 @@ async function aiApproveOrder(env, callback) {
   }
   let draftDetails={};
   try{draftDetails=JSON.parse(draft.details_json||"{}");}catch{}
+  if(draftDetails.source!=="group"&&draftDetails.customer_accepted!==true){
+    if(realCallback)await aiTelegram(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"Покупатель ещё не согласился с предложением. Подтверждение заказа пока недоступно.",show_alert:true});
+    return false;
+  }
   const isGroupOrder=draftDetails.source==="group";
   if(isGroupOrder){
     try{
