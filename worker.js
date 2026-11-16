@@ -2656,6 +2656,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           .bind(telegramId).first();
         const reputation = await env.DB.prepare("SELECT COALESCE(SUM(amount_stars),0) AS total FROM payment_intents WHERE telegram_id=? AND status='paid'")
           .bind(telegramId).first();
+        const rankRow = await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
+        const customerRank = reputationRank(rankRow?.rank_code);
         const bonusRow = await tableExists(env,"user_bonus_balances")
           ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
           : null;
@@ -2663,7 +2665,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
-          orders: orders.results || [], vip: vip || null, bonuses }, 200, origin);
+          orders: orders.results || [], vip: vip || null, bonuses, rank_code: customerRank.code, rank_label: customerRank.label, rank_discount_percent: customerRank.discount }, 200, origin);
       }
 
       if (path === "/api/order-chat" && method === "GET") {
