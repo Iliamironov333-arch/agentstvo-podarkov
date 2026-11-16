@@ -1,6 +1,8 @@
 name: Validate application JavaScript
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   issue_comment:
