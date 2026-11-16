@@ -3138,7 +3138,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           details.conversation.push({role:"assistant",content:String(reply||"").slice(0,1200)});details.conversation=details.conversation.slice(-24);
         }catch(error){handoff=true;reply="Автоматический ответ сейчас недоступен. Сообщение сохранено — владелец сможет ответить вручную.";await notifyOwner(env,"⚠️ ИИ не смог ответить в чате заказа "+draftId+"\nПокупатель: "+telegramId+"\nСообщение: "+message+"\nОшибка: "+String(error).slice(0,180));}}
         else{handoff=true;reply="Автоответы ИИ выключены для этого заказа. Ваше сообщение сохранено — владелец сможет ответить Вам вручную.";await notifyOwner(env,"💬 Новое сообщение в заказе (ИИ выключен)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+message+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");}
-        if(draft.status==="collecting")details.summary=String(details.conversation.filter(m=>m.role==="assistant").slice(-1)[0]?.content||details.summary||"").slice(0,2000);
+        if(draft.status==="collecting"&&nextStatus==="collecting")details.summary=String(details.conversation.filter(m=>m.role==="assistant").slice(-1)[0]?.content||details.summary||"").slice(0,2000);
         await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status=?,estimated_stars=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(JSON.stringify(details),nextStatus,estimatedStars,draftId,String(telegramId)).run();
         return json({ok:true,reply,conversation:details.conversation,handoff,ai_enabled:details.ai_enabled!==false,status:nextStatus,estimated_stars:estimatedStars},200,origin);
       }
@@ -3348,7 +3348,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(draftId,String(telegramId),String(telegramId),user.username||null,user.first_name||null,subject,JSON.stringify(draftDetails),estimatedStars,status).run();
             }
-            const reply = String(craftResult.reply || "Давайте уточним Вашу задумку. Что именно Вы хотели бы заказать?").slice(0,3000);
+            const reply = String(craftReply || "Давайте уточним Вашу задумку. Что именно Вы хотели бы заказать?").slice(0,3000);
             await env.DB.prepare("INSERT INTO support_chat_messages(telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES(?,?,?,'assistant',?,'ai')")
               .bind(telegramId,conversationId,assistantType,reply).run();
             await env.DB.prepare("UPDATE support_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?").bind(conversationId,telegramId).run();
