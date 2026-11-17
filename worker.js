@@ -3507,7 +3507,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
 
         if (action === "create") {
           const conversationsResult = await env.DB.prepare(
-            "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') AND updated_at>datetime('now','-3 days') ORDER BY updated_at ASC"
+            "SELECT id FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL AND (?=1 OR assistant_type='standard') AND updated_at>datetime('now','-3 days') ORDER BY updated_at ASC"
           ).bind(telegramId, vip ? 1 : 0).all();
           const existing = conversationsResult.results || [];
           if (existing.length >= chatLimit) {
@@ -3516,7 +3516,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
           const conversationId = crypto.randomUUID();
           await env.DB.prepare("INSERT INTO support_conversations (id,telegram_id,assistant_type,title) VALUES (?,?,?,'Новый диалог')")
             .bind(conversationId, telegramId, requestedType).run();
-          const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+          const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?")
             .bind(telegramId, chatLimit).all();
           return json({ ok: true, conversation_id: conversationId, assistant_type: requestedType, conversations: refreshed.results || [], chat_limit: chatLimit, vip: !!vip }, 200, origin);
         }
@@ -3528,7 +3528,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         // Совместимость со старой версией Mini App: сообщения без conversation_id продолжают текущий диалог.
         if (!conversationId) {
           const latest = await env.DB.prepare(
-            "SELECT id FROM support_conversations WHERE telegram_id=? AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 1"
+            "SELECT id FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL AND (?=1 OR assistant_type='standard') ORDER BY updated_at DESC LIMIT 1"
           ).bind(telegramId, vip ? 1 : 0).first();
           if (latest?.id) conversationId = latest.id;
           else {
@@ -3537,7 +3537,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
               .bind(conversationId, telegramId, requestedType).run();
           }
         }
-        const conversation = await env.DB.prepare("SELECT id,assistant_type,updated_at,CASE WHEN updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE id=? AND telegram_id=?")
+        const conversation = await env.DB.prepare("SELECT id,assistant_type,updated_at,CASE WHEN deleted_at IS NOT NULL OR updated_at<=datetime('now','-3 days') THEN 1 ELSE 0 END AS closed FROM support_conversations WHERE id=? AND telegram_id=? AND deleted_at IS NULL")
           .bind(conversationId, telegramId).first();
         if (!conversation) return json({ error: "Диалог не найден. Создайте новый диалог." }, 404, origin);
         if(conversation.closed)return json({error:"Этот диалог закрыт: прошло более трёх дней без активности. Создайте новый диалог."},410,origin);
@@ -3669,7 +3669,7 @@ if(activeCraftDraft){
             if(customerAccepted){
               await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
             }
-            const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+            const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?")
               .bind(telegramId,chatLimit).all();
             return json({ok:true,reply,vip:!!vip,saved:true,conversation_id:conversationId,conversations:refreshed.results||[],chat_limit:chatLimit,
               order_draft:true,draft_id:draftId,ready:customerAccepted,offer_pending:offerReady,estimated_stars:estimatedStars,status},200,origin);
@@ -3705,7 +3705,7 @@ if(activeCraftDraft){
           await env.DB.prepare("INSERT INTO support_messages (telegram_id,message) VALUES (?,?)").bind(telegramId, message).run();
           await notifyOwner(env, "💬 Запрос на помощь владельца\nTelegram ID: " + telegramId + "\n\n" + message);
         }
-        const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? ORDER BY updated_at DESC LIMIT ?")
+        const refreshed = await env.DB.prepare("SELECT id,assistant_type,title,created_at,updated_at FROM support_conversations WHERE telegram_id=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?")
           .bind(telegramId, chatLimit).all();
         return json({ ok: true, reply, vip: !!vip, saved: true, conversation_id: conversationId, conversations: refreshed.results || [], chat_limit: chatLimit, actions }, 200, origin);
       }
