@@ -310,7 +310,7 @@ function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const add=(buttons)=>{if(rows.length<3)rows.push(buttons);};
   const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покажите|ассортимент)/i.test(combined);
   const ideaIntent=/(иде|придум|подобрат|вариант|мастерск|творческ|сделать своими руками|как сделать)/i.test(combined);
-  const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени)/i.test(combined);
+  const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени|кнопк|запустить|войти)/i.test(combined);
   const supportIntent=needsOwner || /(поддержк|связаться с владельц|передал вопрос владельц|не могу подтвердить)/i.test(String(answer||"").toLowerCase());
   if(catalogIntent)add([{text:"🎁 Открыть каталог",url:botUrl}]);
   if(ideaIntent)add([{text:"🎨 Подобрать идею",url:botUrl}]);
@@ -994,7 +994,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const replied=message.reply_to_message?.from?.is_bot===true;
     const mentionedBot=(message.entities||[]).some(entity=>entity.type==="text_mention"&&entity.user?.is_bot) || (!!env.BOT_USERNAME&&new RegExp("@"+String(env.BOT_USERNAME).replace(/^@/,""),"i").test(text));
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || (isOwner && /\\b(?:ии|бот|помощник)\\b/i.test(text));
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
