@@ -1386,7 +1386,7 @@ html body>#seasonDecorations .festive-firework{
 /* Глобальная система плавности: настраивается из чит-панели */
 :root{--motion-easing:cubic-bezier(.22,1,.36,1);--motion-button-duration:180ms;--motion-page-duration:320ms;--motion-card-duration:240ms;--motion-modal-duration:280ms;--motion-nav-duration:220ms;--motion-toast-duration:220ms;--motion-button-opacity:.76;--motion-button-scale:.975;--motion-glass-opacity:.18;--motion-glass-blur:12px;--motion-card-offset:8px}
 html.motion-enabled button:not(:disabled){touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:opacity var(--motion-button-duration) var(--motion-easing),transform var(--motion-button-duration) var(--motion-easing),filter var(--motion-button-duration) var(--motion-easing),background-color var(--motion-button-duration) var(--motion-easing),border-color var(--motion-button-duration) var(--motion-easing)}
-html.motion-enabled button:active:not(:disabled){opacity:var(--motion-button-opacity);transform:scale(var(--motion-button-scale))}
+html.motion-enabled button:active:not(:disabled){opacity:var(--motion-button-opacity);transform:scale(var(--motion-button-scale));box-shadow:inset 0 0 0 999px rgba(255,255,255,var(--motion-glass-opacity))}
 html[data-button-effect="none"] button:active:not(:disabled){opacity:1;transform:none}
 html[data-button-effect="opacity"] button:active:not(:disabled){transform:none}
 html[data-button-effect="scale"] button:active:not(:disabled){opacity:1}
@@ -1407,9 +1407,9 @@ html[data-card-effect="fade"] .product.motion-card-enter{animation-name:motion-p
 html[data-card-effect="zoom"] .product.motion-card-enter{animation-name:motion-card-zoom}
 @keyframes motion-card-up{from{opacity:0;transform:translate3d(0,var(--motion-card-offset),0)}to{opacity:1;transform:translate3d(0,0,0)}}
 @keyframes motion-card-zoom{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-html[data-modal-effect="fade"] .modal.open{animation:motion-page-fade var(--motion-modal-duration) var(--motion-easing) both}
-html[data-modal-effect="slide-up"] .modal.open{animation:motion-modal-up var(--motion-modal-duration) var(--motion-easing) both}
-html[data-modal-effect="scale"] .modal.open{animation:motion-modal-scale var(--motion-modal-duration) var(--motion-easing) both}
+html[data-modal-effect="fade"] .modal.open,html[data-modal-effect="fade"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="fade"] .season-event-overlay.open .season-event-dialog{animation:motion-page-fade var(--motion-modal-duration) var(--motion-easing) both}
+html[data-modal-effect="slide-up"] .modal.open,html[data-modal-effect="slide-up"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="slide-up"] .season-event-overlay.open .season-event-dialog{animation:motion-modal-up var(--motion-modal-duration) var(--motion-easing) both}
+html[data-modal-effect="scale"] .modal.open,html[data-modal-effect="scale"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="scale"] .season-event-overlay.open .season-event-dialog{animation:motion-modal-scale var(--motion-modal-duration) var(--motion-easing) both}
 @keyframes motion-modal-up{from{opacity:0;transform:translate3d(0,18px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
 @keyframes motion-modal-scale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 html.motion-enabled .toast.motion-toast-enter{animation:motion-toast-in var(--motion-toast-duration) var(--motion-easing) both}
@@ -1631,7 +1631,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
     <label class="motion-check"><input type="checkbox" data-motion-key="cardStagger" checked> Показывать карточки по очереди</label>
     <label>Стиль появления<select data-motion-key="cardEffect"><option value="fade-up">Мягкое появление снизу</option><option value="fade">Только проявление</option><option value="zoom">Лёгкое увеличение</option><option value="none">Без анимации</option></select></label>
     <label>Длительность появления <output data-motion-value="cardDuration">240 мс</output><input type="range" min="100" max="900" step="10" value="240" data-motion-key="cardDuration" data-motion-unit=" мс"></label>
-    <label>Интервал между карточками <output data-motion-value="cardInterval">45 мс</output><input type="range" min="0" max="200" step="5" value="45" data-motion-key="cardInterval" data-motion-unit=" мс"></label>
+    <label>Интервал между карточками <output data-motion-value="cardInterval">30 мс</output><input type="range" min="0" max="200" step="5" value="30" data-motion-key="cardInterval" data-motion-unit=" мс"></label>
    </div></details>
    <details class="motion-settings-group"><summary>🪟 Окна и уведомления</summary><div class="motion-settings-grid">
     <label>Стиль открытия окна<select data-motion-key="modalEffect"><option value="slide-up">Плавно снизу</option><option value="fade">Растворение</option><option value="scale">Мягкое увеличение</option><option value="none">Без анимации</option></select></label>
@@ -1889,7 +1889,7 @@ tg?.expand();
 
 const API_BASE = (new URLSearchParams(location.search).get('api') || 'https://agentstvo-podarkov.iliamironov333.workers.dev').replace(/\/+$/,'');
 const initData = tg?.initData || '';
-const UI_MOTION_DEFAULTS=Object.freeze({enabled:true,intensity:70,speed:100,easing:'soft',pageTransition:'fade',pageDuration:320,buttonEffect:'ios',buttonOpacity:.76,buttonScale:.975,buttonDuration:180,cardStagger:true,cardEffect:'fade-up',cardDuration:240,cardInterval:45,modalEffect:'slide-up',modalDuration:280,navDuration:220,glassEnabled:true,glassOpacity:.18,glassBlur:12,toastDuration:220,respectReducedMotion:true});
+const UI_MOTION_DEFAULTS=Object.freeze({enabled:true,intensity:70,speed:100,easing:'soft',pageTransition:'fade',pageDuration:320,buttonEffect:'ios',buttonOpacity:.76,buttonScale:.975,buttonDuration:180,cardStagger:true,cardEffect:'fade-up',cardDuration:240,cardInterval:30,modalEffect:'slide-up',modalDuration:280,navDuration:220,glassEnabled:true,glassOpacity:.18,glassBlur:12,toastDuration:220,respectReducedMotion:true});
 let uiMotionSettings={...UI_MOTION_DEFAULTS},uiMotionSaveTimer=null,uiMotionSaveQueue=Promise.resolve();
 
 let products = [
@@ -2327,6 +2327,7 @@ function toast(s) {
  const t = document.getElementById('toast');
  t.textContent = s;
  t.style.display = 'block';
+ if(uiMotionSettings.enabled!==false){t.classList.remove('motion-toast-enter');void t.offsetWidth;t.classList.add('motion-toast-enter');}
  clearTimeout(window._toastTimer);
  window._toastTimer = setTimeout(() => t.style.display = 'none',3300);
 }
