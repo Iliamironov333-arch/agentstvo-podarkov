@@ -5,7 +5,7 @@ const DISCOUNT_PERCENT = 10;
 const UI_MOTION_DEFAULTS = {
   enabled:true, intensity:70, speed:100, easing:"soft", pageTransition:"fade", pageDuration:320,
   buttonEffect:"ios", buttonOpacity:0.76, buttonScale:0.975, buttonDuration:180,
-  cardStagger:true, cardEffect:"fade-up", cardDuration:240, cardInterval:45,
+  cardStagger:true, cardEffect:"fade-up", cardDuration:240, cardInterval:30,
   modalEffect:"slide-up", modalDuration:280, navDuration:220,
   glassEnabled:true, glassOpacity:0.18, glassBlur:12,
   toastDuration:220, respectReducedMotion:true
