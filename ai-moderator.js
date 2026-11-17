@@ -880,13 +880,10 @@ async function aiHandleTelegramUpdateInner(update, env) {
   await aiRememberMember(env,chatId,user);
   const settings=await aiSettings(env);
   const isOwner=!!env.ADMIN_TELEGRAM_ID && String(user.id)===String(env.ADMIN_TELEGRAM_ID);
-  if(isOwner) {
-    // Владелец полностью исключён из клиентского ИИ-сценария.
-    await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
-    return true;
-  }
+  if(isOwner) await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_received",details:{message_id:message.message_id}});
   if(!settings.enabled)return true;
-  const moderationActive=settings.moderation_enabled && !settings.moderation_temporarily_disabled;
+  // Владелец может пользоваться групповым ИИ-помощником, но никогда не попадает под автоматические наказания.
+  const moderationActive=!isOwner && settings.moderation_enabled && !settings.moderation_temporarily_disabled;
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
       await aiRememberMember(env,chatId,member);
@@ -967,10 +964,13 @@ async function aiHandleTelegramUpdateInner(update, env) {
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
+    const telegramMessageDate=Number.isFinite(Number(message.date))&&Number(message.date)>0
+      ? Number(message.date)
+      : Math.floor(Date.now()/1000);
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
       .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
     const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
-    if(settings.owner_suggestions && suggestionPattern.test(text)){
+    if(!isOwner && settings.owner_suggestions && suggestionPattern.test(text)){
       await aiNotifyOwner(env,"💡 Предложение участника по улучшению Агентства\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nСообщение: "+text.slice(0,900));
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"owner_suggestion",details:{message_id:Number(message.message_id)||null,message:text.slice(0,1000)}});
     }
@@ -994,7 +994,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const replied=message.reply_to_message?.from?.is_bot===true;
     const mentionedBot=(message.entities||[]).some(entity=>entity.type==="text_mention"&&entity.user?.is_bot) || (!!env.BOT_USERNAME&&new RegExp("@"+String(env.BOT_USERNAME).replace(/^@/,""),"i").test(text));
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder;
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || (isOwner && /\\b(?:ии|бот|помощник)\\b/i.test(text));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
@@ -1008,7 +1008,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
         }
     }
   }
-  if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
+  if(!isEdited&&!isOwner)await aiAwardGroupMessageReputation(env,chatId,message,user);
   return true;
 }
 async function handleAiTelegramUpdate(update,env){
@@ -1021,7 +1021,7 @@ async function handleAiTelegramUpdate(update,env){
       ? "telegram_message:"+String(message.chat.id)+":"+String(message.message_id)+":"+(update?.edited_message?"edit:"+String(message.edit_date||"0"):"new")
       : null;
   if(!identity)return aiHandleTelegramUpdateInner(update,env);
-  const claim=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP)").bind(identity).run();
+  const claim=await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='processing',updated_at=CURRENT_TIMESTAMP WHERE ai_runtime_state.value='failed' OR (ai_runtime_state.value='processing' AND ai_runtime_state.updated_at<datetime('now','-2 minutes'))").bind(identity).run();
   if(Number(claim.meta?.changes||0)!==1)return true;
   try{
     const result=await aiHandleTelegramUpdateInner(update,env);
