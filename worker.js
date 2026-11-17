@@ -553,7 +553,7 @@ async function buildSupportNavigationActions(env, message) {
   const text=normalizeSupportNavigationText(message),actions=[];
   const add=action=>{if(actions.length<4&&!actions.some(x=>x.view===action.view&&x.product_id===action.product_id))actions.push(action);};
   let catalog=[];try{catalog=await getProducts(env);}catch(error){console.error("Support catalog lookup failed:",String(error).slice(0,250));}
-  const productIntent=/(?:найти|найдите|ищу|подобрать|подберите|покажи|покажите|посмотреть|посмотрите|есть ли|каталог|ассортимент|готовые работы|все работы|(?:помоги|помогите).{0,20}(?:найти|подобрать)|(?:нужна|нужен|нужно).{0,20}(?:работ|товар|подар|издел)|(?:работ|товар|подар|издел).{0,20}(?:найти|подобрать|посмотреть|показать))/i.test(text);
+  const productIntent=/(?:каталог|магазин|ассортимент|готовые работы|все работы|все товары|(?:покажи|покажите|посмотри|посмотрите|найди|найдите|ищу|подбери|подберите|хочу посмотреть|можно посмотреть).{0,45}(?:работ\w*|товар\w*|подар\w*|издел\w*|каталог\w*|магазин\w*|ассортимент)|(?:помоги|помогите).{0,25}(?:найти|подобрать).{0,25}(?:работ\w*|товар\w*|подар\w*|издел\w*)|(?:нужна|нужен|нужно).{0,20}(?:работ\w*|товар\w*|подар\w*|издел\w*)|(?:работ\w*|товар\w*|подар\w*|издел\w*).{0,25}(?:найти|подобрать|посмотреть|показать))/i.test(text);
   const matchedProduct=catalog.find(item=>{const title=normalizeSupportNavigationText(item.title);return title.length>=4&&text.includes(title);})||null;
   if(matchedProduct)add({label:"🎁 Открыть работу: "+String(matchedProduct.title).slice(0,48),view:"product",product_id:String(matchedProduct.id)});
   else if(productIntent)add({label:"🎁 Открыть каталог",view:"catalogView"});
