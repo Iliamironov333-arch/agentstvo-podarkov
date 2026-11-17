@@ -1951,6 +1951,14 @@ function initAdminCategories(){
   <div class="ai-feature-card"><div class="ai-feature-head"><div class="ai-feature-info"><strong>💡 Предложения владельцу</strong><small>Идеи по улучшению Агентства</small></div><label class="ai-switch"><input type="checkbox" id="aiSuggestions"><span></span></label><button class="secondary" type="button" onclick="toggleAiSettings('aiSuggestionsSettings')">Настроить</button></div><div id="aiSuggestionsSettings" class="ai-feature-settings hidden"><p class="muted">ИИ может передавать владельцу предложения по улучшению каталога, сервиса и общения с клиентами.</p></div></div>
  </div>
  <div class="ai-feature-card ai-instructions-card"><h4>📖 Инструкция и правила для ИИ-модератора</h4><p class="muted">Это основной документ, по которому ИИ принимает решения при проверке спорных сообщений. Его можно свободно корректировать.</p><label>Инструкция ИИ-модератора<textarea id="aiModeratorInstructions" rows="12"></textarea></label></div>
+ <div class="ai-feature-card ai-instructions-card" id="aiRuleTestPanel">
+  <h4>🧪 Тест правил</h4>
+  <p class="muted">Проверьте пример сообщения по актуальным настройкам ИИ-модератора из D1. Проверка не отправляет сообщения, не выдаёт наказания и не изменяет данные.</p>
+  <label for="aiRuleTestText">Пример сообщения</label>
+  <textarea id="aiRuleTestText" rows="4" maxlength="2000" placeholder="Вставьте текст, который хотите проверить…"></textarea>
+  <div class="ai-save-row"><button class="secondary" id="aiRuleTestButton" type="button" onclick="runAiRuleTest()">Проверить</button></div>
+  <div id="aiRuleTestResult" class="notice" hidden aria-live="polite"></div>
+ </div>
  <div class="ai-save-row"><button class="primary" type="button" onclick="saveAiBotSettings()">💾 Сохранить все настройки ИИ-бота</button></div>
  <div class="ai-feature-card ai-instructions-card" id="aiPunishmentSettings"><h4>⚖️ Общая система наказаний</h4><p class="muted">Настройте накопление предупреждений, автоматическое наказание и длительность ограничений. Все значения сохраняются на сервере.</p>
  <div class="ai-two-fields">
@@ -4671,6 +4679,19 @@ checkOwnerAccess();
 showView('menuView');
 
 function aiAdminNode(tag,text,className){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(className)n.className=className;return n;}
+async function runAiRuleTest(){
+ const input=document.getElementById('aiRuleTestText'),button=document.getElementById('aiRuleTestButton'),result=document.getElementById('aiRuleTestResult');
+ const text=input?.value.trim()||'';if(!text)return toast('Введите пример сообщения.');
+ button.disabled=true;button.textContent='Проверяем…';result.hidden=false;result.textContent='Проверка выполняется по текущим настройкам сервера. Реальные действия не выполняются.';
+ try{
+  const data=await apiFetch('/api/admin/ai-moderation-test',{method:'POST',body:JSON.stringify({text})});
+  if(data.decision==='paused'){result.textContent=data.reason;return;}
+  const labels={ok:'Нарушение не обнаружено',review:'Нужна ручная проверка',violation:'Обнаружено вероятное нарушение'};
+  const action=data.decision==='violation'?'\\nПредполагаемое действие: '+(data.action_label||data.configured_action):'\\nПредполагаемое действие: не применяется';
+  result.textContent=(labels[data.decision]||'Результат проверки')+'\\nКатегория: '+(data.category||'—')+'\\nПричина: '+(data.reason||'—')+'\\nУверенность: '+Math.round(Number(data.confidence||0)*100)+'%'+action+'\\n'+(data.escalation||'')+'\\n\\nТолько предварительный тест. Никакие действия не выполнялись.';
+ }catch(e){result.textContent=e.message||'Не удалось проверить сообщение.';}
+ finally{button.disabled=false;button.textContent='Проверить';}
+}
 async function loadAiBotAdmin(){
  const status=document.getElementById('aiBotStatus');if(!status)return;
  try{
