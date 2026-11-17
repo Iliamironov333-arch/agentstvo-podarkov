@@ -1,3 +1,4 @@
+import { openAiFetch, getOpenAiRetryDelaySeconds, formatOpenAiWait } from "./openai-client.js";
 const DEFAULT_AI_SETTINGS = {
   enabled: true,
   moderation_enabled: true,
@@ -232,7 +233,7 @@ async function aiIsRepeated(env, chatId, userId, text) {
 }
 async function aiOpenAi(env, instructions, input, tokens = 350) {
   if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
-  const response = await fetch("https://api.openai.com/v1/responses",{method:"POST",
+  const response = await openAiFetch(env,{method:"POST",
     headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
     body:JSON.stringify({model:env.OPENAI_MODEL || "gpt-4o-mini",instructions,input,max_output_tokens:tokens})});
   const data = await response.json().catch(()=>({}));
@@ -243,10 +244,14 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
     error.code=String(providerError.code||"").slice(0,100);
     error.type=String(providerError.type||"").slice(0,100);
     error.providerMessage=String(providerError.message||"").slice(0,300);
-    error.retryAfter=response.headers.get("retry-after")
+    const isTpmRateLimited = /tokens?\s+per\s+min|\bTPM\b/i.test(String(providerError.message || ""));
+    error.retryAfterSeconds = isTpmRateLimited ? (getOpenAiRetryDelaySeconds(response,data) || 60) : getOpenAiRetryDelaySeconds(response,data);
+    error.retryAfter = error.retryAfterSeconds ? String(error.retryAfterSeconds) : (
+      response.headers.get("retry-after")
       || response.headers.get("x-ratelimit-reset-requests")
       || response.headers.get("x-ratelimit-reset-tokens")
-      || null;
+      || null
+    );
     error.requestId=response.headers.get("x-request-id")||null;
     throw error;
   }
@@ -784,7 +789,7 @@ async function aiInspectImage(env,message,settings={}){
   if(!["png","jpg","jpeg","webp"].includes(ext))return {decision:"review",reason:"Формат изображения не поддерживается для автоматической проверки",confidence:0};
   const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
   const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
-  const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
+  const ai=await openAiFetch(env,{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
     body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните JSON с ключами decision, reason и confidence. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.\n\nДополнительные инструкции владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\n\nДополнительные правила медиа:\n"+String(settings.media_rules||"").slice(0,2500),
     input:[{role:"user",content:[{type:"input_text",text:"Проверьте вложение на очевидное нарушение правил группы. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"low"}]}],max_output_tokens:120})});
   const result=await ai.json().catch(()=>({}));
@@ -1086,14 +1091,16 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       catch(error){
         const upstreamStatus=Number(error.status)||0;
         const providerCode=String(error.code||"");
+        const providerMessage=String(error.providerMessage||"");
+        const isTpmRateLimited=/tokens?\s+per\s+min|\bTPM\b/i.test(providerMessage);
         let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
-        if(upstreamStatus===429){
+        if(isTpmRateLimited){
+          message="Достигнут лимит токенов модели в минуту. Проверка временно приостановлена, повторите её через "+formatOpenAiWait(error.retryAfterSeconds||Number(error.retryAfter)||60)+".";
+        }else if(upstreamStatus===429){
           if(providerCode==="insufficient_quota" || error.type==="insufficient_quota"){
             message="Квота OpenAI исчерпана. Проверьте доступный лимит и настройки оплаты проекта OpenAI.";
-          }else if(providerCode==="rate_limit_exceeded"){
-            message="OpenAI временно ограничил частоту запросов или объём токенов. Подождите перед следующей проверкой.";
           }else{
-            message="OpenAI отклонил запрос из-за ограничения (HTTP 429). Проверьте лимиты модели и проекта.";
+            message="OpenAI временно ограничил частоту запросов. Подождите перед следующей проверкой.";
           }
         }else if(upstreamStatus>=500){
           message="Сервис OpenAI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
@@ -1104,10 +1111,10 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
           upstream_status:upstreamStatus||null,
           provider_code:providerCode||null,
           provider_type:String(error.type||"")||null,
-          provider_message:String(error.providerMessage||"").slice(0,240)||null,
+          provider_message:providerMessage.slice(0,240)||null,
           retry_after:error.retryAfter||null,
           request_id:error.requestId||null
-        },upstreamStatus===429?429:502);
+        },isTpmRateLimited?429:upstreamStatus===429?429:502);
       }
     }
     let decision=inspected.decision,reason=inspected.reason,confidence=inspected.confidence;

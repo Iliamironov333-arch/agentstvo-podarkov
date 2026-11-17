@@ -26,5 +26,6 @@ jobs:
         run: |
           node --input-type=module --check < worker.js
           node --input-type=module --check < ai-moderator.js
+          node --input-type=module --check < openai-client.js
       - name: Check Mini App inline JavaScript
         run: node scripts/check-inline-scripts.mjs index.html
