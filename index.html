@@ -1428,7 +1428,7 @@ html body>#seasonDecorations .festive-firework{
   <div id="ownerAccessDiagnostic" class="notice hidden" role="status" aria-live="polite"></div>
  </div>
 </section>
-<section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Таблица лидеров</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Здесь учитываются баллы репутации, заработанные за текущий календарный месяц.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div id="publicLeaderboardList" class="panel"></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
+<section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Репутация и ранги</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="row-actions"><button id="leaderboardTabButton" class="primary" type="button" onclick="showLeaderboardSection('leaders')">🏆 Таблица лидеров</button><button id="ranksTabButton" class="secondary" type="button" onclick="showLeaderboardSection('ranks')">🎖️ Посмотреть ранги</button></div><div id="publicLeaderboardSection"><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Учитываются баллы репутации, заработанные за текущий календарный месяц. Пустые места не дают наград.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div id="publicLeaderboardList" class="panel"></div></div><div id="publicRanksSection" class="hidden"><div class="hero"><small>Твоя ступень и другие участники</small><h2>Система рангов</h2><p>Посмотри свой ранг, скидку и ранги остальных клиентов Агентства подарков.</p></div><div id="publicRanksStatus" class="notice" aria-live="polite">Загрузка рангов…</div><div id="publicMyRank" class="panel"></div><div id="publicRanksList" class="panel"></div></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
@@ -2399,13 +2399,38 @@ async function settleAdminReputationMonth(){
  if(!confirm('Выдать награды за завершившийся календарный месяц? Это действие нельзя повторить.'))return;
  try{const month=previousEkaterinburgMonth();const data=await apiFetch('/api/admin/reputation/settle',{method:'POST',body:JSON.stringify({month})});toast('Награды за '+data.month+' выданы.');await loadAdminReputation();}catch(e){toast(e.message||'Не удалось закрыть месяц.');}
 }
+function showLeaderboardSection(section){
+ const leaders=section!=='ranks';
+ document.getElementById('publicLeaderboardSection')?.classList.toggle('hidden',!leaders);
+ document.getElementById('publicRanksSection')?.classList.toggle('hidden',leaders);
+ document.getElementById('leaderboardTabButton')?.classList.toggle('primary',leaders);
+ document.getElementById('leaderboardTabButton')?.classList.toggle('secondary',!leaders);
+ document.getElementById('ranksTabButton')?.classList.toggle('primary',!leaders);
+ document.getElementById('ranksTabButton')?.classList.toggle('secondary',leaders);
+ if(leaders)loadPublicLeaderboard();else loadPublicRanks();
+}
 async function loadPublicLeaderboard(){
  const root=document.getElementById('publicLeaderboardList'),status=document.getElementById('publicLeaderboardStatus');if(!root||!status)return;
  status.textContent='Загружаем рейтинг…';root.replaceChildren();
  try{const data=await apiFetch('/api/leaderboard');const rows=data.leaderboard||[];status.textContent='Рейтинг за '+data.month+'. Баллы обнуляются для нового месяца, общая репутация сохраняется.';
-  if(!rows.length){root.textContent='В этом месяце пока нет участников с заработанными баллами.';return;}
-  rows.forEach(item=>{const row=document.createElement('div');row.className='admin-user-row';const label=document.createElement('strong');label.textContent=item.place+'. '+item.name;const points=document.createElement('span');points.textContent=Number(item.monthly_points)+' баллов · '+item.rank;row.append(label,points);root.append(row);});
+  rows.forEach(item=>{const row=document.createElement('div');row.className='admin-user-row';const label=document.createElement('strong');label.textContent=item.place+'. '+(item.occupied?item.name:'Свободное место');const points=document.createElement('span');points.textContent=item.occupied?Number(item.monthly_points)+' баллов · '+item.rank:'Пока нет участника';row.append(label,points);root.append(row);});
  }catch(e){status.textContent=e.message||'Не удалось загрузить таблицу лидеров.';}
+}
+async function loadPublicRanks(){
+ const status=document.getElementById('publicRanksStatus'),mine=document.getElementById('publicMyRank'),list=document.getElementById('publicRanksList');if(!status||!mine||!list)return;
+ status.textContent='Загружаем ранги…';mine.replaceChildren();list.replaceChildren();
+ try{
+  const data=await apiFetch('/api/ranks');
+  const card=document.createElement('div');card.className='admin-detail-title';card.textContent='Твой ранг: '+data.me.rank.label+' · скидка '+Number(data.me.discount||0)+'%';
+  const note=document.createElement('div');note.className='muted';note.textContent='Скидка ранга применяется вместе с сезонными скидками.';mine.append(card,note);
+  const heading=document.createElement('h3');heading.textContent='Все ранги';list.append(heading);
+  (data.ranks||[]).forEach(rank=>{const row=document.createElement('div');row.className='admin-user-row';const label=document.createElement('strong');label.textContent=rank.label;const discount=document.createElement('span');discount.textContent='Скидка '+Number(rank.discount)+'%';row.append(label,discount);list.append(row);});
+  const membersHeading=document.createElement('h3');membersHeading.textContent='Ранги участников';membersHeading.style.marginTop='18px';list.append(membersHeading);
+  const members=data.members||[];
+  if(!members.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет других участников.';list.append(empty);}
+  members.forEach(member=>{const row=document.createElement('div');row.className='admin-user-row';const label=document.createElement('strong');label.textContent=(member.is_me?'Ты · ':'')+member.name;const rank=document.createElement('span');rank.textContent=member.rank;row.append(label,rank);list.append(row);});
+  status.textContent='Ранговая система Агентства подарков.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить ранги.';}
 }
 
 async function loadAdminUsers() {
