@@ -236,7 +236,20 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
     headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
     body:JSON.stringify({model:env.OPENAI_MODEL || "gpt-4o-mini",instructions,input,max_output_tokens:tokens})});
   const data = await response.json().catch(()=>({}));
-  if (!response.ok) throw new Error("OpenAI HTTP "+response.status);
+  if (!response.ok) {
+    const providerError=data?.error||{};
+    const error=new Error("OpenAI HTTP "+response.status+(providerError.code?" ("+String(providerError.code).slice(0,80)+")":""));
+    error.status=response.status;
+    error.code=String(providerError.code||"").slice(0,100);
+    error.type=String(providerError.type||"").slice(0,100);
+    error.providerMessage=String(providerError.message||"").slice(0,300);
+    error.retryAfter=response.headers.get("retry-after")
+      || response.headers.get("x-ratelimit-reset-requests")
+      || response.headers.get("x-ratelimit-reset-tokens")
+      || null;
+    error.requestId=response.headers.get("x-request-id")||null;
+    throw error;
+  }
   let output = typeof data.output_text==="string" ? data.output_text : "";
   if (!output && Array.isArray(data.output)) output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join("\n");
   if (!output.trim()) throw new Error("Empty OpenAI response");
@@ -1070,7 +1083,32 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     let inspected={decision:"ok",reason:"Включённых категорий для проверки нет.",confidence:1};
     if(hasActiveRules){
       try{inspected=await aiInspectText(env,text,settings);}
-      catch(error){return aiJson({error:"Не удалось выполнить ИИ-проверку: "+String(error.message||error).slice(0,180)},502);}
+      catch(error){
+        const upstreamStatus=Number(error.status)||0;
+        const providerCode=String(error.code||"");
+        let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
+        if(upstreamStatus===429){
+          if(providerCode==="insufficient_quota" || error.type==="insufficient_quota"){
+            message="Квота OpenAI исчерпана. Проверьте доступный лимит и настройки оплаты проекта OpenAI.";
+          }else if(providerCode==="rate_limit_exceeded"){
+            message="OpenAI временно ограничил частоту запросов или объём токенов. Подождите перед следующей проверкой.";
+          }else{
+            message="OpenAI отклонил запрос из-за ограничения (HTTP 429). Проверьте лимиты модели и проекта.";
+          }
+        }else if(upstreamStatus>=500){
+          message="Сервис OpenAI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
+        }
+        return aiJson({
+          error:message,
+          provider:"OpenAI",
+          upstream_status:upstreamStatus||null,
+          provider_code:providerCode||null,
+          provider_type:String(error.type||"")||null,
+          provider_message:String(error.providerMessage||"").slice(0,240)||null,
+          retry_after:error.retryAfter||null,
+          request_id:error.requestId||null
+        },upstreamStatus===429?429:502);
+      }
     }
     let decision=inspected.decision,reason=inspected.reason,confidence=inspected.confidence;
     if(localReason){decision="violation";reason=localReason;confidence=Math.max(confidence,0.9);}
