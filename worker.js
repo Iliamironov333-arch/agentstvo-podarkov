@@ -476,7 +476,6 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
   const primaryModel = AGENCY_TEXT_MODEL;
-  const fallbackModel = AGENCY_TEXT_MODEL;
   const requestModel = async (model) => {
     try {
       const response = await workersAiFetch(env, {
@@ -491,18 +490,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
       return { response: null, data: {}, networkError: String(error).slice(0, 300) };
     }
   };
-  let attempt = await requestModel(primaryModel);
-  // VIP uses the same API key as standard mode. If the VIP model or its request fails,
-  // preserve VIP instructions and retry with the configured standard model.
-  if (isVip && primaryModel !== fallbackModel && (!attempt.response || !attempt.response.ok)) {
-    const firstError = attempt.data?.error || {};
-    console.warn("VIP support model failed; retrying with standard model:", JSON.stringify({
-      model: primaryModel, http_status: attempt.response?.status || null,
-      error_code: firstError.code || null, error_type: firstError.type || null,
-      network_error: attempt.networkError || null
-    }));
-    attempt = await requestModel(fallbackModel);
-  }
+  const attempt = await requestModel(primaryModel);
   const { response, data, networkError } = attempt;
   const model = response?.ok ? (data?.model || primaryModel) : primaryModel;
   if (!response?.ok) {
@@ -613,7 +601,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
       body: JSON.stringify({ model: AGENCY_TEXT_MODEL, input: prompt, max_output_tokens: 220 })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error("OpenAI estimate HTTP " + response.status);
+    if (!response.ok) throw new Error("Workers AI estimate HTTP " + response.status);
     let output = typeof data.output_text === "string" ? data.output_text : "";
     if (!output && Array.isArray(data.output)) output = data.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n");
     const match = output.match(/\{[\s\S]*\}/);
