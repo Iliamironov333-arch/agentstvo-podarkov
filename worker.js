@@ -2,6 +2,43 @@ import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyP
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
+const UI_MOTION_DEFAULTS = {
+  enabled:true, intensity:70, speed:100, easing:"soft", pageTransition:"fade", pageDuration:320,
+  buttonEffect:"ios", buttonOpacity:0.76, buttonScale:0.975, buttonDuration:180,
+  cardStagger:true, cardEffect:"fade-up", cardDuration:240, cardInterval:30,
+  modalEffect:"slide-up", modalDuration:280, navDuration:220,
+  glassEnabled:true, glassOpacity:0.18, glassBlur:12,
+  toastDuration:220, respectReducedMotion:true
+};
+function normalizeUiMotion(input) {
+  const v=input&&typeof input==="object"&&!Array.isArray(input)?input:{};
+  const number=(value,min,max,fallback)=>{const n=Number(value);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fallback;};
+  const choice=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
+  return {
+    enabled:v.enabled!==false,
+    intensity:number(v.intensity,0,100,UI_MOTION_DEFAULTS.intensity),
+    speed:number(v.speed,50,200,UI_MOTION_DEFAULTS.speed),
+    easing:choice(v.easing,["soft","standard","spring","linear"],UI_MOTION_DEFAULTS.easing),
+    pageTransition:choice(v.pageTransition,["none","fade","slide","fade-slide"],UI_MOTION_DEFAULTS.pageTransition),
+    pageDuration:number(v.pageDuration,100,1000,UI_MOTION_DEFAULTS.pageDuration),
+    buttonEffect:choice(v.buttonEffect,["none","opacity","scale","ios"],UI_MOTION_DEFAULTS.buttonEffect),
+    buttonOpacity:number(v.buttonOpacity,0.35,1,UI_MOTION_DEFAULTS.buttonOpacity),
+    buttonScale:number(v.buttonScale,0.9,1,UI_MOTION_DEFAULTS.buttonScale),
+    buttonDuration:number(v.buttonDuration,80,500,UI_MOTION_DEFAULTS.buttonDuration),
+    cardStagger:v.cardStagger!==false,
+    cardEffect:choice(v.cardEffect,["none","fade","fade-up","zoom"],UI_MOTION_DEFAULTS.cardEffect),
+    cardDuration:number(v.cardDuration,100,900,UI_MOTION_DEFAULTS.cardDuration),
+    cardInterval:number(v.cardInterval,0,200,UI_MOTION_DEFAULTS.cardInterval),
+    modalEffect:choice(v.modalEffect,["none","fade","slide-up","scale"],UI_MOTION_DEFAULTS.modalEffect),
+    modalDuration:number(v.modalDuration,100,900,UI_MOTION_DEFAULTS.modalDuration),
+    navDuration:number(v.navDuration,80,600,UI_MOTION_DEFAULTS.navDuration),
+    glassEnabled:v.glassEnabled!==false,
+    glassOpacity:number(v.glassOpacity,0,0.6,UI_MOTION_DEFAULTS.glassOpacity),
+    glassBlur:number(v.glassBlur,0,28,UI_MOTION_DEFAULTS.glassBlur),
+    toastDuration:number(v.toastDuration,80,600,UI_MOTION_DEFAULTS.toastDuration),
+    respectReducedMotion:v.respectReducedMotion!==false
+  };
+}
 const VIP_PRICES = { subscription: 500, lifetime: 2000 };
 // Пополнение доступно на любую целую сумму от 1 до 10 000 Stars.
 const CUSTOM_PRICE_OPTIONS = {"style":{"classic":0,"watercolor":80,"perspective":120,"autumn":40,"realistic":150,"artist_choice":0},"format":{"postcard":0,"a5":40,"a4":90,"large":140},"palette":{"natural":0,"bright":25,"pastel":35,"custom":55},"complexity":{"simple":0,"medium":45,"detailed":90},"deadline":{"standard":0,"priority":100}};
@@ -970,7 +1007,7 @@ function adminPermissionForPath(path, method) {
   if (path.startsWith("/api/admin/backup")) return "backup_manage";
   if (path === "/api/admin/dashboard") return "dashboard_view";
   if (path === "/api/admin/error-log" || path === "/api/admin/error-resolve" ||
-      path === "/api/admin/feature-flags" || path === "/api/admin/system-controls" ||
+      path === "/api/admin/feature-flags" || path === "/api/admin/ui-motion" || path === "/api/admin/system-controls" ||
       path === "/api/admin/technical-status" || path === "/api/admin/server-diagnostics" ||
       path === "/api/admin/webhook-reconnect") return "system_manage";
   return "owner_only";
@@ -1057,6 +1094,12 @@ export default {
       if (!user) return json({ error: "Telegram authentication failed. Откройте Mini App через Telegram." }, 401, origin);
       const telegramId = String(user.id).trim();
       await ensureUser(env, user);
+
+      if (path === "/api/ui-motion" && method === "GET") {
+        const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
+        let stored={};try{stored=row?.value?JSON.parse(row.value):{};}catch{}
+        return json({ok:true,settings:normalizeUiMotion(stored),updated_at:row?.updated_at||null},200,origin);
+      }
 
       if (path === "/api/ranks" && method === "GET") {
         if (!(await tableExists(env,"reputation_profiles"))) return json({ok:true,ranks:REPUTATION_RANKS,members:[],me:{rank:reputationRank("ordinary"),discount:0},migration_pending:true},200,origin);
@@ -2564,6 +2607,19 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             "0025_gift_certificates":tableChecks.gift_certificates&&tableChecks.gift_certificate_attempts
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+        }
+        if (path === "/api/admin/ui-motion" && method === "GET") {
+          const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
+          let stored={};try{stored=row?.value?JSON.parse(row.value):{};}catch{}
+          return json({ok:true,settings:normalizeUiMotion(stored),updated_at:row?.updated_at||null},200,origin);
+        }
+        if (path === "/api/admin/ui-motion" && method === "POST") {
+          const body=await readJson(request);
+          if(!body.settings||typeof body.settings!=="object"||Array.isArray(body.settings))return json({error:"Передайте настройки плавности."},400,origin);
+          const settings=normalizeUiMotion(body.settings);
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('ui_motion_config',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(settings)).run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"ui_motion_updated",JSON.stringify({settings})).run();
+          return json({ok:true,settings,updated_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "GET") {
           const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];

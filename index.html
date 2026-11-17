@@ -1382,6 +1382,55 @@ html body>#seasonDecorations .festive-firework{
 .admin-order-category .sectionhead h4{margin:0}
 .admin-order-category-count{white-space:nowrap}
 .admin-order-category .admin-user-row,.admin-order-category .admin-user-detail{margin-top:8px}
+
+/* Глобальная система плавности: настраивается из чит-панели */
+:root{--motion-easing:cubic-bezier(.22,1,.36,1);--motion-button-duration:180ms;--motion-page-duration:320ms;--motion-card-duration:240ms;--motion-modal-duration:280ms;--motion-nav-duration:220ms;--motion-toast-duration:220ms;--motion-button-opacity:.76;--motion-button-scale:.975;--motion-glass-opacity:.18;--motion-glass-blur:12px;--motion-card-offset:8px}
+html.motion-enabled button:not(:disabled){touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:opacity var(--motion-button-duration) var(--motion-easing),transform var(--motion-button-duration) var(--motion-easing),filter var(--motion-button-duration) var(--motion-easing),background-color var(--motion-button-duration) var(--motion-easing),border-color var(--motion-button-duration) var(--motion-easing)}
+html.motion-enabled button:active:not(:disabled){opacity:var(--motion-button-opacity);transform:scale(var(--motion-button-scale));box-shadow:inset 0 0 0 999px rgba(255,255,255,var(--motion-glass-opacity))}
+html[data-button-effect="none"] button:active:not(:disabled){opacity:1;transform:none}
+html[data-button-effect="none"] button:active:not(:disabled),html.motion-glass-off button:active:not(:disabled){box-shadow:none}
+html[data-button-effect="opacity"] button:active:not(:disabled){transform:none}
+html[data-button-effect="scale"] button:active:not(:disabled){opacity:1}
+html.motion-enabled .bottom button{transition-duration:var(--motion-nav-duration)}
+html.motion-enabled header,html.motion-enabled .bottom{backdrop-filter:blur(var(--motion-glass-blur)) saturate(1.12);-webkit-backdrop-filter:blur(var(--motion-glass-blur)) saturate(1.12)}
+html.motion-glass-off header,html.motion-glass-off .bottom{backdrop-filter:none;-webkit-backdrop-filter:none}
+html.motion-enabled .panel,html.motion-enabled .product,html.motion-enabled .menu-card{transition:opacity var(--motion-button-duration) var(--motion-easing),transform var(--motion-button-duration) var(--motion-easing),border-color var(--motion-button-duration) var(--motion-easing)}
+html.motion-enabled .motion-page-enter{will-change:opacity,transform}
+html[data-page-transition="fade"] .motion-page-enter{animation:motion-page-fade var(--motion-page-duration) var(--motion-easing) both}
+html[data-page-transition="fade-slide"] .motion-page-enter{animation:motion-page-fade-slide var(--motion-page-duration) var(--motion-easing) both}
+html[data-page-transition="slide"] .motion-page-enter{animation:motion-page-slide var(--motion-page-duration) var(--motion-easing) both}
+@keyframes motion-page-fade{from{opacity:0}to{opacity:1}}
+@keyframes motion-page-fade-slide{from{opacity:0;transform:translate3d(0,9px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes motion-page-slide{from{opacity:.65;transform:translate3d(18px,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+html.motion-enabled .product.motion-card-enter{animation-duration:var(--motion-card-duration);animation-timing-function:var(--motion-easing);animation-fill-mode:both}
+html[data-card-effect="fade-up"] .product.motion-card-enter{animation-name:motion-card-up}
+html[data-card-effect="fade"] .product.motion-card-enter{animation-name:motion-page-fade}
+html[data-card-effect="zoom"] .product.motion-card-enter{animation-name:motion-card-zoom}
+@keyframes motion-card-up{from{opacity:0;transform:translate3d(0,var(--motion-card-offset),0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes motion-card-zoom{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+html[data-modal-effect="fade"] .modal.open,html[data-modal-effect="fade"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="fade"] .season-event-overlay.open .season-event-dialog{animation:motion-page-fade var(--motion-modal-duration) var(--motion-easing) both}
+html[data-modal-effect="slide-up"] .modal.open,html[data-modal-effect="slide-up"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="slide-up"] .season-event-overlay.open .season-event-dialog{animation:motion-modal-up var(--motion-modal-duration) var(--motion-easing) both}
+html[data-modal-effect="scale"] .modal.open,html[data-modal-effect="scale"] .work-detail-overlay.open .work-detail-panel,html[data-modal-effect="scale"] .season-event-overlay.open .season-event-dialog{animation:motion-modal-scale var(--motion-modal-duration) var(--motion-easing) both}
+@keyframes motion-modal-up{from{opacity:0;transform:translate3d(0,18px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes motion-modal-scale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+html.motion-enabled .toast.motion-toast-enter{animation:motion-toast-in var(--motion-toast-duration) var(--motion-easing) both}
+@keyframes motion-toast-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-system-reduced *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+#adminUiMotionPanel .motion-master-toggle{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--panel2);margin:12px 0}
+#adminUiMotionPanel .motion-master-toggle input,#adminUiMotionPanel .motion-check input{width:19px;height:19px;flex:0 0 19px}
+#adminUiMotionPanel .motion-master-toggle span{display:grid;gap:3px}
+#adminUiMotionPanel .motion-master-toggle small{font-size:11px;color:var(--muted);font-weight:400}
+#adminUiMotionPanel .motion-settings-group{border:1px solid var(--line);border-radius:13px;padding:12px;margin:10px 0;background:var(--panel)}
+#adminUiMotionPanel .motion-settings-group summary{font-weight:750;cursor:pointer;list-style:none}
+#adminUiMotionPanel .motion-settings-group summary::-webkit-details-marker{display:none}
+#adminUiMotionPanel .motion-settings-group summary:after{content:"⌄";float:right;color:var(--muted)}
+#adminUiMotionPanel .motion-settings-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:13px}
+#adminUiMotionPanel .motion-settings-grid label{display:grid;gap:7px;font-size:12px;color:var(--muted)}
+#adminUiMotionPanel .motion-settings-grid label output{color:var(--gold2);font-weight:800;font-size:13px}
+#adminUiMotionPanel .motion-settings-grid select{width:100%}
+#adminUiMotionPanel .motion-settings-grid input[type=range]{width:100%;accent-color:var(--gold);padding:0}
+#adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
+@media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -1558,6 +1607,46 @@ html body>#seasonDecorations .festive-firework{
    </div>
   </div>
   <div class="sectionhead"><h3>🎛️ Чит-панель</h3><span>🎛️ Настройки функций — включить / выключить</span></div>
+  <div class="panel" id="adminUiMotionPanel">
+   <div class="sectionhead"><h3>✨ Плавность интерфейса</h3><span>Глобальное управление</span></div>
+   <p class="muted">Настройки применяются сразу ко всему мини-приложению и автоматически сохраняются для всех клиентов. Отдельная кнопка публикации не нужна.</p>
+   <div id="adminUiMotionStatus" class="notice" aria-live="polite">Загрузка глобальных настроек…</div>
+   <label class="motion-master-toggle"><input type="checkbox" data-motion-key="enabled"> <span><b>Включить плавность</b><small>Общий выключатель всех необязательных эффектов</small></span></label>
+   <details class="motion-settings-group" open><summary>⚙️ Общие параметры</summary><div class="motion-settings-grid">
+    <label>Общая интенсивность <output data-motion-value="intensity">70%</output><input type="range" min="0" max="100" step="1" value="70" data-motion-key="intensity" data-motion-unit="%"></label>
+    <label>Общая скорость <output data-motion-value="speed">100%</output><input type="range" min="50" max="200" step="5" value="100" data-motion-key="speed" data-motion-unit="%"></label>
+    <label>Кривая плавности<select data-motion-key="easing"><option value="soft">Мягкая — плавное замедление</option><option value="standard">Стандартная</option><option value="spring">Упругая</option><option value="linear">Равномерная</option></select></label>
+    <label class="motion-check"><input type="checkbox" data-motion-key="respectReducedMotion" checked> Учитывать системное «Уменьшение движения»</label>
+   </div></details>
+   <details class="motion-settings-group" open><summary>👆 Кнопки · отклик в стиле iPad</summary><div class="motion-settings-grid">
+    <label>Эффект нажатия<select data-motion-key="buttonEffect"><option value="ios">iPad — прозрачность + сжатие</option><option value="opacity">Только прозрачность</option><option value="scale">Только сжатие</option><option value="none">Без эффекта</option></select></label>
+    <label>Прозрачность при нажатии <output data-motion-value="buttonOpacity">76%</output><input type="range" min="35" max="100" step="1" value="76" data-motion-key="buttonOpacity" data-motion-unit="%"></label>
+    <label>Сжатие кнопки <output data-motion-value="buttonScale">97.5%</output><input type="range" min="90" max="100" step="0.5" value="97.5" data-motion-key="buttonScale" data-motion-unit="%"></label>
+    <label>Скорость отклика <output data-motion-value="buttonDuration">180 мс</output><input type="range" min="80" max="500" step="10" value="180" data-motion-key="buttonDuration" data-motion-unit=" мс"></label>
+   </div></details>
+   <details class="motion-settings-group" open><summary>📄 Переходы между страницами</summary><div class="motion-settings-grid">
+    <label>Стиль перехода<select data-motion-key="pageTransition"><option value="fade">Плавное растворение</option><option value="fade-slide">Растворение + лёгкое движение</option><option value="slide">Смещение</option><option value="none">Без анимации</option></select></label>
+    <label>Длительность <output data-motion-value="pageDuration">320 мс</output><input type="range" min="100" max="1000" step="10" value="320" data-motion-key="pageDuration" data-motion-unit=" мс"></label>
+   </div></details>
+   <details class="motion-settings-group" open><summary>🛍️ Карточки и каталог</summary><div class="motion-settings-grid">
+    <label class="motion-check"><input type="checkbox" data-motion-key="cardStagger" checked> Показывать карточки по очереди</label>
+    <label>Стиль появления<select data-motion-key="cardEffect"><option value="fade-up">Мягкое появление снизу</option><option value="fade">Только проявление</option><option value="zoom">Лёгкое увеличение</option><option value="none">Без анимации</option></select></label>
+    <label>Длительность появления <output data-motion-value="cardDuration">240 мс</output><input type="range" min="100" max="900" step="10" value="240" data-motion-key="cardDuration" data-motion-unit=" мс"></label>
+    <label>Интервал между карточками <output data-motion-value="cardInterval">30 мс</output><input type="range" min="0" max="200" step="5" value="30" data-motion-key="cardInterval" data-motion-unit=" мс"></label>
+   </div></details>
+   <details class="motion-settings-group"><summary>🪟 Окна и уведомления</summary><div class="motion-settings-grid">
+    <label>Стиль открытия окна<select data-motion-key="modalEffect"><option value="slide-up">Плавно снизу</option><option value="fade">Растворение</option><option value="scale">Мягкое увеличение</option><option value="none">Без анимации</option></select></label>
+    <label>Скорость открытия окна <output data-motion-value="modalDuration">280 мс</output><input type="range" min="100" max="900" step="10" value="280" data-motion-key="modalDuration" data-motion-unit=" мс"></label>
+    <label>Скорость уведомлений <output data-motion-value="toastDuration">220 мс</output><input type="range" min="80" max="600" step="10" value="220" data-motion-key="toastDuration" data-motion-unit=" мс"></label>
+   </div></details>
+   <details class="motion-settings-group"><summary>🧊 Прозрачность и стеклянные эффекты</summary><div class="motion-settings-grid">
+    <label class="motion-check"><input type="checkbox" data-motion-key="glassEnabled" checked> Включить стеклянные эффекты</label>
+    <label>Сила прозрачности <output data-motion-value="glassOpacity">18%</output><input type="range" min="0" max="60" step="1" value="18" data-motion-key="glassOpacity" data-motion-unit="%"></label>
+    <label>Размытие фона <output data-motion-value="glassBlur">12 px</output><input type="range" min="0" max="28" step="1" value="12" data-motion-key="glassBlur" data-motion-unit=" px"></label>
+    <label>Скорость нижней навигации <output data-motion-value="navDuration">220 мс</output><input type="range" min="80" max="600" step="10" value="220" data-motion-key="navDuration" data-motion-unit=" мс"></label>
+   </div></details>
+   <div class="row-actions"><button class="secondary" type="button" onclick="resetUiMotionSettings()">↺ Вернуть стандартную плавность</button></div>
+  </div>
   <div class="panel" id="adminSeasonThemesPanel"><div class="sectionhead"><h3>🎨 Сезонное оформление</h3><span>Выберите тему для приложения</span></div><p class="muted">Осень оставлена без изменений. Выберите сезонную тему:</p><div class="season-theme-grid">
   <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий осени" onclick="event.stopPropagation();openSeasonEventSettings('autumn')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('autumn')}">⚙️</span></button>
   <button type="button" class="season-theme-card season-winter" data-season="winter" onclick="setSeasonTheme('winter')"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий зимы" onclick="event.stopPropagation();openSeasonEventSettings('winter')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('winter')}">⚙️</span></button>
@@ -1801,6 +1890,8 @@ tg?.expand();
 
 const API_BASE = (new URLSearchParams(location.search).get('api') || 'https://agentstvo-podarkov.iliamironov333.workers.dev').replace(/\/+$/,'');
 const initData = tg?.initData || '';
+const UI_MOTION_DEFAULTS=Object.freeze({enabled:true,intensity:70,speed:100,easing:'soft',pageTransition:'fade',pageDuration:320,buttonEffect:'ios',buttonOpacity:.76,buttonScale:.975,buttonDuration:180,cardStagger:true,cardEffect:'fade-up',cardDuration:240,cardInterval:30,modalEffect:'slide-up',modalDuration:280,navDuration:220,glassEnabled:true,glassOpacity:.18,glassBlur:12,toastDuration:220,respectReducedMotion:true});
+let uiMotionSettings={...UI_MOTION_DEFAULTS},uiMotionSaveTimer=null,uiMotionSaveQueue=Promise.resolve();
 
 let products = [
 [0,"Зима в горах",200,"🏔️","winter"],
@@ -1904,7 +1995,7 @@ function initAdminCategories(){
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
-  else if(id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
+  else if(id==='adminUiMotionPanel'||id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
   else if(id==='adminSupportPanel')key='aiorders';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
   else if(txt.includes('Защищённый доступ'))key='server';
@@ -1929,6 +2020,7 @@ function initAdminCategories(){
  const cheatHeading=Array.from(root.querySelectorAll('.sectionhead')).find(el=>(el.textContent||'').includes('🎛️ Чит-панель'));
  if(cheatHeading)sections.cheats.appendChild(cheatHeading);
  if(seasonPanel)sections.cheats.appendChild(seasonPanel);
+ initUiMotionControls();
  const flags=document.getElementById('adminFeatureFlags'),cheatPanel=document.getElementById('adminSystemControlsPanel'),tech=document.getElementById('adminTechnicalCenterPanel');
  if(flags&&cheatPanel){
   const heading=Array.from(tech?.querySelectorAll('h4')||[]).find(x=>x.textContent.includes('Переключатели функций'));
@@ -1994,6 +2086,11 @@ function initAdminCategories(){
 function showAdminCategory(key){
  const root=document.getElementById('adminPanelView');if(!root)return;
  root.querySelectorAll('.admin-category-section').forEach(section=>section.classList.toggle('hidden',section.dataset.category!==key));
+ const selected=root.querySelector('.admin-category-section[data-category="'+key+'"]');
+ if(selected&&uiMotionSettings.enabled!==false&&uiMotionSettings.pageTransition!=='none'&&!document.documentElement.classList.contains('motion-system-reduced')){
+  selected.classList.remove('motion-page-enter');void selected.offsetWidth;selected.classList.add('motion-page-enter');
+  selected.addEventListener('animationend',()=>selected.classList.remove('motion-page-enter'),{once:true});
+ }
  root.querySelectorAll('.admin-category-nav button').forEach(button=>button.classList.toggle('active',button.dataset.category===key));
 }
 
@@ -2008,12 +2105,105 @@ function buyProductNow(productId){
  toast('Работа добавлена к быстрому оформлению. Укажите адрес доставки.');
 }
 
+function applyUiMotionSettings(input){
+ const settings={...UI_MOTION_DEFAULTS,...(input||{})};uiMotionSettings=settings;
+ const root=document.documentElement,speed=Math.max(.5,Math.min(2,Number(settings.speed||100)/100)),intensity=Math.max(0,Math.min(100,Number(settings.intensity||0)))/100;
+ const duration=value=>Math.round(Number(value||0)*speed)+'ms';
+ const easing={soft:'cubic-bezier(.22,1,.36,1)',standard:'ease-in-out',spring:'cubic-bezier(.34,1.56,.64,1)',linear:'linear'}[settings.easing]||'cubic-bezier(.22,1,.36,1)';
+ root.classList.toggle('motion-enabled',settings.enabled!==false);
+ root.classList.toggle('motion-glass-off',settings.glassEnabled===false);
+ const reduced=!!settings.respectReducedMotion&&!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ root.classList.toggle('motion-system-reduced',reduced);
+ root.dataset.pageTransition=settings.enabled===false?'none':settings.pageTransition;
+ root.dataset.cardEffect=settings.enabled===false?'none':settings.cardEffect;
+ root.dataset.modalEffect=settings.enabled===false?'none':settings.modalEffect;
+ root.dataset.buttonEffect=settings.enabled===false?'none':settings.buttonEffect;
+ root.style.setProperty('--motion-easing',easing);
+ root.style.setProperty('--motion-button-duration',duration(settings.buttonDuration));
+ root.style.setProperty('--motion-page-duration',duration(settings.pageDuration));
+ root.style.setProperty('--motion-card-duration',duration(settings.cardDuration));
+ root.style.setProperty('--motion-modal-duration',duration(settings.modalDuration));
+ root.style.setProperty('--motion-nav-duration',duration(settings.navDuration));
+ root.style.setProperty('--motion-toast-duration',duration(settings.toastDuration));
+ root.style.setProperty('--motion-button-opacity',String(settings.buttonOpacity));
+ root.style.setProperty('--motion-button-scale',String(settings.buttonScale));
+ root.style.setProperty('--motion-glass-opacity',String(settings.glassOpacity));
+ root.style.setProperty('--motion-glass-blur',settings.glassBlur+'px');
+ root.style.setProperty('--motion-card-offset',(8*intensity)+'px');
+ document.querySelectorAll('#products .product').forEach((card,index)=>{
+  card.classList.toggle('motion-card-enter',settings.enabled!==false&&settings.cardEffect!=='none');
+  card.dataset.cardEffect=settings.cardEffect;
+  const cardSpeed=Math.max(.5,Math.min(2,Number(settings.speed||100)/100));
+  card.style.animationDuration=duration(settings.cardDuration);
+  card.style.animationDelay=settings.cardStagger?Math.round(index*settings.cardInterval*cardSpeed)+'ms':'0ms';
+ });
+}
+function syncUiMotionControls(){
+ const panel=document.getElementById('adminUiMotionPanel');if(!panel)return;
+ panel.querySelectorAll('[data-motion-key]').forEach(control=>{
+  const key=control.dataset.motionKey;let value=uiMotionSettings[key];
+  if(control.type==='checkbox')control.checked=value!==false;
+  else{
+   if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=Number(value)*100;
+   control.value=String(value);
+  }
+ });
+ panel.querySelectorAll('[data-motion-value]').forEach(output=>{
+  const key=output.dataset.motionValue,control=panel.querySelector('[data-motion-key="'+key+'"]');
+  if(!control)return;
+  let value=uiMotionSettings[key];
+  if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=(Number(value)*100).toFixed(key==='buttonScale'?1:0).replace(/\.0$/,'');
+  output.textContent=String(value)+(control.dataset.motionUnit||'');
+ });
+}
+function scheduleUiMotionSave(){
+ const status=document.getElementById('adminUiMotionStatus');
+ if(status)status.textContent='Изменения применены сразу. Сохраняем общие настройки…';
+ clearTimeout(uiMotionSaveTimer);
+ uiMotionSaveTimer=setTimeout(()=>{
+  const snapshot={...uiMotionSettings};
+  uiMotionSaveQueue=uiMotionSaveQueue.then(()=>apiFetch('/api/admin/ui-motion',{method:'POST',body:JSON.stringify({settings:snapshot})}))
+   .then(data=>{if(JSON.stringify(snapshot)===JSON.stringify(uiMotionSettings)){uiMotionSettings={...UI_MOTION_DEFAULTS,...data.settings};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();const label=document.getElementById('adminUiMotionStatus');if(label)label.textContent='✓ Сохранено в D1. Новые настройки действуют у всех клиентов.';}})
+   .catch(error=>{const label=document.getElementById('adminUiMotionStatus');if(label)label.textContent='Эффекты уже применены на этом устройстве, но серверное сохранение не удалось: '+(error.message||'ошибка');});
+ },400);
+}
+function updateUiMotionControl(control){
+ const key=control?.dataset?.motionKey;if(!key)return;
+ let value=control.type==='checkbox'?control.checked:Number(control.value);
+ if(control.type!=='checkbox'&&!['intensity','speed','pageDuration','buttonOpacity','buttonScale','buttonDuration','cardDuration','cardInterval','modalDuration','navDuration','glassOpacity','glassBlur','toastDuration'].includes(key))value=control.value;
+ if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=Number(value)/100;
+ uiMotionSettings={...uiMotionSettings,[key]:value};
+ applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
+}
+function initUiMotionControls(){
+ const panel=document.getElementById('adminUiMotionPanel');if(!panel||panel.dataset.ready==='1')return;
+ panel.dataset.ready='1';
+ panel.addEventListener('input',event=>{if(event.target?.matches?.('[data-motion-key][type="range"]'))updateUiMotionControl(event.target);});
+ panel.addEventListener('change',event=>{if(event.target?.matches?.('[data-motion-key]:not([type="range"])'))updateUiMotionControl(event.target);});
+ syncUiMotionControls();
+ const status=document.getElementById('adminUiMotionStatus');if(status)status.textContent='Глобальные настройки загружены. Изменения применяются сразу.';
+}
+async function loadUiMotionSettings(){
+ applyUiMotionSettings(uiMotionSettings);
+ if(!initData)return;
+ try{const data=await apiFetch('/api/ui-motion');uiMotionSettings={...UI_MOTION_DEFAULTS,...data.settings};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();}
+ catch(error){console.warn('Не удалось загрузить глобальные настройки плавности:',error);}
+}
+function resetUiMotionSettings(){
+ uiMotionSettings={...UI_MOTION_DEFAULTS};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
+}
+
 function showView(id) {
  if(id==='adminPanelView' && adminSession?.root_owner !== true) {
   toast('Панель владельца закрыта: серверная проверка доступа не пройдена.');
   return;
  }
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
+ const motionTarget=document.getElementById(id);
+ if(motionTarget&&uiMotionSettings.enabled!==false&&uiMotionSettings.pageTransition!=='none'&&!document.documentElement.classList.contains('motion-system-reduced')){
+  motionTarget.classList.remove('motion-page-enter');void motionTarget.offsetWidth;motionTarget.classList.add('motion-page-enter');
+  motionTarget.addEventListener('animationend',()=>motionTarget.classList.remove('motion-page-enter'),{once:true});
+ }
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView','cartView'].includes(id)) {
@@ -2143,6 +2333,7 @@ function toast(s) {
  const t = document.getElementById('toast');
  t.textContent = s;
  t.style.display = 'block';
+ if(uiMotionSettings.enabled!==false){t.classList.remove('motion-toast-enter');void t.offsetWidth;t.classList.add('motion-toast-enter');}
  clearTimeout(window._toastTimer);
  window._toastTimer = setTimeout(() => t.style.display = 'none',3300);
 }
@@ -2168,10 +2359,16 @@ function drawProducts() {
  });
  document.getElementById('count').textContent = `${shown.length} работ`;
 
- shown.forEach(p => {
+ shown.forEach((p,index) => {
   const qty = Number(cart[p[0]] || 0);
   const el = document.createElement('article');
   el.className = 'product';
+  if(uiMotionSettings.enabled!==false&&uiMotionSettings.cardEffect!=='none'){
+   el.classList.add('motion-card-enter');el.dataset.cardEffect=uiMotionSettings.cardEffect;
+   const speed=Math.max(.5,Math.min(2,Number(uiMotionSettings.speed||100)/100));
+   el.style.animationDuration=Math.round(uiMotionSettings.cardDuration*speed)+'ms';
+   el.style.animationDelay=(uiMotionSettings.cardStagger?Math.round(index*uiMotionSettings.cardInterval*speed):0)+'ms';
+  }
   el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
   el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
   el.style.cursor='pointer';
@@ -4673,6 +4870,8 @@ document.addEventListener('click',event=>{
  if(chatButton)openOrderChat(chatButton.dataset.orderId,chatButton.dataset.orderType,chatButton.dataset.orderTitle);
 });
 
+applyUiMotionSettings(uiMotionSettings);
+loadUiMotionSettings();
 drawProducts();
 drawCart();
 loadProducts();
