@@ -1388,6 +1388,7 @@ html body>#seasonDecorations .festive-firework{
 html.motion-enabled button:not(:disabled){touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:opacity var(--motion-button-duration) var(--motion-easing),transform var(--motion-button-duration) var(--motion-easing),filter var(--motion-button-duration) var(--motion-easing),background-color var(--motion-button-duration) var(--motion-easing),border-color var(--motion-button-duration) var(--motion-easing)}
 html.motion-enabled button:active:not(:disabled){opacity:var(--motion-button-opacity);transform:scale(var(--motion-button-scale));box-shadow:inset 0 0 0 999px rgba(255,255,255,var(--motion-glass-opacity))}
 html[data-button-effect="none"] button:active:not(:disabled){opacity:1;transform:none}
+html[data-button-effect="none"] button:active:not(:disabled),html.motion-glass-off button:active:not(:disabled){box-shadow:none}
 html[data-button-effect="opacity"] button:active:not(:disabled){transform:none}
 html[data-button-effect="scale"] button:active:not(:disabled){opacity:1}
 html.motion-enabled .bottom button{transition-duration:var(--motion-nav-duration)}
@@ -2085,6 +2086,11 @@ function initAdminCategories(){
 function showAdminCategory(key){
  const root=document.getElementById('adminPanelView');if(!root)return;
  root.querySelectorAll('.admin-category-section').forEach(section=>section.classList.toggle('hidden',section.dataset.category!==key));
+ const selected=root.querySelector('.admin-category-section[data-category="'+key+'"]');
+ if(selected&&uiMotionSettings.enabled!==false&&uiMotionSettings.pageTransition!=='none'&&!document.documentElement.classList.contains('motion-system-reduced')){
+  selected.classList.remove('motion-page-enter');void selected.offsetWidth;selected.classList.add('motion-page-enter');
+  selected.addEventListener('animationend',()=>selected.classList.remove('motion-page-enter'),{once:true});
+ }
  root.querySelectorAll('.admin-category-nav button').forEach(button=>button.classList.toggle('active',button.dataset.category===key));
 }
 
