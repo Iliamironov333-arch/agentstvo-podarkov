@@ -1411,7 +1411,7 @@ html body>#seasonDecorations .festive-firework{
 <section id="menuView">
  <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p></div>
  <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
- <div class="sectionhead"><h2>Главное меню</h2><span>Выбери раздел</span></div>
+ <div class="sectionhead"><h2>Главное меню</h2><span>Выберите раздел</span></div>
  <div class="menu-grid">
   <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
   <button class="menu-card" onclick="openCustomWizard()"><strong>🎨 Создать своё</strong><span>Индивидуальная работа за 8 шагов</span></button>
@@ -1535,13 +1535,13 @@ html body>#seasonDecorations .festive-firework{
    <div id="adminProductsList"></div>
    <div class="panel" id="adminPhotoStudioPanel">
     <div class="sectionhead"><h3>📸 Фотостудия Cloudinary</h3><span>Медиатека товаров</span></div>
-    <p class="muted">Выбери несколько фотографий, назначь каждой товар и загрузи их одной операцией. Ссылки сохраняются автоматически.</p>
+    <p class="muted">Выберите несколько фотографий, назначьте каждой товар и загрузите их одной операцией. Ссылки сохраняются автоматически.</p>
     <label>Фотографии для массовой загрузки<input id="adminPhotoBatchInput" type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="selectAdminPhotoBatch(this)"></label>
     <div id="adminPhotoBatchList"></div>
     <button class="primary" type="button" id="adminPhotoBatchUpload" onclick="uploadAdminPhotoBatch()" disabled>Загрузить выбранные фотографии</button>
     <div class="sectionhead" style="margin-top:22px"><h3>🧹 Неиспользуемые фотографии</h3><button class="secondary" type="button" onclick="loadAdminOrphanImages()">Проверить</button></div>
     <p class="muted">Показываем только файлы из папки товаров Cloudinary, на которые не ссылается ни одна карточка каталога. Удаление каждого файла требует отдельного подтверждения.</p>
-    <p id="adminOrphanImagesStatus" class="notice" aria-live="polite">Нажми «Проверить», чтобы найти неиспользуемые изображения.</p>
+    <p id="adminOrphanImagesStatus" class="notice" aria-live="polite">Нажмите «Проверить», чтобы найти неиспользуемые изображения.</p>
     <div id="adminOrphanImagesList"></div>
    </div>
    <div id="adminProductEditor" class="admin-user-detail hidden">
@@ -1613,7 +1613,7 @@ html body>#seasonDecorations .festive-firework{
    <div class="admin-search"><label>Начало показа<input id="adminAnnouncementStart" type="datetime-local"></label><label>Окончание показа<input id="adminAnnouncementEnd" type="datetime-local"></label></div>
    <label>Статус<select id="adminAnnouncementStatus"><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="archived">В архиве</option></select></label>
    <div class="admin-product-actions"><button class="secondary" type="button" onclick="previewAnnouncementAudience()">Проверить аудиторию</button><button class="primary" type="button" onclick="saveAdminAnnouncement()">Сохранить объявление</button><button class="secondary" type="button" onclick="resetAdminAnnouncementForm()">Очистить</button></div>
-   <p id="adminAnnouncementPreview" class="notice" aria-live="polite">Перед публикацией проверь аудиторию и предпросмотр.</p>
+   <p id="adminAnnouncementPreview" class="notice" aria-live="polite">Перед публикацией проверьте аудиторию и предпросмотр.</p>
    <div id="adminAnnouncementLivePreview" class="notice hidden"></div>
   </div>
 
@@ -1667,16 +1667,16 @@ html body>#seasonDecorations .festive-firework{
  <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
  <div id="shopAnnouncements" class="announcement-stack" aria-live="polite"></div>
  <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
- <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выбери товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
+ <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выберите товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
  <div class="grid" id="products"></div>
 </section>
 <section id="giftBuilderView" class="hidden">
- <div class="sectionhead"><h2>🎁 Создай набор</h2><span id="giftBuilderStepLabel">Шаг 1 из 4</span></div>
+ <div class="sectionhead"><h2>🎁 Создайте набор</h2><span id="giftBuilderStepLabel">Шаг 1 из 4</span></div>
  <div class="panel" style="position:sticky;top:8px;z-index:8;background:var(--panel);backdrop-filter:blur(14px)"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:8px"><b id="giftBuilderProgressText">Выбор картины</b><span id="giftBuilderProgressPercent">25%</span></div><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden"><div id="giftBuilderProgress" style="height:100%;width:25%;background:linear-gradient(90deg,#d49a36,#f6d88b);border-radius:99px;transition:width .35s ease"></div></div></div>
- <div class="panel gift-step" data-gift-step="1"><h3>1. Выбери картину</h3><p class="notice">Нажми на понравившуюся работу. Можно выбрать несколько картин.</p><div id="giftBuilderProducts" class="grid"></div></div>
- <div class="panel gift-step hidden" data-gift-step="2"><h3>2. Открытка</h3><label>Пожелание для открытки<textarea id="giftBuilderPostcardText" rows="4" maxlength="700" placeholder="Напиши, кому предназначен подарок и что хочется пожелать…"></textarea></label><label>Тон открытки<select id="giftBuilderTone"><option value="warm">Тёплый и душевный</option><option value="funny">Весёлый и лёгкий</option><option value="formal">Элегантный и сдержанный</option><option value="festive">Праздничный</option><option value="gentle">Нежный</option></select></label><label>Детальность оформления<select id="giftBuilderDetail"><option value="simple">Лаконично</option><option value="medium" selected>Средняя детализация</option><option value="premium" disabled>Премиальное оформление — VIP 👑</option></select></label><p class="notice" id="giftBuilderVipPostcard">👑 VIP открывает больше скрапбукинга, декоративных слоёв, фактурных деталей и сложную композицию.</p><label>Дополнительные пожелания<textarea id="giftBuilderPostcardWishes" rows="3" maxlength="700" placeholder="Например: добавить цветы, звёзды или определённые цвета…"></textarea></label></div>
+ <div class="panel gift-step" data-gift-step="1"><h3>1. Выберите картину</h3><p class="notice">Нажмите на понравившуюся работу. Можно выбрать несколько картин.</p><div id="giftBuilderProducts" class="grid"></div></div>
+ <div class="panel gift-step hidden" data-gift-step="2"><h3>2. Открытка</h3><label>Пожелание для открытки<textarea id="giftBuilderPostcardText" rows="4" maxlength="700" placeholder="Напишите, кому предназначен подарок и что хочется пожелать…"></textarea></label><label>Тон открытки<select id="giftBuilderTone"><option value="warm">Тёплый и душевный</option><option value="funny">Весёлый и лёгкий</option><option value="formal">Элегантный и сдержанный</option><option value="festive">Праздничный</option><option value="gentle">Нежный</option></select></label><label>Детальность оформления<select id="giftBuilderDetail"><option value="simple">Лаконично</option><option value="medium" selected>Средняя детализация</option><option value="premium" disabled>Премиальное оформление — VIP 👑</option></select></label><p class="notice" id="giftBuilderVipPostcard">👑 VIP открывает больше скрапбукинга, декоративных слоёв, фактурных деталей и сложную композицию.</p><label>Дополнительные пожелания<textarea id="giftBuilderPostcardWishes" rows="3" maxlength="700" placeholder="Например: добавить цветы, звёзды или определённые цвета…"></textarea></label></div>
  <div class="panel gift-step hidden" data-gift-step="3"><h3>3. Детали набора</h3><label>Какую подарочную коробку Вы хотите?<textarea id="giftBuilderBox" rows="2" maxlength="350" placeholder="Например: светлая коробка с золотой лентой…"></textarea></label><label>Количество наполнителя<select id="giftBuilderFiller"><option value="many">Много</option><option value="medium" selected>Среднее количество</option><option value="none">Без наполнителя</option></select></label><label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderSeasonal" type="checkbox" style="width:auto"><span>🎁 Секретный сезонный подарок</span></label><label>Количество стикеров<select id="giftBuilderStickerQty"><option value="0">Не добавлять</option><option value="1">1 штука</option><option value="2">2 штуки</option><option value="3">3 штуки</option><option value="4">4 штуки</option><option value="5">5 штук</option><option value="10">10 штук</option></select></label><label style="display:flex;align-items:center;gap:10px"><input id="giftBuilderPriority" type="checkbox" style="width:auto"><span>⚡ Приоритетный заказ <b>🔒 Только с VIP</b></span></label><p id="giftBuilderPriorityHint" class="notice">Приоритетная обработка заказа доступна участникам с действующей VIP-подпиской.</p></div>
- <div class="panel gift-step hidden" data-gift-step="4"><h3>4. ИИ-помощник</h3><p class="notice">Попроси ИИ поправить пожелание, предложить оформление или внести изменения в состав набора. Перед оформлением он покажет, что собирается изменить.</p><div id="giftBuilderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto"></div><textarea id="giftBuilderChatInput" rows="3" maxlength="1800" placeholder="Например: сделай открытку более праздничной и добавь синие детали…"></textarea><button class="secondary" id="giftBuilderAsk" type="button" onclick="askGiftBuilderAi()">Отправить ИИ-помощнику</button><div class="lineitem"><span>Товары</span><b id="giftBuilderProductsTotal">0 ⭐</b></div><div class="lineitem"><span>Дополнения</span><b id="giftBuilderExtrasTotal">0 ⭐</b></div><div class="lineitem"><span>Итого без доставки</span><b id="giftBuilderTotal">0 ⭐</b></div><p class="notice">После оформления заказ можно обсуждать с ИИ ещё 3 дня, пока владелец не подтвердил заказ и не выставил счёт.</p></div>
+ <div class="panel gift-step hidden" data-gift-step="4"><h3>4. ИИ-помощник</h3><p class="notice">Попроси ИИ поправить пожелание, предложить оформление или внести изменения в состав набора. Перед оформлением он покажет, что собирается изменить.</p><div id="giftBuilderChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto"></div><textarea id="giftBuilderChatInput" rows="3" maxlength="1800" placeholder="Например: сделай открытку более праздничной и добавьте синие детали…"></textarea><button class="secondary" id="giftBuilderAsk" type="button" onclick="askGiftBuilderAi()">Отправить ИИ-помощнику</button><div class="lineitem"><span>Товары</span><b id="giftBuilderProductsTotal">0 ⭐</b></div><div class="lineitem"><span>Дополнения</span><b id="giftBuilderExtrasTotal">0 ⭐</b></div><div class="lineitem"><span>Итого без доставки</span><b id="giftBuilderTotal">0 ⭐</b></div><p class="notice">После оформления заказ можно обсуждать с ИИ ещё 3 дня, пока владелец не подтвердил заказ и не выставил счёт.</p></div>
  <div class="panel" style="position:sticky;bottom:76px;z-index:7;background:var(--panel);backdrop-filter:blur(14px)"><div class="row-actions" style="margin:0"><button class="secondary" id="giftBuilderBack" type="button" onclick="giftBuilderPrevStep()" disabled>← Назад</button><button class="primary" id="giftBuilderContinue" type="button" onclick="giftBuilderNextStep()" style="flex:2;margin-top:0">Продолжить →</button></div><button class="primary hidden" id="giftBuilderAdd" type="button" onclick="addGiftBuilderToCart()">Перейти к оформлению заказа 🎁</button></div>
 </section>
 <section id="cartView" class="hidden">
@@ -1729,7 +1729,7 @@ html body>#seasonDecorations .festive-firework{
 </section>
 <section id="ordersView" class="hidden">
  <div class="sectionhead"><h2>📦 Мои заказы</h2><span>сохранённые</span></div>
- <div class="panel" id="ordersList"><p class="muted">Открой мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
+ <div class="panel" id="ordersList"><p class="muted">Откройте мини-магазин через Telegram, чтобы загрузить заказы.</p></div>
  
 </section>
 <section id="customWizardView" class="hidden"><div class="sectionhead"><h2>🎨 Создать своё</h2><span id="customStepLabel">Шаг 1 из 8</span></div><div class="panel"><div style="height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px"><div id="customProgress" style="height:100%;width:12.5%;background:linear-gradient(90deg,#e6a53d,#ffdc8b)"></div></div><div id="customQuestion"></div><div id="customOptions" class="row-actions"></div><div id="customTextFields"></div><p class="notice" id="customStepHint"></p><div class="row-actions"><button class="secondary" id="customBack" onclick="customPrev()">← Назад</button><button class="primary" id="customNext" onclick="customNext()" style="flex:2;margin-top:0">Далее →</button></div></div><div class="panel"><div class="lineitem"><span>Предварительная цена</span><b id="customPrice">250 ⭐</b></div><p class="notice">Цена считается сервером по параметрам. Минимум 250 ⭐, максимум 700 ⭐. Заказ сначала поступит владельцу на подтверждение.</p></div></section>
@@ -1748,7 +1748,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="sectionhead"><h2 id="supportMainHeading">🤖 ИИ помощник</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
  <div class="panel">
   <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
-  <p class="muted">🎟️ Для активации подарочного сертификата напиши в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
+  <p class="muted">🎟️ Для активации подарочного сертификата напишите в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
   <p class="muted" style="margin-top:8px">Можно задать вопрос, подобрать подарок или обсудить индивидуальную авторскую работу — всё в одном чате. Помощник сам поймёт, чем помочь.</p>
  </div>
  <div class="panel" id="supportConversationPanel">
@@ -1763,7 +1763,7 @@ html body>#seasonDecorations .festive-firework{
  <div class="panel" id="supportMainChatPanel">
   <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
-  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напиши сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
+  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напишите сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
   <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
   <p class="notice" id="supportResult" aria-live="polite"></p>
   <button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button>
@@ -1773,7 +1773,7 @@ html body>#seasonDecorations .festive-firework{
 
 <section id="balanceView" class="hidden">
  <div class="sectionhead"><h2>⭐ Мой баланс</h2><span>серверный счёт</span></div>
- <div class="panel"><div class="lineitem"><span>Баланс</span><b id="balancePoints">— ⭐</b></div><p class="muted">1 Telegram Star = 1 балл. Все операции фиксируются в базе Агентства.</p><div class="sectionhead"><h3>Пополнить</h3><span>выбери сумму</span></div><div class="row-actions"><button class="secondary" onclick="topUp(50)">50 ⭐</button><button class="secondary" onclick="topUp(100)">100 ⭐</button><button class="secondary" onclick="topUp(250)">250 ⭐</button><button class="secondary" onclick="topUp(500)">500 ⭐</button><button class="secondary" onclick="topUp(750)">750 ⭐</button><button class="secondary" onclick="topUp(1000)">1000 ⭐</button></div><div style="margin-top:16px"><label for="customTopUpAmount" class="muted" style="display:block;margin-bottom:7px">Или укажите собственную сумму (от 1 до 10 000 ⭐)</label><input id="customTopUpAmount" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="Например, 1250" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><button class="primary" type="button" onclick="topUpCustom()">Пополнить на указанную сумму</button><p class="notice">Сервер проверит сумму и создаст счёт Telegram Stars. При сумме свыше 500 ⭐ сохраняется бонус +50 баллов.</p></div></div>
+ <div class="panel"><div class="lineitem"><span>Баланс</span><b id="balancePoints">— ⭐</b></div><p class="muted">1 Telegram Star = 1 балл. Все операции фиксируются в базе Агентства.</p><div class="sectionhead"><h3>Пополнить</h3><span>выберите сумму</span></div><div class="row-actions"><button class="secondary" onclick="topUp(50)">50 ⭐</button><button class="secondary" onclick="topUp(100)">100 ⭐</button><button class="secondary" onclick="topUp(250)">250 ⭐</button><button class="secondary" onclick="topUp(500)">500 ⭐</button><button class="secondary" onclick="topUp(750)">750 ⭐</button><button class="secondary" onclick="topUp(1000)">1000 ⭐</button></div><div style="margin-top:16px"><label for="customTopUpAmount" class="muted" style="display:block;margin-bottom:7px">Или укажите собственную сумму (от 1 до 10 000 ⭐)</label><input id="customTopUpAmount" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="Например, 1250" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><button class="primary" type="button" onclick="topUpCustom()">Пополнить на указанную сумму</button><p class="notice">Сервер проверит сумму и создаст счёт Telegram Stars. При сумме свыше 500 ⭐ сохраняется бонус +50 баллов.</p></div></div>
  <div class="panel"><h3>История операций</h3><div id="balanceHistory"><p class="muted">Загружаем операции…</p></div></div>
 </section>
 <section id="dealsView" class="hidden">
@@ -1994,7 +1994,7 @@ function buyProductNow(productId){
  quickBuyMode=true;
  cart={};cart[product[0]]=1;activePromo=null;persistCart();drawProducts();drawCart();showView('cartView');
  const address=document.getElementById('deliveryAddress');if(address)address.focus();
- toast('Работа добавлена к быстрому оформлению. Укажи адрес доставки.');
+ toast('Работа добавлена к быстрому оформлению. Укажите адрес доставки.');
 }
 
 function showView(id) {
@@ -2203,8 +2203,8 @@ function giftBuilderUpdateStep(){
  if(label)label.textContent='Шаг '+giftBuilderStep+' из 4';if(progress)progress.style.width=percent+'%';if(pt)pt.textContent=titles[giftBuilderStep];if(pp)pp.textContent=percent+'%';if(back)back.disabled=giftBuilderStep===1;if(next)next.classList.toggle('hidden',giftBuilderStep===4);if(finish)finish.classList.toggle('hidden',giftBuilderStep!==4);
 }
 function giftBuilderNextStep(){
- if(giftBuilderStep===1&&!giftBuilderSelectedItems().length)return toast('Сначала выбери хотя бы одну картину.');
- if(giftBuilderStep===2&&document.getElementById('giftBuilderPostcardText')?.value.trim().length<2)return toast('Напиши пожелание для открытки.');
+ if(giftBuilderStep===1&&!giftBuilderSelectedItems().length)return toast('Сначала выберите хотя бы одну картину.');
+ if(giftBuilderStep===2&&document.getElementById('giftBuilderPostcardText')?.value.trim().length<2)return toast('Напишите пожелание для открытки.');
  if(giftBuilderStep<4){giftBuilderStep++;giftBuilderUpdateStep();window.scrollTo({top:0,behavior:'smooth'});}
 }
 function giftBuilderPrevStep(){if(giftBuilderStep>1){giftBuilderStep--;giftBuilderUpdateStep();window.scrollTo({top:0,behavior:'smooth'});}}
@@ -2220,7 +2220,7 @@ function renderGiftBuilder(){
   const title=document.createElement('b');title.textContent=p[1];
   const price=document.createElement('div');price.className='price';price.textContent=money(p[2]);
   card.style.cursor=p[2]==null?'not-allowed':'pointer';card.style.border=qty>0?'2px solid var(--accent)':'1px solid var(--line)';card.style.transition='transform .18s ease,border-color .18s ease,box-shadow .18s ease';card.style.transform=qty>0?'translateY(-2px)':'none';card.setAttribute('role','button');card.setAttribute('aria-pressed',String(qty>0));card.tabIndex=p[2]==null?-1:0;
-  const selected=document.createElement('div');selected.textContent=qty>0?'✓ Выбрано':'Нажми, чтобы выбрать';selected.style.cssText='font-size:13px;color:var(--muted);margin-top:8px';
+  const selected=document.createElement('div');selected.textContent=qty>0?'✓ Выбрано':'Нажмите, чтобы выбрать';selected.style.cssText='font-size:13px;color:var(--muted);margin-top:8px';
   card.addEventListener('click',e=>{if(e.target.closest('input'))return;if(p[2]==null)return;if(qty>0)delete giftBuilderSelection[id];else giftBuilderSelection[id]=1;giftBuilderLayoutOrder=giftBuilderLayoutOrder.filter(x=>x!==id);if(giftBuilderSelection[id])giftBuilderLayoutOrder.push(id);renderGiftBuilder();});
   const count=document.createElement('input');count.type='number';count.min='1';count.max='10';count.value=String(qty||1);count.disabled=!qty;count.setAttribute('aria-label','Количество: '+p[1]);count.style.cssText='width:75px;margin-top:8px';count.addEventListener('click',e=>e.stopPropagation());count.addEventListener('change',e=>{e.stopPropagation();const n=Math.max(1,Math.min(10,Math.floor(Number(count.value)||1)));giftBuilderSelection[id]=n;renderGiftBuilder();});
   card.append(image,title,price,selected,count);root.append(card);
@@ -2247,8 +2247,8 @@ function renderGiftBuilder(){
 }
 function moveGiftBuilderItem(id,direction){const from=giftBuilderLayoutOrder.indexOf(id),to=from+direction;if(from<0||to<0||to>=giftBuilderLayoutOrder.length)return;const next=giftBuilderLayoutOrder.slice();[next[from],next[to]]=[next[to],next[from]];giftBuilderLayoutOrder=next;renderGiftBuilder();}
 async function saveGiftBuilderDraft(){
- const items=giftBuilderSelectedItems();if(!items.length)throw new Error('Сначала выбери товары для подарка.');
- const extras=giftBuilderExtras();if(extras.postcard_text.length<2)throw new Error('Напиши пожелание для открытки.');if(extras.postcard_detail==='premium'&&!vipActive)throw new Error('Премиальное оформление открытки доступно только с VIP.');if(extras.priority_order&&!vipActive)throw new Error('Приоритетный заказ доступен только с VIP.');
+ const items=giftBuilderSelectedItems();if(!items.length)throw new Error('Сначала выберите товары для подарка.');
+ const extras=giftBuilderExtras();if(extras.postcard_text.length<2)throw new Error('Напишите пожелание для открытки.');if(extras.postcard_detail==='premium'&&!vipActive)throw new Error('Премиальное оформление открытки доступно только с VIP.');if(extras.priority_order&&!vipActive)throw new Error('Приоритетный заказ доступен только с VIP.');
  const d=await apiFetch('/api/gift-builder/draft',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,items,...extras})});
  giftBuilderDraftId=d.draft_id;return d;
 }
@@ -2265,7 +2265,7 @@ async function askGiftBuilderAi(){
  finally{button.disabled=false;}
 }
 async function addGiftBuilderToCart(){
- const items=giftBuilderSelectedItems();if(!items.length)return toast('Выбери хотя бы один товар.');
+ const items=giftBuilderSelectedItems();if(!items.length)return toast('Выберите хотя бы один товар.');
  for(const item of items){const combined=Number(cart[item.id]||0)+item.qty;if(combined>10)return toast('В корзине максимум 10 штук одного товара.');}
  const add=document.getElementById('giftBuilderAdd');if(add)add.disabled=true;
  try{
@@ -2325,7 +2325,7 @@ function drawCart() {
  const root = document.getElementById('cartItems');
 
  if (!entries.length) {
-  root.innerHTML = '<p class="muted">Корзина пока пустая. Выбери подарок в каталоге 🎁</p>';
+  root.innerHTML = '<p class="muted">Корзина пока пустая. Выберите подарок в каталоге 🎁</p>';
  } else {
   const bundleBanner=window.pendingGiftBundleId?'<div class="admin-detail-line" style="margin-bottom:10px;border:1px solid var(--gold2);border-radius:12px;padding:12px"><strong>🎁 Подарочный набор</strong><p class="muted" style="margin:5px 0 0">Состав, открытка и дополнительные пожелания будут сохранены как единый заказ набора.</p></div>':'';
   root.innerHTML = bundleBanner + entries.map(p => `<div class="lineitem"><span>${p[3]} ${p[1]} × ${cart[p[0]]}<br><button class="secondary" onclick="changeQty(${p[0]},-1)">−</button> <button class="secondary" onclick="changeQty(${p[0]},1)">＋</button></span><b>${money(p[2]*cart[p[0]])}</b></div>`).join('');
@@ -2664,7 +2664,7 @@ const adminFeatureDefinitions=[
 async function downloadAdminBackup(){
  const status=document.getElementById('adminBackupStatus'),button=document.getElementById('adminBackupDownloadButton');
  if(!status||!button)return;
- if(!API_BASE||!initData){status.textContent='Открой панель владельца через Telegram.';return;}
+ if(!API_BASE||!initData){status.textContent='Откройте панель владельца через Telegram.';return;}
  button.disabled=true;status.textContent='Формируем резервную копию D1…';
  try{
   const response=await fetch(API_BASE+'/api/admin/backup/export',{headers:{'X-Telegram-Init-Data':initData}});
@@ -2734,7 +2734,7 @@ async function loadAdminServerDiagnostics(){
   const meta=document.createElement('p');meta.className='notice';
   meta.textContent='Проверено: '+formatDate(data.checked_at)+' · Ожидающие обновления: '+Number(data.webhook?.pending_update_count||0)+' · Разрешённые типы: '+(data.webhook?.allowed_updates||[]).join(', ');
   root.append(meta);
-  status.textContent=data.overall_ok?'Все основные проверки пройдены.':'Есть проблемы — смотри строки выше. Нажми «Переподключить webhook», если адрес или регистрация webhook не совпадают.';
+  status.textContent=data.overall_ok?'Все основные проверки пройдены.':'Есть проблемы — посмотрите строки выше. Нажмите «Переподключить webhook», если адрес или регистрация webhook не совпадают.';
  }catch(e){status.textContent=e.message||'Не удалось выполнить диагностику.';}
 }
 async function reconnectAdminWebhook(){
@@ -3110,7 +3110,7 @@ function resetAdminAnnouncementForm() {
  updateAnnouncementTypeUi();
  document.getElementById('adminAnnouncementStatus').value='draft';
  document.getElementById('adminAnnouncementEditorTitle').textContent='Новое объявление';
- document.getElementById('adminAnnouncementPreview').textContent='Перед публикацией проверь аудиторию и предпросмотр.';
+ document.getElementById('adminAnnouncementPreview').textContent='Перед публикацией проверьте аудиторию и предпросмотр.';
  document.getElementById('adminAnnouncementLivePreview').classList.add('hidden');
  updateAnnouncementAudienceUi();
 }
@@ -3621,7 +3621,7 @@ function selectAdminPhotoBatch(input){
   const name=document.createElement('strong');name.textContent=file.name;
   const meta=document.createElement('small');meta.textContent=(file.size/1024).toFixed(0)+' КБ · '+file.type;
   const select=document.createElement('select');select.setAttribute('aria-label','Товар для '+file.name);
-  const empty=document.createElement('option');empty.value='';empty.textContent='— Выбери товар —';select.append(empty);
+  const empty=document.createElement('option');empty.value='';empty.textContent='— Выберите товар —';select.append(empty);
   adminProductsCache.forEach(product=>{
    const option=document.createElement('option');option.value=String(product.id);option.textContent=(product.title||'Без названия')+' · ID '+product.id;select.append(option);
   });
@@ -3634,12 +3634,12 @@ function selectAdminPhotoBatch(input){
   info.append(name,meta,select);row.append(img,info);list.append(row);
  });
  if(button)button.disabled=!files.length||!adminProductsCache.length;
- if(!adminProductsCache.length)toast('Сначала загрузи каталог товаров.');
+ if(!adminProductsCache.length)toast('Сначала загрузите каталог товаров.');
 }
 async function uploadAdminPhotoBatch(){
  const button=document.getElementById('adminPhotoBatchUpload');
  const ready=adminPhotoBatch.filter(item=>!item.uploaded&&item.productId);
- if(!ready.length){toast('Назначь фотографии товарам.');return;}
+ if(!ready.length){toast('Назначьте фотографии товарам.');return;}
  const missing=adminPhotoBatch.filter(item=>!item.uploaded&&!item.productId).length;
  if(missing&&!confirm('У '+missing+' фотографий не выбран товар. Загрузить только назначенные?'))return;
  if(button){button.disabled=true;button.textContent='Загрузка…';}
@@ -3871,12 +3871,12 @@ async function checkOwnerAccess() {
  card.classList.add('hidden');
  if (!tg) {
   adminSession = null;
-  setOwnerAccessDiagnostic('A01', 'Telegram WebApp не загружен', 'Не найден window.Telegram.WebApp. Открой мини-приложение кнопкой внутри Telegram.', clientIdState);
+  setOwnerAccessDiagnostic('A01', 'Telegram WebApp не загружен', 'Не найден window.Telegram.WebApp. Откройте мини-приложение кнопкой внутри Telegram.', clientIdState);
   return;
  }
  if (!initData) {
   adminSession = null;
-  setOwnerAccessDiagnostic('A02', 'Нет подписанных initData', 'Telegram не передал данные авторизации. Открой мини-приложение непосредственно из бота, а не по обычной браузерной ссылке.', clientIdState);
+  setOwnerAccessDiagnostic('A02', 'Нет подписанных initData', 'Telegram не передал данные авторизации. Откройте мини-приложение непосредственно из бота, а не по обычной браузерной ссылке.', clientIdState);
   return;
  }
  if (description) description.textContent = 'Проверяем владельца на сервере…';
@@ -3900,9 +3900,9 @@ async function checkOwnerAccess() {
   }
   adminSession = null;
   if (result?.root_owner !== true) {
-   setOwnerAccessDiagnostic('A04', 'Сервер не распознал основной аккаунт владельца', 'Worker ответил, но root_owner не равен true. Проверь Telegram ID, BOT_TOKEN и соответствие аккаунта боту.', clientIdState);
+   setOwnerAccessDiagnostic('A04', 'Сервер не распознал основной аккаунт владельца', 'Worker ответил, но root_owner не равен true. Проверьте Telegram ID, BOT_TOKEN и соответствие аккаунта боту.', clientIdState);
   } else if (result?.admin_access !== true) {
-   setOwnerAccessDiagnostic('A05', 'Сервер запретил административный доступ', 'root_owner подтверждён, но admin_access не равен true. Проверь формирование сессии /api/admin/session.', clientIdState);
+   setOwnerAccessDiagnostic('A05', 'Сервер запретил административный доступ', 'root_owner подтверждён, но admin_access не равен true. Проверьте формирование сессии /api/admin/session.', clientIdState);
   } else {
    setOwnerAccessDiagnostic('A06', 'Неожиданный формат ответа сервера', 'Ожидались root_owner=true, admin_access=true и role=owner. Получен другой набор полей.', clientIdState);
   }
@@ -3914,11 +3914,11 @@ async function checkOwnerAccess() {
   } else if (status === 403) {
    setOwnerAccessDiagnostic('A04', 'Сервер отказал в доступе (HTTP 403)', e.message || 'Telegram ID, подтверждённый сервером, не совпал с ID владельца.', clientIdState);
   } else if (status === 404) {
-   setOwnerAccessDiagnostic('A07', 'Маршрут проверки не найден (HTTP 404)', 'Проверь API_BASE и наличие маршрута /api/admin/session в опубликованном Worker.', clientIdState);
+   setOwnerAccessDiagnostic('A07', 'Маршрут проверки не найден (HTTP 404)', 'Проверьте API_BASE и наличие маршрута /api/admin/session в опубликованном Worker.', clientIdState);
   } else if (status >= 500) {
    setOwnerAccessDiagnostic('A08', 'Ошибка Worker или базы данных (HTTP ' + status + ')', e.message || 'Серверная ошибка при создании административной сессии.', clientIdState);
   } else if (status > 0) {
-   setOwnerAccessDiagnostic('A09', 'Неожиданный HTTP-ответ (' + status + ')', e.message || 'Проверь ответ Worker.', clientIdState);
+   setOwnerAccessDiagnostic('A09', 'Неожиданный HTTP-ответ (' + status + ')', e.message || 'Проверьте ответ Worker.', clientIdState);
   } else {
    setOwnerAccessDiagnostic('A10', 'Сетевая ошибка или ошибка запроса', e?.message || String(e), clientIdState);
   }
@@ -3983,7 +3983,7 @@ async function saveAdminStaffPermissions(){
 
 async function apiFetch(path,options={}) {
  if (!API_BASE) throw new Error('API пока не настроен. Нужен публичный HTTPS-адрес сервера в параметре ?api=...');
- if (!initData) throw new Error('Открой каталог кнопкой внутри Telegram, чтобы проверить пользователя.');
+ if (!initData) throw new Error('Откройте каталог кнопкой внутри Telegram, чтобы проверить пользователя.');
 
  const response = await fetch(API_BASE + path,{
   ...options,
@@ -4122,7 +4122,7 @@ function renderSupportConversations() {
  root.replaceChildren();
  if (!supportConversations.length) {
   const empty = document.createElement('p'); empty.className = 'muted';
-  empty.textContent = 'Пока нет диалогов. Нажми «Новый диалог», чтобы начать.';
+  empty.textContent = 'Пока нет диалогов. Нажмите «Новый диалог», чтобы начать.';
   root.appendChild(empty);
  } else {
   const makeFolder=(title,items,collapsible=true)=>{
@@ -4193,7 +4193,7 @@ async function loadSupportHistory(conversationId, actions = null) {
  const root = document.getElementById('supportChatLog');
  if (!root) return;
  supportPendingActions = Array.isArray(actions) ? actions : [];
- if (!initData) { root.textContent = 'Открой мини-приложение через Telegram, чтобы начать диалог.'; return; }
+ if (!initData) { root.textContent = 'Откройте мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
   const suffix = conversationId ? '?conversation_id=' + encodeURIComponent(conversationId) : '';
   const data = await apiFetch('/api/support/chat' + suffix);
@@ -4248,7 +4248,7 @@ function isCraftOrderIntent(message){
 async function openCraftInAssistant(){
  activeOrderChatId='';craftModeActive=true;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.remove('hidden');
- const input=document.getElementById('supportMessage');if(input)input.placeholder='Напиши сообщение ИИ-помощнику…';
+ const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение ИИ-помощнику…';
  const send=document.getElementById('supportSendBtn');if(send)send.textContent=craftConversationReady?'Отправить сообщение':'Отправить';
  if(!craftMessages.length)await restoreCraftConversation();else await loadCraftConversation();
 }
@@ -4263,7 +4263,7 @@ async function sendSupport() {
  const button = document.getElementById('supportSendBtn');
  const message = input.value.trim();
  if(activeSupportConversationClosed){result.textContent='Этот диалог закрыт. Создайте новый, чтобы отправить сообщение.';return;}
- if (!message) { result.textContent = 'Напиши сообщение перед отправкой.'; return; }
+ if (!message) { result.textContent = 'Напишите сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
  button.disabled = true; result.textContent = 'ИИ помощник готовит ответ…';
@@ -4422,7 +4422,7 @@ async function checkout() {
  if(entries.some(p=>p[2]==null))return toast('У одной из работ ещё не указана цена.');
  const deliveryMethod=document.getElementById('deliveryMethod')?.value==='pickup'?'pickup':'courier';
  const address=document.getElementById('deliveryAddress')?.value.trim()||'';
- if(deliveryMethod==='courier'&&address.length<8)return toast('Укажи полный адрес доставки в Екатеринбурге.');
+ if(deliveryMethod==='courier'&&address.length<8)return toast('Укажите полный адрес доставки в Екатеринбурге.');
  const btn=document.getElementById('checkoutBtn'),statusBox=document.getElementById('deliveryCalcStatus');
  btn.disabled=true;btn.textContent=deliveryMethod==='pickup'?'Оформляем самовывоз…':'Рассчитываем доставку…';
  if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Подтверждаем бесплатный самовывоз из пункта выдачи…':'Проверяем адрес и автомобильный маршрут…';
@@ -4459,11 +4459,11 @@ async function checkout() {
    if(status==='paid'){
     quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
-    quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверь «Мои заказы».');loadMe();
+    quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверьте «Мои заказы».');loadMe();
    }else{
     quickBuyMode=false;apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:data.order_id})})
      .then(()=>{loadBalance();loadMe();toast('Неоплаченный заказ отменён. Списанные ⭐ возвращены на баланс.');})
-     .catch(()=>toast('Платёж не завершён. Проверь статус заказа и баланс.'));
+     .catch(()=>toast('Платёж не завершён. Проверьте статус заказа и баланс.'));
    }
   });
  }catch(e){
@@ -4488,7 +4488,7 @@ function setUnifiedChatContext(isOrder){
  if(back)back.classList.toggle('hidden',!isOrder);
  if(refresh)refresh.hidden=!isOrder;
  if(heading)heading.textContent=isOrder?'💬 Переписка по заказу № '+activeOrderChatId:'🤖 ИИ помощник';
- if(input){input.placeholder=isOrder?'Напишите сообщение по этому заказу…':'Напиши сообщение ИИ помощнику…';input.disabled=false;}
+ if(input){input.placeholder=isOrder?'Напишите сообщение по этому заказу…':'Напишите сообщение ИИ помощнику…';input.disabled=false;}
  if(send){send.textContent='Отправить';send.disabled=false;}
 }
 async function openOrderChat(id,type,title){
