@@ -22,7 +22,7 @@ function hasImageInput(input) {
   return input.some(item => Array.isArray(item?.content) && item.content.some(part => part?.type === "input_image" || part?.type === "image_url"));
 }
 
-function toVisionMessages(payload) {
+function toMessages(payload) {
   const messages = [];
   if (typeof payload.instructions === "string" && payload.instructions.trim()) {
     messages.push({ role: "system", content: payload.instructions });
@@ -58,8 +58,17 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// Keep the existing Responses-shaped call sites while routing text to GPT-OSS 120B
-// and image moderation to the free-tier vision model.
+function toResponsesShape(result) {
+  const outputText = getTextFromResult(result);
+  return {
+    ...result,
+    output_text: outputText,
+    output: [{ type: "message", content: [{ type: "output_text", text: outputText }] }]
+  };
+}
+
+// Translate the old Responses-shaped internal requests to the documented
+// Workers AI chat-completions input shape.
 export async function workersAiFetch(env, requestInit = {}) {
   if (typeof env?.AI?.run !== "function") {
     return jsonResponse({ error: { message: "Workers AI binding AI is not configured" } }, 503);
@@ -72,23 +81,21 @@ export async function workersAiFetch(env, requestInit = {}) {
   }
   const vision = hasImageInput(payload.input);
   const model = vision ? AGENCY_VISION_MODEL : AGENCY_TEXT_MODEL;
-  const aiInput = { ...payload };
-  delete aiInput.model;
+  const aiInput = {
+    messages: toMessages(payload),
+    max_tokens: Math.max(1, Math.min(4096, Number(payload.max_output_tokens) || 512))
+  };
+  for (const key of ["temperature", "top_p", "top_k", "repetition_penalty", "frequency_penalty", "presence_penalty", "seed", "response_format"]) {
+    if (payload[key] !== undefined) aiInput[key] = payload[key];
+  }
+  if (vision) {
+    aiInput.max_tokens = Math.min(aiInput.max_tokens, 256);
+    aiInput.temperature = 0.1;
+    aiInput.chat_template_kwargs = { enable_thinking: false };
+  }
   try {
-    if (vision) {
-      const result = await env.AI.run(model, {
-        messages: toVisionMessages(payload),
-        max_tokens: Math.max(1, Math.min(256, Number(payload.max_output_tokens) || 120)),
-        temperature: 0.1
-      });
-      const outputText = getTextFromResult(result);
-      return jsonResponse({
-        output_text: outputText,
-        output: [{ type: "message", content: [{ type: "output_text", text: outputText }] }]
-      });
-    }
     const result = await env.AI.run(model, aiInput);
-    return jsonResponse(result);
+    return jsonResponse(toResponsesShape(result));
   } catch (error) {
     const message = String(error?.message || error || "Workers AI request failed").slice(0, 500);
     const isLimit = /rate|limit|quota|neuron|capacity/i.test(message);
