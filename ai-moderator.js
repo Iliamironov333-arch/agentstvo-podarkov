@@ -302,12 +302,30 @@ function aiAgencyIntent(text) {
   if(!aboutAgency)return false;
   return /[?？]|(?:^|[\s,!.])(?:что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти|придум|предлож|опис|совет|сдела|нарис)/i.test(value);
 }
-async function aiGroupReply(env,chatId,userId,text,replyToMessageId=null){
+function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
+  const combined=(String(userText||"")+"\n"+String(answer||"")).toLowerCase().replace(/ё/g,"е");
+  const rows=[];
+  const botUrl="https://t.me/Agentstvo_podarkov_bot";
+  const supportUrl="https://t.me/Iliya_Mironov_33";
+  const add=(buttons)=>{if(rows.length<3)rows.push(buttons);};
+  const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покажите|ассортимент)/i.test(combined);
+  const ideaIntent=/(иде|придум|подобрат|вариант|мастерск|творческ|сделать своими руками|как сделать)/i.test(combined);
+  const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени)/i.test(combined);
+  const supportIntent=needsOwner || /(поддержк|связаться с владельц|передал вопрос владельц|не могу подтвердить)/i.test(String(answer||"").toLowerCase());
+  if(catalogIntent)add([{text:"🎁 Открыть каталог",url:botUrl}]);
+  if(ideaIntent)add([{text:"🎨 Подобрать идею",url:botUrl}]);
+  if(navigationIntent && !catalogIntent && !ideaIntent)add([{text:"📱 Открыть Агентство",url:botUrl}]);
+  if(supportIntent)add([{text:"💬 Связаться с поддержкой",url:supportUrl}]);
+  if(!rows.length && /агентств|подар|заказ|оплат|баланс|каталог|товар|поделк/i.test(combined))add([{text:"📱 Открыть Агентство",url:botUrl}]);
+  return rows.length?{inline_keyboard:rows}:null;
+}
+async function aiGroupReply(env,chatId,userId,text,replyToMessageId=null,replyMarkup=null){
   const settings=await aiSettings(env);
   const last=await env.DB.prepare("SELECT created_at FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(String(chatId),String(userId||"")).first();
   if(last && (Date.now()-Date.parse(last.created_at.replace(" ","T")+"Z"))/1000<Number(settings.answer_interval_seconds||5))return false;
   const payload={chat_id:chatId,text:String(text).slice(0,3500),allow_sending_without_reply:true};
   if(replyToMessageId)payload.reply_to_message_id=Number(replyToMessageId);
+  if(replyMarkup?.inline_keyboard?.length)payload.reply_markup=replyMarkup;
   const sent=await aiTelegram(env,"sendMessage",payload);
   await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?,?,?)")
     .bind(String(chatId),Number(sent?.message_id)||null,String(userId||""),"assistant",String(text).slice(0,3500)).run();
@@ -536,8 +554,8 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
   const catalog=(products.results||[]).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
   const instructions=[
-    "Вы — персональный ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников.",
-    "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами.",
+    "Вы — ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников. Пишите простым текстом без Markdown-разметки и звёздочек. В каждом ответе используйте 1–2 уместных эмодзи, не больше.",
+    "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами. Сервер сам добавляет подходящие кнопки к ответу: никогда не отказывайтесь от кнопки и не говорите, что не умеете её создать. Если кнопка может не открыться, обязательно объясните словами: откройте @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство» и выберите нужный раздел.",
     "Помогайте придумать интересную идею для подарка или изделия: задавайте один уместный уточняющий вопрос, предлагайте несколько конкретных идей и описаний. Не требуйте сразу оформить заказ.",
     "Если человек хочет понять, что можно заказать, опирайтесь на реальный каталог и реальные товары. Если подходящей готовой работы нет, можно помочь придумать индивидуальную идею, не обещая, что Агентство уже производит её.",
     "Помощь сделать поделку самостоятельно дома — запасной сценарий. Предлагайте её только если человек прямо просит инструкцию для самостоятельного изготовления либо явно выбирает самостоятельный вариант. Не переводите обычный запрос о товаре в DIY.",
@@ -574,7 +592,11 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     await aiNotifyOwner(env,"❔ ИИ-помощнику нужна помощь владельца"+(questionId?" · вопрос №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтветьте в Mini App → ИИ-бот → Вопросы владельцу.");
     answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
   }
-  await aiGroupReply(env,chatId,user.id,answer,replyToMessageId);
+    answer=String(answer||"").replace(/\*{1,2}/g,"").trim();
+  if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";
+  const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
+  if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
+  await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
 async function aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder}){
@@ -808,7 +830,7 @@ async function aiAwardGroupMessageReputation(env,chatId,message,user){
     .bind(String(user.id),null,"group-message:"+String(chatId)+":"+messageId,createdAt).run();
   return Number(reward.meta?.changes||0)===1;
 }
-async function handleAiTelegramUpdate(update, env) {
+async function aiHandleTelegramUpdateInner(update, env) {
   if (update.callback_query?.data?.startsWith("ai_order_approve:")) {
     await aiApproveOrder(env,update.callback_query);return true;
   }
@@ -967,6 +989,30 @@ async function handleAiTelegramUpdate(update, env) {
   if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
   return true;
 }
+async function handleAiTelegramUpdate(update,env){
+  const message=update?.message||update?.edited_message;
+  const callback=update?.callback_query;
+  const identity=update?.update_id!==undefined
+    ? "telegram_update:"+String(update.update_id)
+    : callback?.id ? "telegram_callback:"+String(callback.id)
+    : message?.chat?.id&&message?.message_id
+      ? "telegram_message:"+String(message.chat.id)+":"+String(message.message_id)+":"+(update?.edited_message?"edit:"+String(message.edit_date||"0"):"new")
+      : null;
+  if(!identity)return aiHandleTelegramUpdateInner(update,env);
+  const claim=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP)").bind(identity).run();
+  if(Number(claim.meta?.changes||0)!==1)return true;
+  try{
+    const result=await aiHandleTelegramUpdateInner(update,env);
+    await env.DB.prepare("UPDATE ai_runtime_state SET value='done',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
+    return result;
+  }catch(error){
+    const messageId=message?.message_id||null;
+    await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run().catch(()=>{});
+    await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});
+    await aiNotifyOwner(env,"⚠️ Не удалось полностью обработать обновление группы"+(messageId?" · сообщение №"+messageId:"")+". Повтор Telegram остановлен, чтобы не запускать повторную модерацию одного сообщения. Ошибка: "+String(error).slice(0,300));
+    return true;
+  }
+}
 async function aiBuildWeeklyReport(env) {
   const end = new Date();
   const start = new Date(end.getTime()-7*86400000);
@@ -1050,6 +1096,7 @@ async function handleAiScheduled(env) {
   await env.DB.prepare("UPDATE ai_watchlist SET status='ended' WHERE status='active' AND expires_at<=CURRENT_TIMESTAMP").run();
   await env.DB.prepare("UPDATE ai_group_messages SET content='[удалено по сроку хранения]' WHERE created_at<datetime('now','-90 days') AND content<>'[удалено по сроку хранения]'").run();
   await env.DB.prepare("DELETE FROM ai_moderation_events WHERE created_at<datetime('now','-180 days')").run();
+  await env.DB.prepare("DELETE FROM ai_runtime_state WHERE (key LIKE 'telegram_update:%' OR key LIKE 'telegram_message:%' OR key LIKE 'telegram_callback:%') AND updated_at<datetime('now','-7 days')").run();
   await env.DB.prepare("DELETE FROM ai_complaints WHERE created_at<datetime('now','-180 days') AND status<>'review'").run();
   await env.DB.prepare("DELETE FROM ai_group_members WHERE last_seen_at<datetime('now','-180 days')").run();
   await env.DB.prepare("DELETE FROM ai_owner_questions WHERE status='answered' AND answered_at<datetime('now','-180 days')").run();
