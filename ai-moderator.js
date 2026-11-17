@@ -547,32 +547,12 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
   return true;
 }
-async function aiSendRecommendedProductPhotos(env,chatId,userId,products,productIds,replyToMessageId=null){
-  const selected=[...new Set((Array.isArray(productIds)?productIds:[]).map(String))]
-    .map(id=>(products||[]).find(product=>String(product.id)===id))
-    .filter(product=>product&&/^https:\/\/res\.cloudinary\.com\//i.test(String(product.image_url||"")))
-    .slice(0,3);
-  let sent=0;
-  for(const product of selected){
-    const photoUrl=String(product.image_url).replace("/image/upload/","/image/upload/f_jpg,q_auto/").replace(/\.webp(?=\?|$)/i,".jpg");
-    const caption=(String(product.title)+"\nЦена: "+Number(product.price_stars)+" Stars"+(product.description?"\n"+String(product.description).slice(0,500):"")).slice(0,1000);
-    try{
-      await aiTelegram(env,"sendPhoto",{chat_id:chatId,photo:photoUrl,caption,
-        reply_to_message_id:replyToMessageId||undefined,
-        reply_markup:{inline_keyboard:[[{text:"🎁 Открыть каталог",url:"https://t.me/Agentstvo_podarkov_bot"}]]}});
-      sent++;
-    }catch(error){
-      await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:userId,type:"product_photo_send_failed",severity:"warning",details:{product_id:String(product.id),error:String(error).slice(0,250)}});
-    }
-  }
-  return sent;
-}
 async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=null,replyToOriginalId=null){
   if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId))return;
   const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
   const context=(recent.results||[]).slice(0,16).reverse();
-  const products=await env.DB.prepare("SELECT id,title,description,category,price_stars,image_url FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
-  const catalog=(products.results||[]).map(p=>({id:String(p.id),title:p.title,description:p.description,category:p.category,price_stars:p.price_stars,image_url:p.image_url||null}));
+  const products=await env.DB.prepare("SELECT id,title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
+  const catalog=(products.results||[]).map(p=>({id:String(p.id),title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
   const instructions=[
     "Вы — ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников. Пишите простым текстом без Markdown-разметки и звёздочек. В каждом ответе используйте 1–2 уместных эмодзи, не больше.",
     "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами. Сервер сам добавляет подходящие кнопки к ответу: никогда не отказывайтесь от кнопки и не говорите, что не умеете её создать. Если кнопка может не открыться, обязательно объясните словами: откройте @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство» и выберите нужный раздел.",
@@ -585,10 +565,9 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     "Отвечайте на новую тему отдельно и не переносите пожелания одного участника в диалог другого. Используйте только историю текущего участника.",
     "Запрос из «Создать своё» поступает владельцу на проверку. Только владелец подтверждает индивидуальную работу и цену; до подтверждения счёт не отправляется.",
     "Актуальное главное меню Mini App: «Магазин» — каталог готовых работ; «Создать своё» — пошаговая форма индивидуальной работы; «VIP-подписка» — VIP-возможности; «Мои заказы» — статусы и история; «Мой баланс» — баллы и операции; «Пополнить баланс» — оплата Stars; «ИИ помощник» — отдельный чат для вопросов, подбора подарка и обсуждения авторской работы; «О проекте» — правила и контакты; «Таблица лидеров» — репутация; «Скидки и акции» — действующие предложения. Категории каталога: «Все работы», «Осень», «Новинки», «Зима и Новый год», «Картины», «Животные», «Дома и здания», «Поделки», «Услуги». Не называйте разделы иначе и не придумывайте кнопки. В групповой переписке Вы уже являетесь ИИ-помощником: не отправляйте человека искать кнопку «ИИ помощник», если он уже общается с Вами.",
-    "Каталог (источник истины) содержит ID, названия, описания, категории, цену в Stars и image_url. Для ответа верните recommended_product_ids — массив ID только реальных активных товаров, которые действительно подходят к запросу. Максимум 3. Если просят показать фото, выбирайте только товары с непустым image_url. Если фото у товара нет, прямо скажите об этом; не придумывайте, что фотография приложена.",
     "Не придумывайте товары, цены, сроки, наличие, оплату, обещания и решения владельца. Если точного ответа нет, честно скажите об этом и передайте вопрос владельцу.",
     "Не отвечайте на посторонние сообщения, если Вас не спросили и не упомянули. Верните ignore=true, если сообщение не относится к Агентству и не является обращением к собеседнику.",
-    "Верните только JSON вида {\"answer\":\"ответ\",\"needs_owner\":true или false,\"ignore\":true или false,\"recommended_product_ids\":[\"ID\"]}. Если подходящих товаров нет, верните пустой массив."
+    "Верните только JSON вида {\"answer\":\"ответ\",\"needs_owner\":true или false,\"ignore\":true или false}."
   ];
   instructions.push(aiToneInstruction(settings.global_tone));
   if(settings.companion_mode){
@@ -599,8 +578,8 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   instructions.push("ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: не предлагайте клиенту оформить заказ и не вставляйте предложение о заказе в разговор. Оформление начинается только по собственной ясной прямой просьбе клиента. Консультация, ориентация, вопросы о товарах, идеи и обычная беседа не являются согласием. При смене темы отвечайте на новую тему, не продолжайте прежний сценарий заказа. Черновик оформления в группе активен не дольше 30 минут бездействия; не считайте новые приветствия, благодарность или обычные вопросы ответами на старый заказ.");
   const input=[{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},...context.map(m=>({role:m.role,content:m.content}))];
   const raw=await aiGenerateText(env,instructions.join("\n"),input,650);
-  let answer=raw,needsOwner=false,ignore=false,recommendedProductIds=[];
-  try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;recommendedProductIds=Array.isArray(parsed.recommended_product_ids)?parsed.recommended_product_ids.map(String).slice(0,3):[];}}catch{}
+  let answer=raw,needsOwner=false,ignore=false;
+  try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}}catch{}
   if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
   if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
   // Жёсткая страховка от рекламного призыва оформить заказ в обычном ответе.
@@ -615,15 +594,9 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   }
     answer=String(answer||"").replace(/\*{1,2}/g,"").trim();
   if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";
-  if(!recommendedProductIds.length && /(фото|картин|изображ|покаж)/i.test(text)){
-    const normalized=text.toLowerCase();
-    recommendedProductIds=(products.results||[]).filter(p=>p.image_url&&normalized.includes(String(p.title||"").toLowerCase())).map(p=>String(p.id)).slice(0,3);
-    if(!recommendedProductIds.length && !/(картины|картин|рисунк)/i.test(text))recommendedProductIds=(products.results||[]).filter(p=>p.image_url).map(p=>String(p.id)).slice(0,3);
-  }
   const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
   if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
-  const sent=await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
-  if(sent)await aiSendRecommendedProductPhotos(env,chatId,user.id,products.results||[],recommendedProductIds,replyToMessageId);
+  await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
 async function aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder}){
