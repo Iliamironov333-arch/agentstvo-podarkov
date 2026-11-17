@@ -1067,7 +1067,17 @@ export default {
         ]);
         const meRank=reputationRank(mine?.rank_code);
         const publicMembers=(members.results||[]).map(row=>({name:row.first_name||(row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,rank_code:row.rank_code,is_me:String(row.telegram_id)===telegramId}));
-        return json({ok:true,ranks:REPUTATION_RANKS.map(({code,label,discount})=>({code,label,discount})),me:{rank:meRank,discount:meRank.discount},members:publicMembers},200,origin);
+        const participation=Number(mine?.leaderboard_opt_in)!==0;
+        return json({ok:true,ranks:REPUTATION_RANKS.map(({code,label,discount})=>({code,label,discount})),me:{rank:meRank,discount:meRank.discount,leaderboard_opt_in:participation},members:publicMembers},200,origin);
+      }
+
+      if (path === "/api/leaderboard/participation" && method === "POST") {
+        if (!(await tableExists(env,"reputation_profiles"))) return json({error:"Настройки рейтинга временно недоступны."},503,origin);
+        const body=await readJson(request);
+        if(typeof body.enabled!=="boolean")return json({error:"Укажите, включить или выключить участие."},400,origin);
+        await ensureReputationProfile(env,telegramId);
+        await env.DB.prepare("UPDATE reputation_profiles SET leaderboard_opt_in=? WHERE telegram_id=?").bind(body.enabled?1:0,telegramId).run();
+        return json({ok:true,enabled:body.enabled},200,origin);
       }
 
       if (path === "/api/announcements" && method === "GET") {
@@ -1099,7 +1109,7 @@ export default {
         let options=[];try{options=JSON.parse(item.poll_options_json||"[]")}catch{}
         if(!Array.isArray(options)||optionIndex>=options.length)return json({error:"Такого варианта ответа нет."},400,origin);
         const saved=await env.DB.prepare("INSERT OR IGNORE INTO announcement_votes (announcement_id,telegram_id,option_index) VALUES (?,?,?)").bind(announcementId,telegramId,optionIndex).run();
-        if(!saved.meta||saved.meta.changes!==1)return json({error:"Ты уже голосовал в этом опросе."},409,origin);
+        if(!saved.meta||saved.meta.changes!==1)return json({error:"Вы уже голосовали в этом опросе."},409,origin);
         const counts=await env.DB.prepare("SELECT option_index,COUNT(*) AS votes FROM announcement_votes WHERE announcement_id=? GROUP BY option_index").bind(announcementId).all();
         const map=new Map((counts.results||[]).map(row=>[Number(row.option_index),Number(row.votes||0)]));
         return json({ok:true,vote_results:options.map((_,i)=>map.get(i)||0),my_vote:optionIndex},200,origin);
