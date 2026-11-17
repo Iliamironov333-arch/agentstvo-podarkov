@@ -1,4 +1,4 @@
-import { openAiFetch, getOpenAiRetryDelaySeconds } from "./openai-client.js";
+import { openAiFetch, getOpenAiRetryDelaySeconds, formatOpenAiWait } from "./openai-client.js";
 const DEFAULT_AI_SETTINGS = {
   enabled: true,
   moderation_enabled: true,
@@ -1092,7 +1092,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
         const upstreamStatus=Number(error.status)||0;
         const providerCode=String(error.code||"");
         const providerMessage=String(error.providerMessage||"");
-        const isTpmRateLimited=providerCode==="rate_limit_exceeded" || /tokens?\s+per\s+min|\bTPM\b/i.test(providerMessage);
+        const isTpmRateLimited=/tokens?\s+per\s+min|\bTPM\b/i.test(providerMessage);
         let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
         if(isTpmRateLimited){
           message="Достигнут лимит токенов модели в минуту. Проверка временно приостановлена, повторите её через "+String(error.retryAfterSeconds||error.retryAfter||"некоторое время")+".";
