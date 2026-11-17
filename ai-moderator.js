@@ -1066,9 +1066,12 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     const enabled=settings.enabled===true && settings.moderation_enabled===true && !settings.moderation_temporarily_disabled;
     if(!enabled)return aiJson({ok:true,decision:"paused",reason:"Модерация сейчас отключена. Проверка не выполнялась.",action:"none",settings_snapshot:{enabled:settings.enabled,moderation_enabled:settings.moderation_enabled,temporarily_disabled:settings.moderation_temporarily_disabled}});
     const localReason=aiClassifyLocal({text},settings);
-    let inspected;
-    try{inspected=await aiInspectText(env,text,settings);}
-    catch(error){return aiJson({error:"Не удалось выполнить ИИ-проверку: "+String(error.message||error).slice(0,180)},502);}
+    const hasActiveRules=!!(settings.profanity||settings.spam||settings.advertising||settings.suspicious_links||settings.repeated_messages||settings.media_checks);
+    let inspected={decision:"ok",reason:"Включённых категорий для проверки нет.",confidence:1};
+    if(hasActiveRules){
+      try{inspected=await aiInspectText(env,text,settings);}
+      catch(error){return aiJson({error:"Не удалось выполнить ИИ-проверку: "+String(error.message||error).slice(0,180)},502);}
+    }
     let decision=inspected.decision,reason=inspected.reason,confidence=inspected.confidence;
     if(localReason){decision="violation";reason=localReason;confidence=Math.max(confidence,0.9);}
     const category=aiCategoryFromReason(reason);
