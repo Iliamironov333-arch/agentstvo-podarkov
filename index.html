@@ -2099,12 +2099,105 @@ function buyProductNow(productId){
  toast('Работа добавлена к быстрому оформлению. Укажите адрес доставки.');
 }
 
+function applyUiMotionSettings(input){
+ const settings={...UI_MOTION_DEFAULTS,...(input||{})};uiMotionSettings=settings;
+ const root=document.documentElement,speed=Math.max(.5,Math.min(2,Number(settings.speed||100)/100)),intensity=Math.max(0,Math.min(100,Number(settings.intensity||0)))/100;
+ const duration=value=>Math.round(Number(value||0)*speed)+'ms';
+ const easing={soft:'cubic-bezier(.22,1,.36,1)',standard:'ease-in-out',spring:'cubic-bezier(.34,1.56,.64,1)',linear:'linear'}[settings.easing]||'cubic-bezier(.22,1,.36,1)';
+ root.classList.toggle('motion-enabled',settings.enabled!==false);
+ root.classList.toggle('motion-glass-off',settings.glassEnabled===false);
+ const reduced=!!settings.respectReducedMotion&&!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ root.classList.toggle('motion-system-reduced',reduced);
+ root.dataset.pageTransition=settings.enabled===false?'none':settings.pageTransition;
+ root.dataset.cardEffect=settings.enabled===false?'none':settings.cardEffect;
+ root.dataset.modalEffect=settings.enabled===false?'none':settings.modalEffect;
+ root.dataset.buttonEffect=settings.enabled===false?'none':settings.buttonEffect;
+ root.style.setProperty('--motion-easing',easing);
+ root.style.setProperty('--motion-button-duration',duration(settings.buttonDuration));
+ root.style.setProperty('--motion-page-duration',duration(settings.pageDuration));
+ root.style.setProperty('--motion-card-duration',duration(settings.cardDuration));
+ root.style.setProperty('--motion-modal-duration',duration(settings.modalDuration));
+ root.style.setProperty('--motion-nav-duration',duration(settings.navDuration));
+ root.style.setProperty('--motion-toast-duration',duration(settings.toastDuration));
+ root.style.setProperty('--motion-button-opacity',String(settings.buttonOpacity));
+ root.style.setProperty('--motion-button-scale',String(settings.buttonScale));
+ root.style.setProperty('--motion-glass-opacity',String(settings.glassOpacity));
+ root.style.setProperty('--motion-glass-blur',settings.glassBlur+'px');
+ root.style.setProperty('--motion-card-offset',(8*intensity)+'px');
+ document.querySelectorAll('#products .product').forEach((card,index)=>{
+  card.classList.toggle('motion-card-enter',settings.enabled!==false&&settings.cardEffect!=='none');
+  card.dataset.cardEffect=settings.cardEffect;
+  const cardSpeed=Math.max(.5,Math.min(2,Number(settings.speed||100)/100));
+  card.style.animationDuration=duration(settings.cardDuration);
+  card.style.animationDelay=settings.cardStagger?Math.round(index*settings.cardInterval*cardSpeed)+'ms':'0ms';
+ });
+}
+function syncUiMotionControls(){
+ const panel=document.getElementById('adminUiMotionPanel');if(!panel)return;
+ panel.querySelectorAll('[data-motion-key]').forEach(control=>{
+  const key=control.dataset.motionKey;let value=uiMotionSettings[key];
+  if(control.type==='checkbox')control.checked=value!==false;
+  else{
+   if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=Number(value)*100;
+   control.value=String(value);
+  }
+ });
+ panel.querySelectorAll('[data-motion-value]').forEach(output=>{
+  const key=output.dataset.motionValue,control=panel.querySelector('[data-motion-key="'+key+'"]');
+  if(!control)return;
+  let value=uiMotionSettings[key];
+  if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=(Number(value)*100).toFixed(key==='buttonScale'?1:0).replace(/\.0$/,'');
+  output.textContent=String(value)+(control.dataset.motionUnit||'');
+ });
+}
+function scheduleUiMotionSave(){
+ const status=document.getElementById('adminUiMotionStatus');
+ if(status)status.textContent='Изменения применены сразу. Сохраняем общие настройки…';
+ clearTimeout(uiMotionSaveTimer);
+ uiMotionSaveTimer=setTimeout(()=>{
+  const snapshot={...uiMotionSettings};
+  uiMotionSaveQueue=uiMotionSaveQueue.then(()=>apiFetch('/api/admin/ui-motion',{method:'POST',body:JSON.stringify({settings:snapshot})}))
+   .then(data=>{if(JSON.stringify(snapshot)===JSON.stringify(uiMotionSettings)){uiMotionSettings={...UI_MOTION_DEFAULTS,...data.settings};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();const label=document.getElementById('adminUiMotionStatus');if(label)label.textContent='✓ Сохранено в D1. Новые настройки действуют у всех клиентов.';}})
+   .catch(error=>{const label=document.getElementById('adminUiMotionStatus');if(label)label.textContent='Эффекты уже применены на этом устройстве, но серверное сохранение не удалось: '+(error.message||'ошибка');});
+ },400);
+}
+function updateUiMotionControl(control){
+ const key=control?.dataset?.motionKey;if(!key)return;
+ let value=control.type==='checkbox'?control.checked:Number(control.value);
+ if(control.type!=='checkbox'&&!['intensity','speed','pageDuration','buttonOpacity','buttonScale','buttonDuration','cardDuration','cardInterval','modalDuration','navDuration','glassOpacity','glassBlur','toastDuration'].includes(key))value=control.value;
+ if(key==='buttonOpacity'||key==='glassOpacity'||key==='buttonScale')value=Number(value)/100;
+ uiMotionSettings={...uiMotionSettings,[key]:value};
+ applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
+}
+function initUiMotionControls(){
+ const panel=document.getElementById('adminUiMotionPanel');if(!panel||panel.dataset.ready==='1')return;
+ panel.dataset.ready='1';
+ panel.addEventListener('input',event=>{if(event.target?.matches?.('[data-motion-key][type="range"]'))updateUiMotionControl(event.target);});
+ panel.addEventListener('change',event=>{if(event.target?.matches?.('[data-motion-key]:not([type="range"])'))updateUiMotionControl(event.target);});
+ syncUiMotionControls();
+ const status=document.getElementById('adminUiMotionStatus');if(status)status.textContent='Глобальные настройки загружены. Изменения применяются сразу.';
+}
+async function loadUiMotionSettings(){
+ applyUiMotionSettings(uiMotionSettings);
+ if(!initData)return;
+ try{const data=await apiFetch('/api/ui-motion');uiMotionSettings={...UI_MOTION_DEFAULTS,...data.settings};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();}
+ catch(error){console.warn('Не удалось загрузить глобальные настройки плавности:',error);}
+}
+function resetUiMotionSettings(){
+ uiMotionSettings={...UI_MOTION_DEFAULTS};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
+}
+
 function showView(id) {
  if(id==='adminPanelView' && adminSession?.root_owner !== true) {
   toast('Панель владельца закрыта: серверная проверка доступа не пройдена.');
   return;
  }
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
+ const motionTarget=document.getElementById(id);
+ if(motionTarget&&uiMotionSettings.enabled!==false&&uiMotionSettings.pageTransition!=='none'&&!document.documentElement.classList.contains('motion-system-reduced')){
+  motionTarget.classList.remove('motion-page-enter');void motionTarget.offsetWidth;motionTarget.classList.add('motion-page-enter');
+  motionTarget.addEventListener('animationend',()=>motionTarget.classList.remove('motion-page-enter'),{once:true});
+ }
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView','cartView'].includes(id)) {
@@ -2259,10 +2352,16 @@ function drawProducts() {
  });
  document.getElementById('count').textContent = `${shown.length} работ`;
 
- shown.forEach(p => {
+ shown.forEach((p,index) => {
   const qty = Number(cart[p[0]] || 0);
   const el = document.createElement('article');
   el.className = 'product';
+  if(uiMotionSettings.enabled!==false&&uiMotionSettings.cardEffect!=='none'){
+   el.classList.add('motion-card-enter');el.dataset.cardEffect=uiMotionSettings.cardEffect;
+   const speed=Math.max(.5,Math.min(2,Number(uiMotionSettings.speed||100)/100));
+   el.style.animationDuration=Math.round(uiMotionSettings.cardDuration*speed)+'ms';
+   el.style.animationDelay=(uiMotionSettings.cardStagger?Math.round(index*uiMotionSettings.cardInterval*speed):0)+'ms';
+  }
   el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
   el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
   el.style.cursor='pointer';
@@ -4764,6 +4863,8 @@ document.addEventListener('click',event=>{
  if(chatButton)openOrderChat(chatButton.dataset.orderId,chatButton.dataset.orderType,chatButton.dataset.orderTitle);
 });
 
+applyUiMotionSettings(uiMotionSettings);
+loadUiMotionSettings();
 drawProducts();
 drawCart();
 loadProducts();
