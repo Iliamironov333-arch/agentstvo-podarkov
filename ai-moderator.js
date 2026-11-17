@@ -1095,7 +1095,7 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
         const isTpmRateLimited=/tokens?\s+per\s+min|\bTPM\b/i.test(providerMessage);
         let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
         if(isTpmRateLimited){
-          message="Достигнут лимит токенов модели в минуту. Проверка временно приостановлена, повторите её через "+String(error.retryAfterSeconds||error.retryAfter||"некоторое время")+".";
+          message="Достигнут лимит токенов модели в минуту. Проверка временно приостановлена, повторите её через "+formatOpenAiWait(error.retryAfterSeconds||Number(error.retryAfter)||60)+".";
         }else if(upstreamStatus===429){
           if(providerCode==="insufficient_quota" || error.type==="insufficient_quota"){
             message="Квота OpenAI исчерпана. Проверьте доступный лимит и настройки оплаты проекта OpenAI.";
