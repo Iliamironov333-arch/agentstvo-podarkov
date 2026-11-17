@@ -547,6 +547,26 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
   await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(JSON.stringify(details),active.id).run();
   return true;
 }
+async function aiSendRecommendedProductPhotos(env,chatId,userId,products,productIds,replyToMessageId=null){
+  const selected=[...new Set((Array.isArray(productIds)?productIds:[]).map(String))]
+    .map(id=>(products||[]).find(product=>String(product.id)===id))
+    .filter(product=>product&&/^https:\/\/res\.cloudinary\.com\//i.test(String(product.image_url||"")))
+    .slice(0,3);
+  let sent=0;
+  for(const product of selected){
+    const photoUrl=String(product.image_url).replace("/image/upload/","/image/upload/f_jpg,q_auto/").replace(/\.webp(?=\?|$)/i,".jpg");
+    const caption=(String(product.title)+"\nЦена: "+Number(product.price_stars)+" Stars"+(product.description?"\n"+String(product.description).slice(0,500):"")).slice(0,1000);
+    try{
+      await aiTelegram(env,"sendPhoto",{chat_id:chatId,photo:photoUrl,caption,
+        reply_to_message_id:replyToMessageId||undefined,
+        reply_markup:{inline_keyboard:[[{text:"🎁 Открыть каталог",url:"https://t.me/Agentstvo_podarkov_bot"}]]}});
+      sent++;
+    }catch(error){
+      await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:userId,type:"product_photo_send_failed",severity:"warning",details:{product_id:String(product.id),error:String(error).slice(0,250)}});
+    }
+  }
+  return sent;
+}
 async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=null,replyToOriginalId=null){
   if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId))return;
   const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
@@ -597,7 +617,8 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";
   const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
   if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
-  await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
+  const sent=await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
+  if(sent)await aiSendRecommendedProductPhotos(env,chatId,user.id,products.results||[],recommendedProductIds,replyToMessageId);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
 }
 async function aiRollbackOrderDelivery(env,{draft,id,orderId,balanceUsed,error,realCallback,callback,isGroupOrder}){
