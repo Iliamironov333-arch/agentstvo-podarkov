@@ -1004,8 +1004,11 @@ async function handleAiTelegramUpdate(update,env){
     await env.DB.prepare("UPDATE ai_runtime_state SET value='done',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
     return result;
   }catch(error){
-    await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key=? AND value='processing'").bind(identity).run();
-    throw error;
+    const messageId=message?.message_id||null;
+    await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run().catch(()=>{});
+    await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});
+    await aiNotifyOwner(env,"⚠️ Не удалось полностью обработать обновление группы"+(messageId?" · сообщение №"+messageId:"")+". Повтор Telegram остановлен, чтобы не запускать повторную модерацию одного сообщения. Ошибка: "+String(error).slice(0,300));
+    return true;
   }
 }
 async function aiBuildWeeklyReport(env) {
