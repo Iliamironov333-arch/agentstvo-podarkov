@@ -998,16 +998,18 @@ async function handleAiTelegramUpdate(update,env){
     : message?.chat?.id&&message?.message_id
       ? "telegram_message:"+String(message.chat.id)+":"+String(message.message_id)+":"+(update?.edited_message?"edit:"+String(message.edit_date||"0"):"new")
       : null;
-  if(!identity)return aiHandleTelegramUpdateInner(update,env);
-  const claim=await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='processing',updated_at=CURRENT_TIMESTAMP WHERE ai_runtime_state.value='failed' OR (ai_runtime_state.value='processing' AND ai_runtime_state.updated_at<datetime('now','-2 minutes'))").bind(identity).run();
-  if(Number(claim.meta?.changes||0)!==1)return true;
   try{
+    if(!identity)return await aiHandleTelegramUpdateInner(update,env);
+    const claim=await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='processing',updated_at=CURRENT_TIMESTAMP WHERE ai_runtime_state.value='failed' OR (ai_runtime_state.value='processing' AND ai_runtime_state.updated_at<datetime('now','-2 minutes'))").bind(identity).run();
+    if(Number(claim.meta?.changes||0)!==1)return true;
     const result=await aiHandleTelegramUpdateInner(update,env);
     await env.DB.prepare("UPDATE ai_runtime_state SET value='done',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
     return result;
   }catch(error){
     const messageId=message?.message_id||null;
-    await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run().catch(()=>{});
+    if(identity)try{
+      await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
+    }catch(stateError){console.error("Could not mark Telegram update failed:",String(stateError).slice(0,250));}
     await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});
     await aiNotifyOwner(env,"⚠️ Не удалось полностью обработать обновление группы"+(messageId?" · сообщение №"+messageId:"")+". Повтор Telegram остановлен, чтобы не запускать повторную модерацию одного сообщения. Ошибка: "+String(error).slice(0,300));
     return true;
