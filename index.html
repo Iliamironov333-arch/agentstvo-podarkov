@@ -1910,6 +1910,17 @@ function initAdminCategories(){
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
  });
+ // Тест правил расположен первым элементом серверной части, без отдельной карточки.
+ const ruleTest=document.createElement('div');
+ ruleTest.id='aiRuleTestPanel';
+ ruleTest.innerHTML=`
+  <div class="sectionhead"><h3>🧪 Тест правил ИИ-модератора</h3></div>
+  <p class="muted">Проверьте пример сообщения по актуальным настройкам из D1. Проверка не отправляет сообщения, не выдаёт наказания и не изменяет данные.</p>
+  <label for="aiRuleTestText">Пример сообщения</label>
+  <textarea id="aiRuleTestText" rows="4" maxlength="2000" placeholder="Вставьте текст, который хотите проверить…"></textarea>
+  <div class="row-actions"><button class="secondary" id="aiRuleTestButton" type="button" onclick="runAiRuleTest()">Проверить</button></div>
+  <div id="aiRuleTestResult" class="notice" style="white-space:pre-line" hidden aria-live="polite"></div>`;
+ sections.server.prepend(ruleTest);
  // Фотостудия — самостоятельный раздел, не спрятанный внутри панели каталога.
  const photoStudioPanel=root.querySelector('#adminPhotoStudioPanel');
  if(photoStudioPanel)sections.photos.appendChild(photoStudioPanel);
@@ -1951,14 +1962,6 @@ function initAdminCategories(){
   <div class="ai-feature-card"><div class="ai-feature-head"><div class="ai-feature-info"><strong>💡 Предложения владельцу</strong><small>Идеи по улучшению Агентства</small></div><label class="ai-switch"><input type="checkbox" id="aiSuggestions"><span></span></label><button class="secondary" type="button" onclick="toggleAiSettings('aiSuggestionsSettings')">Настроить</button></div><div id="aiSuggestionsSettings" class="ai-feature-settings hidden"><p class="muted">ИИ может передавать владельцу предложения по улучшению каталога, сервиса и общения с клиентами.</p></div></div>
  </div>
  <div class="ai-feature-card ai-instructions-card"><h4>📖 Инструкция и правила для ИИ-модератора</h4><p class="muted">Это основной документ, по которому ИИ принимает решения при проверке спорных сообщений. Его можно свободно корректировать.</p><label>Инструкция ИИ-модератора<textarea id="aiModeratorInstructions" rows="12"></textarea></label></div>
- <div class="ai-feature-card ai-instructions-card" id="aiRuleTestPanel">
-  <h4>🧪 Тест правил</h4>
-  <p class="muted">Проверьте пример сообщения по актуальным настройкам ИИ-модератора из D1. Проверка не отправляет сообщения, не выдаёт наказания и не изменяет данные.</p>
-  <label for="aiRuleTestText">Пример сообщения</label>
-  <textarea id="aiRuleTestText" rows="4" maxlength="2000" placeholder="Вставьте текст, который хотите проверить…"></textarea>
-  <div class="ai-save-row"><button class="secondary" id="aiRuleTestButton" type="button" onclick="runAiRuleTest()">Проверить</button></div>
-  <div id="aiRuleTestResult" class="notice" style="white-space:pre-line" hidden aria-live="polite"></div>
- </div>
  <div class="ai-save-row"><button class="primary" type="button" onclick="saveAiBotSettings()">💾 Сохранить все настройки ИИ-бота</button></div>
  <div class="ai-feature-card ai-instructions-card" id="aiPunishmentSettings"><h4>⚖️ Общая система наказаний</h4><p class="muted">Настройте накопление предупреждений, автоматическое наказание и длительность ограничений. Все значения сохраняются на сервере.</p>
  <div class="ai-two-fields">
