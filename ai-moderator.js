@@ -313,7 +313,7 @@ function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени)/i.test(combined);
   const supportIntent=needsOwner || /(поддержк|связаться с владельц|передал вопрос владельц|не могу подтвердить)/i.test(String(answer||"").toLowerCase());
   if(catalogIntent)add([{text:"🎁 Открыть каталог",url:botUrl}]);
-  if(ideaIntent)add([{text:"✨ ИИ-мастерская и идеи",url:botUrl}]);
+  if(ideaIntent)add([{text:"🎨 Подобрать идею",url:botUrl}]);
   if(navigationIntent && !catalogIntent && !ideaIntent)add([{text:"📱 Открыть Агентство",url:botUrl}]);
   if(supportIntent)add([{text:"💬 Связаться с поддержкой",url:supportUrl}]);
   if(!rows.length && /агентств|подар|заказ|оплат|баланс|каталог|товар|поделк/i.test(combined))add([{text:"📱 Открыть Агентство",url:botUrl}]);
@@ -554,7 +554,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
   const catalog=(products.results||[]).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
   const instructions=[
-    "Вы — персональный ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников.",
+    "Вы — ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников. Пишите простым текстом без Markdown-разметки и звёздочек. В каждом ответе используйте 1–2 уместных эмодзи, не больше.",
     "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами. Сервер сам добавляет подходящие кнопки к ответу: никогда не отказывайтесь от кнопки и не говорите, что не умеете её создать. Если кнопка может не открыться, обязательно объясните словами: откройте @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство» и выберите нужный раздел.",
     "Помогайте придумать интересную идею для подарка или изделия: задавайте один уместный уточняющий вопрос, предлагайте несколько конкретных идей и описаний. Не требуйте сразу оформить заказ.",
     "Если человек хочет понять, что можно заказать, опирайтесь на реальный каталог и реальные товары. Если подходящей готовой работы нет, можно помочь придумать индивидуальную идею, не обещая, что Агентство уже производит её.",
@@ -592,7 +592,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     await aiNotifyOwner(env,"❔ ИИ-помощнику нужна помощь владельца"+(questionId?" · вопрос №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтветьте в Mini App → ИИ-бот → Вопросы владельцу.");
     answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
   }
-  const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
+  answer=String(answer||"").replace(/\\*{1,2}/g,"").trim();\n  if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";\n  const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
   if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
   await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
