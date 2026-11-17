@@ -2431,7 +2431,7 @@ async function toggleLeaderboardParticipation(){
  const button=document.getElementById('leaderboardParticipationButton'),label=document.getElementById('leaderboardParticipationText');if(!button||button.disabled)return;
  const enabled=button.dataset.enabled!=='1';button.disabled=true;button.textContent='Сохраняем…';
  try{
-  const data=await apiFetch('/api/leaderboard/participation',{method:'POST',body:{enabled}});
+  const data=await apiFetch('/api/leaderboard/participation',{method:'POST',body:JSON.stringify({enabled})});
   button.dataset.enabled=data.enabled?'1':'0';button.textContent=data.enabled?'Выключить участие':'Включить участие';button.className=data.enabled?'secondary':'primary';button.disabled=false;
   label.textContent=data.enabled?'Вы участвуете в ежемесячном рейтинге. При желании участие можно отключить.':'Вы не участвуете в ежемесячном рейтинге. Общая репутация и начисления сохраняются.';
   await loadPublicLeaderboard();
