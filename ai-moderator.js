@@ -298,9 +298,9 @@ async function aiInspectText(env,text,settings){
 function aiAgencyIntent(text) {
   const value=String(text||"").trim();
   if(!value)return false;
-  const aboutAgency=/(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|мини.?апп|приложени|магазин|мастерск|создать своё|иде[яи]|творч|поделк|материал|описан|открытк|рисунок)/i.test(value);
+  const aboutAgency=/(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|мини.?апп|приложени|магазин|мастерск|создать своё|иде[яи]|творч|поделк|материал|описан|открытк|рисунок|фото|картин|изображ|покаж|ии|бот|помощник)/i.test(value);
   if(!aboutAgency)return false;
-  return /[?？]|(?:^|[\s,!.])(?:что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти|придум|предлож|опис|совет|сдела|нарис)/i.test(value);
+  return /[?？]|(?:^|[\s,!.])(?:что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти|придум|предлож|опис|совет|сдела|нарис|покаж|ии|бот|помощник)/i.test(value);
 }
 function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const combined=(String(userText||"")+"\n"+String(answer||"")).toLowerCase().replace(/ё/g,"е");
@@ -308,7 +308,7 @@ function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const botUrl="https://t.me/Agentstvo_podarkov_bot";
   const supportUrl="https://t.me/Iliya_Mironov_33";
   const add=(buttons)=>{if(rows.length<3)rows.push(buttons);};
-  const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покажите|ассортимент)/i.test(combined);
+  const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покаж|ассортимент|фото|картин|изображ)/i.test(combined);
   const ideaIntent=/(иде|придум|подобрат|вариант|мастерск|творческ|сделать своими руками|как сделать)/i.test(combined);
   const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени|кнопк|запустить|войти)/i.test(combined);
   const supportIntent=needsOwner || /(поддержк|связаться с владельц|передал вопрос владельц|не могу подтвердить)/i.test(String(answer||"").toLowerCase());
@@ -571,8 +571,8 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId))return;
   const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
   const context=(recent.results||[]).slice(0,16).reverse();
-  const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
-  const catalog=(products.results||[]).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
+  const products=await env.DB.prepare("SELECT id,title,description,category,price_stars,image_url FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
+  const catalog=(products.results||[]).map(p=>({id:String(p.id),title:p.title,description:p.description,category:p.category,price_stars:p.price_stars,image_url:p.image_url||null}));
   const instructions=[
     "Вы — ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников. Пишите простым текстом без Markdown-разметки и звёздочек. В каждом ответе используйте 1–2 уместных эмодзи, не больше.",
     "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами. Сервер сам добавляет подходящие кнопки к ответу: никогда не отказывайтесь от кнопки и не говорите, что не умеете её создать. Если кнопка может не открыться, обязательно объясните словами: откройте @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство» и выберите нужный раздел.",
