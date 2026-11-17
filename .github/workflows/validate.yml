@@ -26,5 +26,8 @@ jobs:
         run: |
           node --input-type=module --check < worker.js
           node --input-type=module --check < ai-moderator.js
+          node --input-type=module --check < workers-ai-client.js
+      - name: Test Workers AI adapter
+        run: node scripts/test-workers-ai-client.mjs
       - name: Check Mini App inline JavaScript
         run: node scripts/check-inline-scripts.mjs index.html

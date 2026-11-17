@@ -1,3 +1,4 @@
+import { workersAiFetch, workersAiTranscribe, AGENCY_TEXT_MODEL, AGENCY_VISION_MODEL } from "./workers-ai-client.js";
 const DEFAULT_AI_SETTINGS = {
   enabled: true,
   moderation_enabled: true,
@@ -230,15 +231,15 @@ async function aiIsRepeated(env, chatId, userId, text) {
   const same = (recent.results || []).filter(row=>row.content===text).length;
   return same >= 2;
 }
-async function aiOpenAi(env, instructions, input, tokens = 350) {
-  if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
-  const response = await fetch("https://api.openai.com/v1/responses",{method:"POST",
-    headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({model:env.OPENAI_MODEL || "gpt-4o-mini",instructions,input,max_output_tokens:tokens})});
+async function aiGenerateText(env, instructions, input, tokens = 350) {
+  if (!env.AI) throw new Error("Workers AI binding AI is not configured");
+  const response = await workersAiFetch(env,{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:tokens})});
   const data = await response.json().catch(()=>({}));
   if (!response.ok) {
     const providerError=data?.error||{};
-    const error=new Error("OpenAI HTTP "+response.status+(providerError.code?" ("+String(providerError.code).slice(0,80)+")":""));
+    const error=new Error("Workers AI HTTP "+response.status+(providerError.code?" ("+String(providerError.code).slice(0,80)+")":""));
     error.status=response.status;
     error.code=String(providerError.code||"").slice(0,100);
     error.type=String(providerError.type||"").slice(0,100);
@@ -252,7 +253,7 @@ async function aiOpenAi(env, instructions, input, tokens = 350) {
   }
   let output = typeof data.output_text==="string" ? data.output_text : "";
   if (!output && Array.isArray(data.output)) output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join("\n");
-  if (!output.trim()) throw new Error("Empty OpenAI response");
+  if (!output.trim()) throw new Error("Empty Workers AI response");
   return output.trim().slice(0,3500);
 }
 async function aiEstimateGroupOrderPrice(env,summary){
@@ -263,7 +264,7 @@ async function aiEstimateGroupOrderPrice(env,summary){
     "Это только предварительная оценка для владельца. Не утверждай, что цена окончательная, и не обещай сроки.",
     "Не придумывай дополнительные материалы или услуги, которых нет в описании."
   ].join("\n");
-  const raw=await aiOpenAi(env,instructions,[{role:"user",content:String(summary||"").slice(0,3000)}],180);
+  const raw=await aiGenerateText(env,instructions,[{role:"user",content:String(summary||"").slice(0,3000)}],180);
   const match=raw.match(/\{[\s\S]*\}/);
   if(!match)throw new Error("ИИ не вернул структурированную оценку цены.");
   const parsed=JSON.parse(match[0]);
@@ -289,7 +290,7 @@ async function aiInspectText(env,text,settings){
     settings.night_mode && settings.night_rules ? "Ночной режим: " + settings.night_rules : ""
   ].filter(Boolean).join("\n");
   const prompt="Проверь сообщение Telegram-группы «Агентство подарков» только на следующие включённые категории: "+categories.join(", ")+". Обычные вопросы, обсуждение товаров Агентства, безопасные ссылки и доброжелательное общение разрешены. Не проверяй выключенные категории. Если не уверены, выбирайте review.\nПравила по категориям:\n"+customRules+"\nОбщая инструкция владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\nВерните JSON с ключами decision, reason и confidence. Значение decision должно быть ok, review или violation. violation ставьте только при очевидном нарушении и уверенности не ниже 0.9.";
-  const raw=await aiOpenAi(env,prompt,String(text).slice(0,2500),150);
+  const raw=await aiGenerateText(env,prompt,String(text).slice(0,2500),150);
   const match=raw.match(/\{[\s\S]*\}/);if(!match)throw new Error("Text classifier returned no JSON");
   const parsed=JSON.parse(match[0]);
   return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное сообщение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
@@ -558,7 +559,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   if(settings.ai_instructions)instructions.push("Дополнительные инструкции владельца:\n"+String(settings.ai_instructions).slice(0,6000));
   instructions.push("ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: не предлагайте клиенту оформить заказ и не вставляйте предложение о заказе в разговор. Оформление начинается только по собственной ясной прямой просьбе клиента. Консультация, ориентация, вопросы о товарах, идеи и обычная беседа не являются согласием. При смене темы отвечайте на новую тему, не продолжайте прежний сценарий заказа. Черновик оформления в группе активен не дольше 30 минут бездействия; не считайте новые приветствия, благодарность или обычные вопросы ответами на старый заказ.");
   const input=[{role:"user",content:"Каталог (источник истины): "+JSON.stringify(catalog).slice(0,12000)},...context.map(m=>({role:m.role,content:m.content}))];
-  const raw=await aiOpenAi(env,instructions.join("\n"),input,650);
+  const raw=await aiGenerateText(env,instructions.join("\n"),input,650);
   let answer=raw,needsOwner=false,ignore=false;
   try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}}catch{}
   if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
@@ -746,7 +747,7 @@ function aiBase64(buffer){
 async function aiTranscribeAudio(env,message){
   const media=message.voice||message.audio;
   if(!media?.file_id)return null;
-  if(!env.OPENAI_API_KEY)throw new Error("OPENAI_API_KEY is not configured for audio review");
+  if(!env.AI)throw new Error("Workers AI binding AI is not configured for audio review");
   const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
   if(!file?.file_path||Number(file.file_size||0)>10*1024*1024)throw new Error("Audio exceeds the automatic review limit");
   const response=await fetch("https://api.telegram.org/file/bot"+env.BOT_TOKEN+"/"+file.file_path);
@@ -756,19 +757,11 @@ async function aiTranscribeAudio(env,message){
   const ext=String(file.file_path).split(".").pop().toLowerCase();
   const supported=["ogg","oga","mp3","mp4","mpeg","mpga","m4a","wav","webm"];
   if(!supported.includes(ext))throw new Error("Unsupported audio format");
-  const mime=ext==="ogg"||ext==="oga"?"audio/ogg":ext==="mp3"?"audio/mpeg":ext==="m4a"?"audio/mp4":ext==="wav"?"audio/wav":ext==="webm"?"audio/webm":"audio/mp4";
-  const form=new FormData();
-  form.append("file",new Blob([buffer],{type:mime}),ext==="oga"?"voice.ogg":"voice."+ext);
-  form.append("model",env.OPENAI_TRANSCRIPTION_MODEL||"gpt-transcribe");
-  form.append("languages[]","ru");
-  form.append("prompt","Русская речь в группе Агентства подарков. Сохраняйте произнесённые слова без добавления новых.");
-  const result=await fetch("https://api.openai.com/v1/audio/transcriptions",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY},body:form});
-  const data=await result.json().catch(()=>({}));
-  if(!result.ok)throw new Error("Audio transcription API HTTP "+result.status);
-  return String(data.text||"").trim().slice(0,3500);
+  const text=await workersAiTranscribe(env,buffer);
+  return String(text||"").trim().slice(0,3500);
 }
 async function aiInspectImage(env,message,settings={}){
-  if(!env.OPENAI_API_KEY)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
+  if(!env.AI)return {decision:"review",reason:"ИИ-проверка изображения не настроена",confidence:0};
   const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
   const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
   const sticker=message.sticker&&!message.sticker.is_animated&&!message.sticker.is_video?message.sticker:null;
@@ -784,8 +777,8 @@ async function aiInspectImage(env,message,settings={}){
   if(!["png","jpg","jpeg","webp"].includes(ext))return {decision:"review",reason:"Формат изображения не поддерживается для автоматической проверки",confidence:0};
   const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
   const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
-  const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните JSON с ключами decision, reason и confidence. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.\n\nДополнительные инструкции владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\n\nДополнительные правила медиа:\n"+String(settings.media_rules||"").slice(0,2500),
+  const ai=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:AGENCY_VISION_MODEL,instructions:"Вы — классификатор безопасности Telegram-группы. Оцените только очевидные нарушения правил: рекламная рассылка, азартные/мошеннические предложения, фишинговые материалы, оскорбительные изображения, явно сексуальный контент или явно жестокие графические изображения. Не описывайте содержимое подробно. Не считайте обычные фотографии, рисунки, поделки и мемы нарушениями. При сомнении выбирайте review. Верните JSON с ключами decision, reason и confidence. Автоматическое нарушение ставьте только при очевидном случае и высокой уверенности.\n\nДополнительные инструкции владельца:\n"+String(settings.moderation_instructions||"").slice(0,5000)+"\n\nДополнительные правила медиа:\n"+String(settings.media_rules||"").slice(0,2500),
     input:[{role:"user",content:[{type:"input_text",text:"Проверьте вложение на очевидное нарушение правил группы. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"low"}]}],max_output_tokens:120})});
   const result=await ai.json().catch(()=>({}));
   if(!ai.ok)throw new Error("Vision API HTTP "+ai.status);
@@ -829,7 +822,7 @@ async function handleAiTelegramUpdate(update, env) {
   const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sending')").bind(noticeKey).run();
   if(notice.meta?.changes===1){
     try{
-      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в ИИ-сервис OpenAI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в Cloudflare Workers AI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
       await env.DB.prepare("UPDATE ai_runtime_state SET value='sent',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(noticeKey).run();
     }catch(error){
       await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key=? AND value='sending'").bind(noticeKey).run();
@@ -998,7 +991,7 @@ async function aiBuildWeeklyReport(env) {
   const eventText=(events.results||[]).map(x=>x.event_type+": "+x.total).join(", ")||"нет";
   const topicText=(topics.results||[]).map(x=>x.content).join("\n").slice(0,10000);
   let popular="Основные темы собраны из сообщений группы.";
-  try { popular=await aiOpenAi(env,Number(messageCount?.total||0)>100?"Выделите 8–12 популярных тем, кратко опишите главные обсуждения и повторяющиеся вопросы. Не называйте участников и не раскрывайте персональные данные. Верните структурированный список.":"Кратко выделите 5–8 популярных тем из переписки. Не называйте участников и не раскрывайте персональные данные. Верните только список тем.",topicText,Number(messageCount?.total||0)>100?500:250); } catch {}
+  try { popular=await aiGenerateText(env,Number(messageCount?.total||0)>100?"Выделите 8–12 популярных тем, кратко опишите главные обсуждения и повторяющиеся вопросы. Не называйте участников и не раскрывайте персональные данные. Верните структурированный список.":"Кратко выделите 5–8 популярных тем из переписки. Не называйте участников и не раскрывайте персональные данные. Верните только список тем.",topicText,Number(messageCount?.total||0)>100?500:250); } catch {}
   const restrictions=Number((events.results||[]).find(x=>x.event_type==="restriction")?.total||0);
   const metrics={events:events.results||[],messages:Number(messageCount?.total||0),warnings:Number(warnings?.total||0),restrictions,complaints:Number(complaints?.total||0),orders:Number(orders?.total||0),paid_orders:Number(paid?.total||0)};
   const delta=(current,previous)=>{const d=Number(current||0)-Number(previous||0);return (d>0?"+":"")+d;};
@@ -1006,7 +999,7 @@ async function aiBuildWeeklyReport(env) {
   let suggestions="";
   const settings=await aiSettings(env);
   if(settings.owner_suggestions){
-    try{suggestions=await aiOpenAi(env,"Предложите 3–5 практических улучшений для Агентства подарков, его группы, каталога, поддержки и оформления заказов. Используйте только наблюдаемые темы переписки; не выдумывайте проблемы. Кратко объясняйте пользу каждого предложения.",topicText,300);}catch{}
+    try{suggestions=await aiGenerateText(env,"Предложите 3–5 практических улучшений для Агентства подарков, его группы, каталога, поддержки и оформления заказов. Используйте только наблюдаемые темы переписки; не выдумывайте проблемы. Кратко объясняйте пользу каждого предложения.",topicText,300);}catch{}
   }
   const report="📊 ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ «АГЕНТСТВА ПОДАРКОВ»\nПериод: "+periodStart+" — "+periodEnd+"\n\nСообщения в группе: "+metrics.messages+"\nАктивность модерации: "+eventText+"\nПредупреждения: "+metrics.warnings+"\nОграничения: "+metrics.restrictions+"\nЖалобы: "+metrics.complaints+"\nЗапросы на заказы через группу: "+metrics.orders+"\nОплаченные ИИ-заказы: "+metrics.paid_orders+"\n\nДинамика:\n"+comparison+"\n\nПопулярные темы:\n"+popular+(suggestions?"\n\nИдеи по улучшению Агентства:\n"+suggestions:"");
   await env.DB.prepare("INSERT OR IGNORE INTO ai_weekly_reports(period_start,period_end,report_text,metrics_json) VALUES(?,?,?,?)").bind(periodStart,periodEnd,report,JSON.stringify({...metrics,comparison})).run();
@@ -1087,20 +1080,14 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
         const upstreamStatus=Number(error.status)||0;
         const providerCode=String(error.code||"");
         let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
-        if(upstreamStatus===429){
-          if(providerCode==="insufficient_quota" || error.type==="insufficient_quota"){
-            message="Квота OpenAI исчерпана. Проверьте доступный лимит и настройки оплаты проекта OpenAI.";
-          }else if(providerCode==="rate_limit_exceeded"){
-            message="OpenAI временно ограничил частоту запросов или объём токенов. Подождите перед следующей проверкой.";
-          }else{
-            message="OpenAI отклонил запрос из-за ограничения (HTTP 429). Проверьте лимиты модели и проекта.";
-          }
+        if(upstreamStatus===429 || providerCode==="workers_ai_limit"){
+          message="Cloudflare Workers AI временно ограничил запрос. Возможно, достигнут бесплатный дневной лимит или лимит запросов. Попробуйте позже.";
         }else if(upstreamStatus>=500){
-          message="Сервис OpenAI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
+          message="Cloudflare Workers AI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
         }
         return aiJson({
           error:message,
-          provider:"OpenAI",
+          provider:"Cloudflare Workers AI",
           upstream_status:upstreamStatus||null,
           provider_code:providerCode||null,
           provider_type:String(error.type||"")||null,

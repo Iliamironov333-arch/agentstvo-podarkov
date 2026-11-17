@@ -1,4 +1,5 @@
 import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft } from "./ai-moderator.js";
+import { workersAiFetch, AGENCY_TEXT_MODEL } from "./workers-ai-client.js";
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
@@ -393,7 +394,7 @@ async function releaseExpiredOrderReservations(env) {
 }
 
 async function createOrderChatAnswer(env, history, orderContext) {
-  if (!env.OPENAI_API_KEY) throw new Error("ИИ-консультант временно недоступен.");
+  if (!env.AI) throw new Error("ИИ-консультант временно недоступен.");
   const instructions = [
     await getGlobalAiToneInstruction(env),
     "Ты — ИИ-консультант Агентства подарков в персональном чате конкретного заказа.",
@@ -405,10 +406,10 @@ async function createOrderChatAnswer(env, history, orderContext) {
     orderContext?.order_type==="gift_builder_draft_not_yet_ordered" ? "Это ещё не оформленный черновик подарка. Не называй его заказом, не утверждай, что что-либо уже куплено или отправлено владельцу. Помоги подобрать дополнения и улучшить идею. Если клиент просит изменить параметры черновика, подскажи ему, что можно вернуться к настройкам конструктора." : "",
     "Контекст заказа: " + JSON.stringify(orderContext).slice(0,5000)
   ].join("\n");
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await workersAiFetch(env, {
     method: "POST",
-    headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
       input: history.slice(-30).map(item => ({ role: item.role, content: item.content })), max_output_tokens: 650 })
   });
   const data = await response.json().catch(() => ({}));
@@ -430,7 +431,7 @@ async function createOrderChatAnswer(env, history, orderContext) {
 }
 
 async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allowItemChanges=true){
-  if(!env.OPENAI_API_KEY)throw new Error("ИИ-помощник временно недоступен.");
+  if(!env.AI)throw new Error("ИИ-помощник временно недоступен.");
   const instructions=[
     await getGlobalAiToneInstruction(env),
     "Ты — ИИ-помощник конструктора подарка Агентства подарков. Общайся на русском, доброжелательно и конкретно.",
@@ -443,7 +444,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
     "Текущий черновик: "+JSON.stringify(bundle).slice(0,5000),
     "Каталог: "+JSON.stringify(catalog.map(p=>({id:String(p.id),title:p.title}))).slice(0,3000)
   ].join("\n");
-  const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:history.slice(-24).map(x=>({role:x.role,content:x.content})),max_output_tokens:850})});
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input:history.slice(-24).map(x=>({role:x.role,content:x.content})),max_output_tokens:850})});
   const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error("ИИ-помощник не смог ответить. Попробуйте позже.");
   let output=typeof data.output_text==="string"?data.output_text:"";if(!output&&Array.isArray(data.output))output=data.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
   const match=output.match(/\{[\s\S]*\}/);if(!match)throw new Error("ИИ-помощник вернул некорректный ответ.");
@@ -451,7 +452,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
 }
 
 async function createSupportAnswer(env, history, isVip, customerContext = {}, navigationActions = []) {
-  if (!env.OPENAI_API_KEY) throw new Error("ИИ-помощник ещё не подключён: добавьте OPENAI_API_KEY в Cloudflare Worker Secrets.");
+  if (!env.AI) throw new Error("ИИ-помощник временно недоступен: Workers AI не подключён.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
   const forceFinal = questionsUsed >= 16;
   const lastUserMessage = [...history].reverse().find(item => item.role === "user")?.content || "";
@@ -474,13 +475,12 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
-  const primaryModel = isVip ? (env.OPENAI_VIP_MODEL || env.OPENAI_MODEL || "gpt-4o-mini") : (env.OPENAI_MODEL || "gpt-4o-mini");
-  const fallbackModel = env.OPENAI_MODEL || "gpt-4o-mini";
+  const primaryModel = AGENCY_TEXT_MODEL;
   const requestModel = async (model) => {
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await workersAiFetch(env, {
         method: "POST",
-        headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model, instructions,
           input: history.map(item => ({ role: item.role, content: item.content })), max_output_tokens: isVip ? 1200 : 900 })
       });
@@ -490,35 +490,24 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
       return { response: null, data: {}, networkError: String(error).slice(0, 300) };
     }
   };
-  let attempt = await requestModel(primaryModel);
-  // VIP uses the same API key as standard mode. If the VIP model or its request fails,
-  // preserve VIP instructions and retry with the configured standard model.
-  if (isVip && primaryModel !== fallbackModel && (!attempt.response || !attempt.response.ok)) {
-    const firstError = attempt.data?.error || {};
-    console.warn("VIP support model failed; retrying with standard model:", JSON.stringify({
-      model: primaryModel, http_status: attempt.response?.status || null,
-      error_code: firstError.code || null, error_type: firstError.type || null,
-      network_error: attempt.networkError || null
-    }));
-    attempt = await requestModel(fallbackModel);
-  }
+  const attempt = await requestModel(primaryModel);
   const { response, data, networkError } = attempt;
   const model = response?.ok ? (data?.model || primaryModel) : primaryModel;
   if (!response?.ok) {
     const apiError = data?.error || {};
     const diagnostic = {
-      stage: networkError ? "openai_network" : "openai_request",
+      stage: networkError ? "workers_ai_network" : "workers_ai_request",
       model,
       http_status: response?.status || null,
       error_code: apiError.code || null,
       error_type: apiError.type || null,
       error_param: apiError.param || null,
-      error_message: String(apiError.message || networkError || "OpenAI returned a non-2xx response").slice(0, 350),
+      error_message: String(apiError.message || networkError || "Workers AI returned a non-2xx response").slice(0, 350),
       request_id: response?.headers?.get("x-request-id") || null,
       history_messages: history.length,
       question_count: questionsUsed
     };
-    console.error("OpenAI support request failed:", JSON.stringify(diagnostic));
+    console.error("Workers AI support request failed:", JSON.stringify(diagnostic));
     const failure = new Error("Сервис помощника временно недоступен. Попробуй позже.");
     failure.diagnostic = diagnostic;
     throw failure;
@@ -531,7 +520,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   }
   if (!answer.trim()) {
     const diagnostic = {
-      stage: "openai_empty_output",
+      stage: "workers_ai_empty_output",
       model,
       response_status: data?.status || null,
       incomplete_reason: data?.incomplete_details?.reason || null,
@@ -597,7 +586,7 @@ async function buildSupportNavigationActions(env, message) {
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
-  if (!env.OPENAI_API_KEY) return { price_stars: Math.max(280,Math.min(800,Math.round(Number(fallbackStars)||280))), source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
+  if (!env.AI) return { price_stars: Math.max(280,Math.min(800,Math.round(Number(fallbackStars)||280))), source: "rules_fallback", note: "ИИ-оценка временно недоступна; использован базовый расчёт." };
   const prompt = [
     "Оцени предварительную стоимость готовой авторской художественной работы для заказа в Агентстве подарков.",
     "Верни только JSON без Markdown: {\"price_stars\": число, \"note\": \"короткое объяснение\"}.",
@@ -606,13 +595,13 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
     "Данные заказа: " + JSON.stringify(answers).slice(0,3500)
   ].join("\n");
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await workersAiFetch(env, {
       method: "POST",
-      headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", input: prompt, max_output_tokens: 220 })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: AGENCY_TEXT_MODEL, input: prompt, max_output_tokens: 220 })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error("OpenAI estimate HTTP " + response.status);
+    if (!response.ok) throw new Error("Workers AI estimate HTTP " + response.status);
     let output = typeof data.output_text === "string" ? data.output_text : "";
     if (!output && Array.isArray(data.output)) output = data.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n");
     const match = output.match(/\{[\s\S]*\}/);
@@ -652,7 +641,7 @@ async function getGlobalAiToneInstruction(env){
  }catch{return "Общий тон Агентства: уважительный, спокойный и ясный. Всегда обращайся к покупателям на «Вы», «Вам», «Ваш», не используй обращение на «ты».";}
 }
 async function createCraftAnswer(env,messages){
- if(!env.OPENAI_API_KEY)throw new Error("ИИ-мастерская временно не подключена.");
+ if(!env.AI)throw new Error("ИИ-мастерская временно не подключена.");
  const assistantTurns=messages.filter(m=>m.role==="assistant").length;
  const questionsUsed=Math.max(0,assistantTurns-1);
  const instructions=[
@@ -670,7 +659,7 @@ async function createCraftAnswer(env,messages){
   "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ принят или оплачен."
  ].join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
+ const r=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
  let answer=typeof d.output_text==="string"?d.output_text:"";if(!answer&&Array.isArray(d.output))answer=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!answer.trim())throw new Error("ИИ-мастерская не вернула ответ.");
  answer=answer.trim();const ready=answer.startsWith("[READY]");answer=answer.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,5000);
@@ -678,7 +667,7 @@ async function createCraftAnswer(env,messages){
 }
 async function createVipSupportAnswer(env,message){
  const instructions=[await getGlobalAiToneInstruction(env),"Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:1000})});
+ const r=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input:message,max_output_tokens:1000})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("VIP support failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("VIP-помощь временно недоступна.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
 }
@@ -2606,7 +2595,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             "0024_support_multi_chat":tableChecks.support_conversations&&await columnExists(env,"support_chat_messages","conversation_id")&&await columnExists(env,"support_chat_messages","assistant_type"),
             "0025_gift_certificates":tableChecks.gift_certificates&&tableChecks.gift_certificate_attempts
           };
-          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,openai:!!env.OPENAI_API_KEY},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+          return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,workers_ai:!!env.AI},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/ui-motion" && method === "GET") {
           const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
@@ -3694,7 +3683,7 @@ if(activeCraftDraft){
         const productOrders = await env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status,fulfillment_status,created_at,priority_order FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 8").bind(telegramId).all();
         const customOrders = await env.DB.prepare("SELECT id,subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 5").bind(telegramId).all();
         const customerContext={balance_points:Number(customer?.balance_stars||0),product_orders:productOrders.results||[],custom_orders:customOrders.results||[],vip:!!vip};
-        if (!env.OPENAI_API_KEY) return json({ error: "ИИ-помощник ещё не подключён. Владелец должен добавить OPENAI_API_KEY в Cloudflare Worker Secrets." }, 503, origin);
+        if (!env.AI) return json({ error: "ИИ-помощник временно недоступен: Workers AI не подключён." }, 503, origin);
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
