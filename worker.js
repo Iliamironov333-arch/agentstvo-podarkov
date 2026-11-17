@@ -3486,7 +3486,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const lastUserMessage = messages.length && messages[messages.length - 1].role === "assistant"
           ? [...messages].reverse().find(item => item.role === "user")?.content || ""
           : "";
-        const actions = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : [];
+        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : { actions: [] };
+        const actions = actionContext.actions || [];
         return json({
           conversations,
           conversation_id: activeConversation?.id || null,
