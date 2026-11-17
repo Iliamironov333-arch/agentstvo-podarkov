@@ -253,7 +253,7 @@ async function aiGenerateText(env, instructions, input, tokens = 350) {
   }
   let output = typeof data.output_text==="string" ? data.output_text : "";
   if (!output && Array.isArray(data.output)) output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join("\n");
-  if (!output.trim()) throw new Error("Empty OpenAI response");
+  if (!output.trim()) throw new Error("Empty Workers AI response");
   return output.trim().slice(0,3500);
 }
 async function aiEstimateGroupOrderPrice(env,summary){
@@ -822,7 +822,7 @@ async function handleAiTelegramUpdate(update, env) {
   const notice=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value) VALUES(?,'sending')").bind(noticeKey).run();
   if(notice.meta?.changes===1){
     try{
-      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в ИИ-сервис OpenAI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
+      await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"ℹ️ В этой группе работает ИИ-модератор «Агентства подарков». Он проверяет доступные сообщения, ссылки и вложения, помогает по вопросам Агентства и обрабатывает жалобы. Для ответов и проверки отдельных сообщений и поддерживаемых изображений текст, поддерживаемые изображения и аудиосообщения могут передаваться в Cloudflare Workers AI для проверки и расшифровки. Система сохраняет текстовый контекст и журнал событий на ограниченный срок. Не отправляйте в группу пароли, коды и другие конфиденциальные данные. Обработка зависит от доступных боту данных и его прав в Telegram."});
       await env.DB.prepare("UPDATE ai_runtime_state SET value='sent',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(noticeKey).run();
     }catch(error){
       await env.DB.prepare("DELETE FROM ai_runtime_state WHERE key=? AND value='sending'").bind(noticeKey).run();
@@ -1080,20 +1080,14 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
         const upstreamStatus=Number(error.status)||0;
         const providerCode=String(error.code||"");
         let message="Не удалось выполнить ИИ-проверку. Попробуйте позже.";
-        if(upstreamStatus===429){
-          if(providerCode==="insufficient_quota" || error.type==="insufficient_quota"){
-            message="Квота OpenAI исчерпана. Проверьте доступный лимит и настройки оплаты проекта OpenAI.";
-          }else if(providerCode==="rate_limit_exceeded"){
-            message="OpenAI временно ограничил частоту запросов или объём токенов. Подождите перед следующей проверкой.";
-          }else{
-            message="OpenAI отклонил запрос из-за ограничения (HTTP 429). Проверьте лимиты модели и проекта.";
-          }
+        if(upstreamStatus===429 || providerCode==="workers_ai_limit"){
+          message="Cloudflare Workers AI временно ограничил запрос. Возможно, достигнут бесплатный дневной лимит или лимит запросов. Попробуйте позже.";
         }else if(upstreamStatus>=500){
-          message="Сервис OpenAI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
+          message="Cloudflare Workers AI временно недоступен (HTTP "+upstreamStatus+"). Попробуйте позже.";
         }
         return aiJson({
           error:message,
-          provider:"OpenAI",
+          provider:"Cloudflare Workers AI",
           upstream_status:upstreamStatus||null,
           provider_code:providerCode||null,
           provider_type:String(error.type||"")||null,
