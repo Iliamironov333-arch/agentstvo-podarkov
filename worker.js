@@ -1062,7 +1062,7 @@ export default {
         if (!(await tableExists(env,"reputation_profiles"))) return json({ok:true,ranks:REPUTATION_RANKS,members:[],me:{rank:reputationRank("ordinary"),discount:0},migration_pending:true},200,origin);
         await ensureReputationProfile(env,telegramId);
         const [mine,members]=await Promise.all([
-          env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first(),
+          env.DB.prepare("SELECT rank_code,leaderboard_opt_in FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first(),
           env.DB.prepare("SELECT u.telegram_id,u.username,u.first_name,COALESCE(p.rank_code,'ordinary') AS rank_code FROM users u LEFT JOIN reputation_profiles p ON p.telegram_id=u.telegram_id ORDER BY CASE COALESCE(p.rank_code,'ordinary') WHEN 'secret' THEN 5 WHEN 'god' THEN 4 WHEN 'vip' THEN 3 WHEN 'regular' THEN 2 ELSE 1 END DESC, u.first_name COLLATE NOCASE ASC LIMIT 100").all()
         ]);
         const meRank=reputationRank(mine?.rank_code);
