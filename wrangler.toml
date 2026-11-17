@@ -12,5 +12,8 @@ binding = "DB"
 database_name = "agentstvo-podarkov-staging"
 database_id = "bb26ba92-bc62-43dc-ab4d-57cb1d399bbc"
 
+[ai]
+binding = "AI"
+
 [triggers]
 crons = ["*/1 * * * *"]
