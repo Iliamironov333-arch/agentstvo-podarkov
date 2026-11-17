@@ -1057,6 +1057,32 @@ async function handleAiScheduled(env) {
 async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,permissions) {
   const ownerOnly = () => rootOwner === true;
   const has = key => rootOwner || permissions?.[key] === true;
+  if(path==="/api/admin/ai-moderation-test" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Тест правил доступен только владельцу."},403);
+    const body=await aiReadJson(request);
+    const text=String(body.text||"").trim().slice(0,2000);
+    if(!text)return aiJson({error:"Введите пример сообщения для проверки."},400);
+    const settings=await aiSettings(env);
+    const enabled=settings.enabled===true && settings.moderation_enabled===true && !settings.moderation_temporarily_disabled;
+    if(!enabled)return aiJson({ok:true,decision:"paused",reason:"Модерация сейчас отключена. Проверка не выполнялась.",action:"none",settings_snapshot:{enabled:settings.enabled,moderation_enabled:settings.moderation_enabled,temporarily_disabled:settings.moderation_temporarily_disabled}});
+    const localReason=aiClassifyLocal({text},settings);
+    const hasActiveRules=!!(settings.profanity||settings.spam||settings.advertising||settings.suspicious_links||settings.repeated_messages||settings.media_checks);
+    let inspected={decision:"ok",reason:"Включённых категорий для проверки нет.",confidence:1};
+    if(hasActiveRules){
+      try{inspected=await aiInspectText(env,text,settings);}
+      catch(error){return aiJson({error:"Не удалось выполнить ИИ-проверку: "+String(error.message||error).slice(0,180)},502);}
+    }
+    let decision=inspected.decision,reason=inspected.reason,confidence=inspected.confidence;
+    if(localReason){decision="violation";reason=localReason;confidence=Math.max(confidence,0.9);}
+    const category=aiCategoryFromReason(reason);
+    const configuredAction=decision==="violation"?(settings["punishment_"+category]||settings.punishment_default||"warning"):"none";
+    const escalation=decision==="violation"&&configuredAction==="warning"
+      ? "Если у участника уже накоплено "+Number(settings.warnings_before_restriction||2)+" активных предупреждений, сработает дополнительное правило эскалации («"+String(settings.warning_escalation_action||"restriction")+"»). Историю конкретного участника тест не проверяет."
+      : "История предупреждений конкретного участника не проверялась.";
+    return aiJson({ok:true,decision,reason,confidence,category,configured_action:configuredAction,
+      action_label:configuredAction==="warning"?"Предупреждение":configuredAction==="mute"?"Мут":"Ограничение",
+      escalation,read_only:true,settings_snapshot:{profanity:!!settings.profanity,spam:!!settings.spam,advertising:!!settings.advertising,suspicious_links:!!settings.suspicious_links,repeated_messages:!!settings.repeated_messages,media_checks:!!settings.media_checks,night_mode:!!settings.night_mode,moderation_enabled:!!settings.moderation_enabled}});
+  }
   if(path==="/api/admin/ai-bot/settings" && method==="GET") {
     const settings=await aiSettings(env);
     return aiJson({ok:true,settings});
