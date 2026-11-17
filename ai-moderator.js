@@ -298,9 +298,9 @@ async function aiInspectText(env,text,settings){
 function aiAgencyIntent(text) {
   const value=String(text||"").trim();
   if(!value)return false;
-  const aboutAgency=/(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|мини.?апп|приложени|магазин|мастерск|создать своё|иде[яи]|творч|поделк|материал|описан|открытк|рисунок)/i.test(value);
+  const aboutAgency=/(агентств|подар|товар|каталог|заказ|заказать|купить|покуп|стоим|цен[аыу]|оплат|stars|старс|баланс|достав|поддержк|акци|скидк|индивидуальн|мини.?апп|приложени|магазин|мастерск|создать своё|иде[яи]|творч|поделк|материал|описан|открытк|рисунок|фото|картин|изображ|покаж|ии|бот|помощник)/i.test(value);
   if(!aboutAgency)return false;
-  return /[?？]|(?:^|[\s,!.])(?:что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти|придум|предлож|опис|совет|сдела|нарис)/i.test(value);
+  return /[?？]|(?:^|[\s,!.])(?:что|как|где|когда|сколько|почему|можно|подскаж|объясн|расскаж|помог|хочу|нужно|ищу|интерес|оформ|закаж|купл|оплат|открой|найти|придум|предлож|опис|совет|сдела|нарис|покаж|ии|бот|помощник)/i.test(value);
 }
 function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const combined=(String(userText||"")+"\n"+String(answer||"")).toLowerCase().replace(/ё/g,"е");
@@ -308,9 +308,9 @@ function aiBuildGroupKeyboard(userText, answer, needsOwner=false){
   const botUrl="https://t.me/Agentstvo_podarkov_bot";
   const supportUrl="https://t.me/Iliya_Mironov_33";
   const add=(buttons)=>{if(rows.length<3)rows.push(buttons);};
-  const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покажите|ассортимент)/i.test(combined);
+  const catalogIntent=/(поделк|издел|товар|подар|каталог|не могу найти|ищу|есть ли|посмотреть|покаж|ассортимент|фото|картин|изображ)/i.test(combined);
   const ideaIntent=/(иде|придум|подобрат|вариант|мастерск|творческ|сделать своими руками|как сделать)/i.test(combined);
-  const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени)/i.test(combined);
+  const navigationIntent=/(где кнопк|как открыть|как найти|не вижу|не могу открыть|меню|раздел|мини.?апп|приложени|кнопк|запустить|войти)/i.test(combined);
   const supportIntent=needsOwner || /(поддержк|связаться с владельц|передал вопрос владельц|не могу подтвердить)/i.test(String(answer||"").toLowerCase());
   if(catalogIntent)add([{text:"🎁 Открыть каталог",url:botUrl}]);
   if(ideaIntent)add([{text:"🎨 Подобрать идею",url:botUrl}]);
@@ -551,8 +551,8 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   if(await aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId))return;
   const recent=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 50").bind(String(chatId),String(user.id)).all();
   const context=(recent.results||[]).slice(0,16).reverse();
-  const products=await env.DB.prepare("SELECT title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
-  const catalog=(products.results||[]).map(p=>({title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
+  const products=await env.DB.prepare("SELECT id,title,description,category,price_stars FROM products WHERE is_active=1 ORDER BY title LIMIT 100").all();
+  const catalog=(products.results||[]).map(p=>({id:String(p.id),title:p.title,description:p.description,category:p.category,price_stars:p.price_stars}));
   const instructions=[
     "Вы — ИИ-помощник «Агентства подарков» в общей группе. У каждого участника отдельная переписка и собственный контекст: отвечайте именно этому человеку, не смешивайте вопросы разных участников. Пишите простым текстом без Markdown-разметки и звёздочек. В каждом ответе используйте 1–2 уместных эмодзи, не больше.",
     "В первую очередь помогайте с ориентацией: где кнопки, как открыть Mini App, как найти каталог, как заказать, где баланс и где мастерская. Объясняйте понятными шагами. Сервер сам добавляет подходящие кнопки к ответу: никогда не отказывайтесь от кнопки и не говорите, что не умеете её создать. Если кнопка может не открыться, обязательно объясните словами: откройте @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство» и выберите нужный раздел.",
@@ -560,11 +560,11 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     "Если человек хочет понять, что можно заказать, опирайтесь на реальный каталог и реальные товары. Если подходящей готовой работы нет, можно помочь придумать индивидуальную идею, не обещая, что Агентство уже производит её.",
     "Помощь сделать поделку самостоятельно дома — запасной сценарий. Предлагайте её только если человек прямо просит инструкцию для самостоятельного изготовления либо явно выбирает самостоятельный вариант. Не переводите обычный запрос о товаре в DIY.",
     "Вы можете быть собеседником: поддержать человека, поговорить, отреагировать на его идею или сомнение. Не превращайте дружескую беседу в рекламу или заказ.",
-    "Не начинайте сбор заказа по одному упоминанию покупки. Сбор запускается только после ясной прямой просьбы оформить заказ. Вопросы «что можно заказать?», «придумай описание», «какая идея интереснее?» и просьбы поддержать НЕ являются согласием на оформление.",
-    "Никогда не предлагайте оформить заказ, не задавайте наводящих вопросов ради продажи и не завершайте обычный ответ фразой-приглашением заказать. Начинайте оформление только если клиент сам прямо написал, что хочет оформить/заказать. Одного интереса к каталогу, вопроса о товаре, обсуждения идеи или дружеской беседы недостаточно.",
-    "Если клиент сам прямо попросил оформить заказ, можно перейти к сбору деталей по одному вопросу. Если во время сбора клиент явно меняет тему или задаёт отдельный новый вопрос, остановите старый сбор и отвечайте на новую тему отдельно. Не переносите старые пожелания заказа в новый разговор. Контекст других участников никогда не используйте.",
-    "После готового сбора заявка поступает владельцу в Mini App → ИИ-заказы и в его Telegram. Владелец проверяет описание, назначает цену и подтверждает. До его подтверждения счёт не отправляется.",
-    "Mini App: «Магазин» — каталог готовых работ; «Создать своё» — опрос для индивидуального заказа; «ИИ-мастерская» — творческий диалог; «Мои заказы» — статус заказов; «Мой баланс» — баллы и операции; «Поддержка» — обращение.",
+    "В групповой переписке Вы консультируете, но не создаёте заказ и не собираете персональные данные или детали оплаты. Для готовой работы объясните путь: «Магазин» → выбрать товар → «＋ В корзину» или «⚡ Купить сразу» → корзина → «Оформить заказ». Для индивидуальной работы: «Создать своё» → пройти 8 шагов; предварительная цена рассчитывается сервером в диапазоне 250–700 Stars, затем запрос проверяет владелец. Не обещайте подтверждение или срок до решения владельца.",
+    "Не подталкивайте к покупке и не завершайте обычный ответ рекламным призывом. Если клиент сам прямо хочет купить, спокойно объясните точный путь в Mini App; не начинайте сбор заказа прямо в группе.",
+    "Отвечайте на новую тему отдельно и не переносите пожелания одного участника в диалог другого. Используйте только историю текущего участника.",
+    "Запрос из «Создать своё» поступает владельцу на проверку. Только владелец подтверждает индивидуальную работу и цену; до подтверждения счёт не отправляется.",
+    "Актуальное главное меню Mini App: «Магазин» — каталог готовых работ; «Создать своё» — пошаговая форма индивидуальной работы; «VIP-подписка» — VIP-возможности; «Мои заказы» — статусы и история; «Мой баланс» — баллы и операции; «Пополнить баланс» — оплата Stars; «ИИ помощник» — отдельный чат для вопросов, подбора подарка и обсуждения авторской работы; «О проекте» — правила и контакты; «Таблица лидеров» — репутация; «Скидки и акции» — действующие предложения. Категории каталога: «Все работы», «Осень», «Новинки», «Зима и Новый год», «Картины», «Животные», «Дома и здания», «Поделки», «Услуги». Не называйте разделы иначе и не придумывайте кнопки. В групповой переписке Вы уже являетесь ИИ-помощником: не отправляйте человека искать кнопку «ИИ помощник», если он уже общается с Вами.",
     "Не придумывайте товары, цены, сроки, наличие, оплату, обещания и решения владельца. Если точного ответа нет, честно скажите об этом и передайте вопрос владельцу.",
     "Не отвечайте на посторонние сообщения, если Вас не спросили и не упомянули. Верните ignore=true, если сообщение не относится к Агентству и не является обращением к собеседнику.",
     "Верните только JSON вида {\"answer\":\"ответ\",\"needs_owner\":true или false,\"ignore\":true или false}."
@@ -858,13 +858,10 @@ async function aiHandleTelegramUpdateInner(update, env) {
   await aiRememberMember(env,chatId,user);
   const settings=await aiSettings(env);
   const isOwner=!!env.ADMIN_TELEGRAM_ID && String(user.id)===String(env.ADMIN_TELEGRAM_ID);
-  if(isOwner) {
-    // Владелец полностью исключён из клиентского ИИ-сценария.
-    await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_ignored",details:{message_id:message.message_id}});
-    return true;
-  }
+  if(isOwner) await aiLog(env,{chat_id:chatId,actor:user.id,type:"owner_message_received",details:{message_id:message.message_id}});
   if(!settings.enabled)return true;
-  const moderationActive=settings.moderation_enabled && !settings.moderation_temporarily_disabled;
+  // Владелец может пользоваться групповым ИИ-помощником, но никогда не попадает под автоматические наказания.
+  const moderationActive=!isOwner && settings.moderation_enabled && !settings.moderation_temporarily_disabled;
   if(Array.isArray(message.new_chat_members)&&message.new_chat_members.length) {
     for(const member of message.new_chat_members) {
       await aiRememberMember(env,chatId,member);
@@ -945,10 +942,13 @@ async function aiHandleTelegramUpdateInner(update, env) {
     if(moderationActive && settings.repeated_messages && await aiIsRepeated(env,chatId,user.id,text)) {
       await aiWarn(env,chatId,message,"Повторяющиеся сообщения (флуд)","repeated_messages");return true;
     }
+    const telegramMessageDate=Number.isFinite(Number(message.date))&&Number(message.date)>0
+      ? Number(message.date)
+      : Math.floor(Date.now()/1000);
     await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content,created_at) VALUES(?,?,?, 'user', ?, datetime(?,'unixepoch'))")
       .bind(chatId,Number(message.message_id)||null,String(user.id),text.slice(0,3500),telegramMessageDate).run();
     const suggestionPattern=/(предлагаю|предложение|советую|было бы лучше|можно добавить|не хватает|улучшить|улучшение|(?:отличн|хорош|интересн).{0,30}иде[яи]|иде[яи].{0,50}(?:мастер.?класс|показ|каталог|приложени|поддержк|функци)|жд[её]м.{0,20}иде[яи])/i;
-    if(settings.owner_suggestions && suggestionPattern.test(text)){
+    if(!isOwner && settings.owner_suggestions && suggestionPattern.test(text)){
       await aiNotifyOwner(env,"💡 Предложение участника по улучшению Агентства\nУчастник: "+aiSafeName(user)+" ("+user.id+")\nСообщение: "+text.slice(0,900));
       await aiLog(env,{chat_id:chatId,actor:user.id,target:env.ADMIN_TELEGRAM_ID,type:"owner_suggestion",details:{message_id:Number(message.message_id)||null,message:text.slice(0,1000)}});
     }
@@ -972,9 +972,9 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const replied=message.reply_to_message?.from?.is_bot===true;
     const mentionedBot=(message.entities||[]).some(entity=>entity.type==="text_mention"&&entity.user?.is_bot) || (!!env.BOT_USERNAME&&new RegExp("@"+String(env.BOT_USERNAME).replace(/^@/,""),"i").test(text));
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder;
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
-    // через ИИ-мастерскую Mini App или отдельный опрос «Создать своё».
+    // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
       try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id,message.reply_to_message?.message_id||null); }
       catch(error) {
@@ -986,7 +986,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
         }
     }
   }
-  if(!isEdited)await aiAwardGroupMessageReputation(env,chatId,message,user);
+  if(!isEdited&&!isOwner)await aiAwardGroupMessageReputation(env,chatId,message,user);
   return true;
 }
 async function handleAiTelegramUpdate(update,env){
@@ -998,16 +998,18 @@ async function handleAiTelegramUpdate(update,env){
     : message?.chat?.id&&message?.message_id
       ? "telegram_message:"+String(message.chat.id)+":"+String(message.message_id)+":"+(update?.edited_message?"edit:"+String(message.edit_date||"0"):"new")
       : null;
-  if(!identity)return aiHandleTelegramUpdateInner(update,env);
-  const claim=await env.DB.prepare("INSERT OR IGNORE INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP)").bind(identity).run();
-  if(Number(claim.meta?.changes||0)!==1)return true;
   try{
+    if(!identity)return await aiHandleTelegramUpdateInner(update,env);
+    const claim=await env.DB.prepare("INSERT INTO ai_runtime_state(key,value,updated_at) VALUES(?,'processing',CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='processing',updated_at=CURRENT_TIMESTAMP WHERE ai_runtime_state.value='failed' OR (ai_runtime_state.value='processing' AND ai_runtime_state.updated_at<datetime('now','-2 minutes'))").bind(identity).run();
+    if(Number(claim.meta?.changes||0)!==1)return true;
     const result=await aiHandleTelegramUpdateInner(update,env);
     await env.DB.prepare("UPDATE ai_runtime_state SET value='done',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
     return result;
   }catch(error){
     const messageId=message?.message_id||null;
-    await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run().catch(()=>{});
+    if(identity)try{
+      await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run();
+    }catch(stateError){console.error("Could not mark Telegram update failed:",String(stateError).slice(0,250));}
     await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});
     await aiNotifyOwner(env,"⚠️ Не удалось полностью обработать обновление группы"+(messageId?" · сообщение №"+messageId:"")+". Повтор Telegram остановлен, чтобы не запускать повторную модерацию одного сообщения. Ошибка: "+String(error).slice(0,300));
     return true;

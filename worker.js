@@ -451,27 +451,34 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
   const parsed=JSON.parse(match[0]);return {reply:String(parsed.reply||"Готово.").slice(0,3000),updates:parsed.updates&&typeof parsed.updates==="object"?parsed.updates:null};
 }
 
-async function createSupportAnswer(env, history, isVip, customerContext = {}, navigationActions = []) {
+async function createSupportAnswer(env, history, isVip, customerContext = {}, navigationActions = [], catalogContext = {}) {
   if (!env.AI) throw new Error("ИИ-помощник временно недоступен: Workers AI не подключён.");
   const questionsUsed = history.reduce((total, item) => total + (item.role === "assistant" ? (String(item.content || "").match(/\?/g) || []).length : 0), 0);
   const forceFinal = questionsUsed >= 16;
   const lastUserMessage = [...history].reverse().find(item => item.role === "user")?.content || "";
-  const explicitlyRequestsButton = /(?:сформир\w*|созда\w*|сдела\w*|добав\w*|отправ\w*|пришл\w*|покаж\w*|дай)\s*.{0,45}(?:кнопк|ссылк)|(?:кнопк|ссылк).{0,55}(?:на|для|в|к)\b|(?:нужна|нужен|нужно|хочу|можно).{0,25}(?:кнопк|ссылк)/i.test(String(lastUserMessage));
+  const matchedProduct = catalogContext.matchedProduct || null;
+  const catalog = Array.isArray(catalogContext.catalog) ? catalogContext.catalog : [];
   const instructions = [
     await getGlobalAiToneInstruction(env),
-    "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко.",
+    "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко. Пиши простым текстом без Markdown-звёздочек; используй 1–2 уместных эмодзи.",
     "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
     "Если клиент обсуждает свою будущую работу или индивидуальный заказ, проведи консультацию максимум из 16 вопросов за весь диалог: задавай по одному вопросу, не повторяй уже известное, выясни задумку, получателя, повод, бюджет, размер, стиль, цвета, материалы/технику, детализацию и срок.",
     "Для индивидуального заказа уточняй бюджет только в рублях. Никогда не спрашивай, предпочитает ли клиент рубли или Telegram Stars, и не предлагай выбор валюты/способа оплаты в ходе консультации. Не путай бюджет в рублях с оплатой товаров каталога через Telegram Stars.",
-    "При подборе индивидуальной работы предложи 2–3 варианта готового заказа, предварительно оцени стоимость и подстрой предложение под бюджет. Чётко говори, что цена ориентировочная и окончательно подтверждается владельцем.",
+    "Если клиент ищет готовую работу, сначала проверь реальный каталог и не выдавай придуманные варианты за существующие товары. Если клиент хочет индивидуальную работу на заказ, можешь предложить 2–3 концепции только как идеи будущей работы, прямо обозначая, что это не готовые товары каталога. Предварительная цена индивидуальной работы не является окончательной и подтверждается владельцем.",
     "Не превращай консультацию в мастер-класс: не объясняй, как самостоятельно изготовить работу, и не выдавай пошаговые инструкции. Помогай выбрать и заказать готовую работу Агентства.",
+    "Каталог Агентства — обязательный источник истины. Ниже передан актуальный список активных товаров из базы мини-приложения с точными названиями, описаниями, категориями и ценами. Ищи товар по смыслу и названию в этом списке, а не по памяти. Никогда не выдумывай товары, не говори, что не видишь каталог, если данные переданы. Если работа найдена, назови её точное название и цену из каталога. Если сервер подобрал конкретную работу, под ответом будет реальная кнопка открытия карточки именно этой работы — обязательно скажи клиенту, что кнопка уже прикреплена, и не заменяй её инструкцией искать вручную. Если точного совпадения нет, честно скажи, что именно эта работа не найдена среди активных товаров, и предложи открыть каталог кнопкой. Не называй похожую работу точным совпадением.",
+    "Проверенные сведения об Агентстве: готовые авторские работы находятся в разделе «Магазин»; индивидуальную работу можно описать через «Создать своё»; «ИИ помощник» отвечает на вопросы, помогает найти готовую работу и подобрать подарок; «Мои заказы» показывает статусы и историю; «Мой баланс» показывает баллы и операции; «Пополнить баланс» — оплата Telegram Stars; «VIP-подписка» открывает VIP-возможности; «Скидки и акции» показывает активные предложения; «Поддержка» позволяет связаться с командой; «О проекте» содержит информацию и правила. Не придумывай другие разделы.",
+    "Готовая работа: клиент открывает карточку товара, добавляет его в корзину или выбирает «Купить сразу», затем оформляет заказ. Индивидуальная работа: клиент описывает пожелания в «Создать своё», запрос поступает владельцу на проверку; цена и возможность выполнения подтверждаются владельцем. Не утверждай, что индивидуальная работа уже существует в каталоге или гарантированно будет выполнена.",
     "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
     "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
     "Ты не знаешь местоположение клиента и не имеешь доступа к его геолокации. Не угадывай и не называй город, адрес или регион клиента. Если местоположение действительно важно, сначала прямо спроси клиента.",
     "Проверенные сервером данные текущего покупателя (используй их для ответов о балансе и заказах; не показывай Telegram ID): " + JSON.stringify(customerContext).slice(0,5000),
-    navigationActions.length ? ("Под ответом интерфейс ОБЯЗАТЕЛЬНО покажет реальные интерактивные кнопки перехода: " + navigationActions.map(item => item.label).join(", ") + ". Прямо назови подходящую кнопку и предложи нажать её.") : explicitlyRequestsButton ? "Клиент прямо попросил создать/сформировать/отправить кнопку или ссылку, но адресат пока не распознан. НИКОГДА не отказывайся и не говори, что клиент не хочет кнопку. Задай один короткий уточняющий вопрос: на какой именно раздел или какую работу нужна кнопка. Не выдумывай несуществующие цели." : "Для этого ответа кнопки перехода не сформированы. НИКОГДА не пиши «нажмите кнопку ниже», «кнопка ниже» или похожие фразы. Если нужен переход, объясни словами, как открыть раздел через главное меню. Не выдумывай кнопки и ссылки.",
+    "Актуальный каталог активных товаров из базы: " + JSON.stringify(catalog).slice(0,18000),
+    matchedProduct ? ("Сервер точно нашёл запрошенную работу в каталоге: " + JSON.stringify(matchedProduct) + ". Под ответом ОБЯЗАТЕЛЬНО будет кнопка открытия карточки этой работы: " + (navigationActions.find(item=>item.view==="product")?.label||"Открыть работу") + ". Назови её и не предлагай ручной поиск.") : "",
+    navigationActions.length ? ("Под ответом интерфейс ОБЯЗАТЕЛЬНО покажет реальные интерактивные кнопки: " + navigationActions.map(item => item.label).join(", ") + ". Всегда упоминай подходящую кнопку в самом ответе.") : "Если кнопка для этого запроса не сформирована, не говори, что кнопка уже прикреплена. Не проси клиента отдельно приказать отправить кнопку.",
+
     isVip ? "Пользователь VIP: давай более подробные рекомендации по выбору подарков, но не выдумывай факты и не меняй правила оплаты." : "Пользователь без VIP: предоставляй базовую поддержку и рекомендации по каталогу.",
     forceFinal ? "В диалоге уже использовано 16 вопросов. Больше не задавай вопросов: подготовь итоговую рекомендацию, варианты и предварительную оценку стоимости с имеющимися данными." : ""
   ].filter(Boolean).join("\n");
@@ -543,46 +550,35 @@ function normalizeSupportNavigationText(value) {
 }
 
 async function buildSupportNavigationActions(env, message) {
-  const text = normalizeSupportNavigationText(message);
-  const explicitButtonRequest = /(?:сформир\w*|созда\w*|сдела\w*|добав\w*|отправ\w*|пришл\w*|покаж\w*|дай)\s*.{0,45}(?:кнопк|ссылк)|(?:кнопк|ссылк).{0,55}(?:на|для|в|к)\b|(?:нужна|нужен|нужно|хочу|можно).{0,25}(?:кнопк|ссылк)/i.test(text);
-  const asksToNavigate = explicitButtonRequest || /(?:где|как)\s+(?:находится\s+)?(?:каталог|магазин|корзин\w*|акци\w*|заказ\w*|баланс|профиль|меню|поддержк\w*|помощник|конструктор|мастерск\w*)\b|(?:каталог|магазин|корзин\w*|акци\w*|заказ\w*|баланс|профиль|меню)\s+(?:где|находится)\b/i.test(text) || /(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|как посмотреть|где посмотреть|как проверить|как узнать|хочу посмотреть|хочу открыть|можно посмотреть|можно открыть|помоги открыть|мне нужен|мне нужна|мне нужно|дай.{0,20}(?:кнопк|ссылк)|покажите|кнопк|сертификат.{0,30}(?:активир|баланс)|(?:активир|баланс).{0,30}сертификат)/i.test(text);
-  if (!asksToNavigate) return [];
-
-  const actions = [];
-  const add = (action) => {
-    if (actions.length < 4 && !actions.some(item => item.view === action.view && item.product_id === action.product_id)) actions.push(action);
-  };
-
-  try {
-    const catalog = await getProducts(env);
-    const normalized = normalizeSupportNavigationText(message);
-    const product = catalog.find(item => {
-      const title = normalizeSupportNavigationText(item.title);
-      return title.length >= 4 && normalized.includes(title);
-    });
-    if (product) {
-      add({ label: "🎁 Открыть работу: " + String(product.title).slice(0, 48), view: "product", product_id: String(product.id) });
-    }
-  } catch (error) {
-    console.error("Support navigation catalog lookup failed:", String(error).slice(0, 250));
+  const text=normalizeSupportNavigationText(message),actions=[];
+  const add=action=>{if(actions.length<4&&!actions.some(x=>x.view===action.view&&x.product_id===action.product_id))actions.push(action);};
+  let catalog=[];try{catalog=await getProducts(env);}catch(error){console.error("Support catalog lookup failed:",String(error).slice(0,250));}
+  const productIntent=/(?:каталог|магазин|ассортимент|готовые работы|все работы|все товары|(?:покажи|покажите|посмотри|посмотрите|найди|найдите|ищу|подбери|подберите|хочу посмотреть|можно посмотреть).{0,45}(?:работ\w*|товар\w*|подар\w*|издел\w*|каталог\w*|магазин\w*|ассортимент)|(?:помоги|помогите).{0,25}(?:найти|подобрать).{0,25}(?:работ\w*|товар\w*|подар\w*|издел\w*)|(?:нужна|нужен|нужно).{0,20}(?:работ\w*|товар\w*|подар\w*|издел\w*)|(?:работ\w*|товар\w*|подар\w*|издел\w*).{0,25}(?:найти|подобрать|посмотреть|показать))/i.test(text);
+  const matchedProduct=catalog.find(item=>{const title=normalizeSupportNavigationText(item.title);return title.length>=4&&text.includes(title);})||null;
+  if(matchedProduct)add({label:"🎁 Открыть работу: "+String(matchedProduct.title).slice(0,48),view:"product",product_id:String(matchedProduct.id)});
+  else if(productIntent)add({label:"🎁 Открыть каталог",view:"catalogView"});
+  const explicitButtonRequest=/(?:сформир\w*|созда\w*|сдела\w*|добав\w*|отправ\w*|пришл\w*|покаж\w*|дай)\s*.{0,45}(?:кнопк|ссылк)|(?:кнопк|ссылк).{0,55}(?:на|для|в|к)\b|(?:нужна|нужен|нужно|хочу|можно).{0,25}(?:кнопк|ссылк)/i.test(text);
+  const asksToNavigate=explicitButtonRequest||/(?:где|как)\s+(?:находится\s+)?(?:каталог|магазин|корзин\w*|акци\w*|заказ\w*|баланс|профиль|меню|поддержк\w*|помощник|конструктор|мастерск\w*)\b|(?:каталог|магазин|корзин\w*|акци\w*|заказ\w*|баланс|профиль|меню)\s+(?:где|находится)\b/i.test(text)||/(?:открой|покажи|перейди|перейти|найди|где найти|где находится|как попасть|как открыть|как посмотреть|где посмотреть|как проверить|как узнать|хочу посмотреть|хочу открыть|можно посмотреть|можно открыть|помоги открыть|мне нужен|мне нужна|мне нужно|дай.{0,20}(?:кнопк|ссылк)|покажите|кнопк|сертификат.{0,30}(?:активир|баланс)|(?:активир|баланс).{0,30}сертификат)/i.test(text);
+  if(asksToNavigate){
+    if(/(главн.{0,8}меню|в меню|домой|на главную)/i.test(text))add({label:"🏠 Главное меню",view:"menuView"});
+    if(/(каталог|магазин|все товары|все работы)/i.test(text)&&!matchedProduct)add({label:"🎁 Открыть каталог",view:"catalogView"});
+    if(/(конструктор подарка|собрать подарок|сборк.{0,12}подарк|подарочн.{0,12}набор)/i.test(text))add({label:"🎁 Конструктор подарка",view:"giftBuilderView"});
+    if(/(акци|скидк|спецпредложен)/i.test(text))add({label:"🍂 Скидки и акции",view:"dealsView"});
+    if(/(корзин|оформить заказ|перейти к оплате|доставк)/i.test(text))add({label:"🛒 Открыть корзину",view:"cartView"});
+    if(/(мои заказы|список заказов|истори[яю] заказов|(?:мой|мои|моего).{0,12}заказ|статус.{0,20}заказ|заказ.{0,20}статус)/i.test(text))add({label:"📦 Мои заказы",view:"ordersView"});
+    if(/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
+    if(/(профиль|личный кабинет)/i.test(text))add({label:"👤 Мой профиль",view:"profileView"});
+    if(/(vip|вип)/i.test(text))add({label:"👑 VIP",view:"vipView"});
+    if(/(создать индивидуальн.{0,12}заказ|оформить индивидуальн.{0,12}заказ|конструктор индивидуальн.{0,12}заказ)/i.test(text))add({label:"📝 Индивидуальный заказ",view:"customWizardView"});
+    else if(/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text))add({label:"🧵 ИИ-мастерская",view:"aiWorkshopView"});
+    if(/(поддержк|помощник|помощники)/i.test(text))add({label:"🤖 ИИ помощник",view:"supportView"});
+    if(/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text))add({label:"✉️ Написать владельцу",view:"owner"});
+    if(/сертификат/i.test(text)&&/(активир|баланс|начисл)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
+    if(/(о проекте|информаци[яю] о проекте|правила)/i.test(text))add({label:"ℹ️ О проекте",view:"aboutView"});
   }
-
-  if (/(главн.{0,8}меню|в меню|домой|на главную)/i.test(text)) add({ label: "🏠 Главное меню", view: "menuView" });
-  if (/(каталог|магазин|все товары|все работы)/i.test(text)) add({ label: "🎁 Открыть каталог", view: "catalogView" });
-  if (/(конструктор подарка|собрать подарок|сборк.{0,12}подарк|подарочн.{0,12}набор)/i.test(text)) add({ label: "🎁 Конструктор подарка", view: "giftBuilderView" });
-  if (/(акци|скидк|спецпредложен)/i.test(text)) add({ label: "🍂 Скидки и акции", view: "dealsView" });
-  if (/(корзин|оформить заказ|перейти к оплате|доставк)/i.test(text)) add({ label: "🛒 Открыть корзину", view: "cartView" });
-  if (/(мои заказы|список заказов|истори[яю] заказов|(?:мой|мои|моего).{0,12}заказ|статус.{0,20}заказ|заказ.{0,20}статус)/i.test(text)) add({ label: "📦 Мои заказы", view: "ordersView" });
-  if (/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
-  if (/(профиль|личный кабинет)/i.test(text)) add({ label: "👤 Мой профиль", view: "profileView" });
-  if (/(vip|вип)/i.test(text)) add({ label: "👑 VIP", view: "vipView" });
-  if (/(создать индивидуальн.{0,12}заказ|оформить индивидуальн.{0,12}заказ|конструктор индивидуальн.{0,12}заказ)/i.test(text)) add({ label: "📝 Индивидуальный заказ", view: "customWizardView" });
-  else if (/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text)) add({ label: "🧵 ИИ-мастерская", view: "aiWorkshopView" });
-  if (/(поддержк|помощник|помощники)/i.test(text)) add({ label: "🤖 ИИ помощник", view: "supportView" });
-  if (/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text)) add({ label: "✉️ Написать владельцу", view: "owner" });
-  if (/сертификат/i.test(text) && /(активир|баланс|начисл)/i.test(text)) add({ label: "⭐ Мой баланс", view: "balanceView" });
-  if (/(о проекте|информаци[яю] о проекте|правила)/i.test(text)) add({ label: "ℹ️ О проекте", view: "aboutView" });
-  return actions;
+  const matched=matchedProduct?{id:String(matchedProduct.id),title:String(matchedProduct.title||""),description:String(matchedProduct.description||"").slice(0,1000),category:String(matchedProduct.category||""),price_stars:Number(matchedProduct.price_stars||0)}:null;
+  const catalogContext=catalog.map(item=>({id:String(item.id),title:String(item.title||""),description:String(item.description||"").slice(0,500),category:String(item.category||""),price_stars:Number(item.price_stars||0)}));
+  return {actions,catalog:catalogContext,matchedProduct:matched,productIntent};
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
@@ -714,7 +710,14 @@ async function handleWebhook(request, env) {
   const groupUpdateMessage = update.message || update.edited_message;
   if (groupUpdateMessage && !groupUpdateMessage.successful_payment &&
       (groupUpdateMessage.chat?.type === "group" || groupUpdateMessage.chat?.type === "supergroup")) {
-    await handleAiTelegramUpdate(update, env);
+    try {
+      await handleAiTelegramUpdate(update, env);
+    } catch (error) {
+      console.error("Group Telegram update failed; acknowledging to prevent endless retries:", String(error).slice(0,500));
+      try { await writeSystemError(env,error,"/api/telegram/webhook"); } catch (logError) {
+        console.error("Could not persist group webhook error:",String(logError).slice(0,250));
+      }
+    }
     return json({ ok: true });
   }
   // Personal bot commands must be handled separately from group moderation.
@@ -3483,7 +3486,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const lastUserMessage = messages.length && messages[messages.length - 1].role === "assistant"
           ? [...messages].reverse().find(item => item.role === "user")?.content || ""
           : "";
-        const actions = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : [];
+        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : { actions: [] };
+        const actions = actionContext.actions || [];
         return json({
           conversations,
           conversation_id: activeConversation?.id || null,
@@ -3687,10 +3691,24 @@ if(activeCraftDraft){
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
-        const actions = await buildSupportNavigationActions(env, message);
+        const catalogContext = await buildSupportNavigationActions(env, message);
+        const actions = catalogContext.actions;
         let reply;
         try {
-          reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext, actions);
+          reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext, actions, catalogContext);
+          // Product lookup is deterministic: never let a model guess availability or invent a product.
+          if (catalogContext.matchedProduct) {
+            const item = catalogContext.matchedProduct;
+            const detail = String(item.description || "").trim();
+            const buttonLabel = actions.find(action => action.view === "product")?.label || "🎁 Открыть работу";
+            reply = "Нашёл в актуальном каталоге работу «" + item.title + "». "
+              + (detail ? detail + " " : "")
+              + "Цена: " + Number(item.price_stars || 0) + " Stars. "
+              + "Нажмите кнопку «" + buttonLabel + "» под сообщением — она откроет карточку именно этой работы. 🎁";
+          } else if (catalogContext.productIntent) {
+            reply = "Я проверил актуальный каталог Агентства, но точную работу по этому названию среди активных товаров не нашёл. Не буду придумывать похожую работу. "
+              + "Откройте каталог кнопкой ниже — там можно посмотреть все доступные варианты. Если уточните название или опишете работу, я проверю ещё раз. 🎁";
+          }
         } catch (error) {
           console.error("Support assistant failed:", String(error));
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
