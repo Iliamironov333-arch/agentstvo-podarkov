@@ -592,7 +592,9 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     await aiNotifyOwner(env,"❔ ИИ-помощнику нужна помощь владельца"+(questionId?" · вопрос №"+questionId:"")+"\nУчастник: "+user.id+"\nВопрос: "+text.slice(0,700)+"\nОтветьте в Mini App → ИИ-бот → Вопросы владельцу.");
     answer="Я пока не могу достоверно подтвердить эту информацию. Передал Ваш вопрос владельцу и сообщу Вам, когда получу ответ.";
   }
-  answer=String(answer||"").replace(/\\*{1,2}/g,"").trim();\n  if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";\n  const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
+    answer=String(answer||"").replace(/\*{1,2}/g,"").trim();
+  if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";
+  const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
   if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
   await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
   await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:needsOwner?"ai_answer_referred":"ai_answer",details:{characters:answer.length,question_id:questionId}});
