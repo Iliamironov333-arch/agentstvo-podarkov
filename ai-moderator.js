@@ -1009,7 +1009,8 @@ async function handleAiTelegramUpdate(update,env){
   }catch(error){
     const messageId=message?.message_id||null;
     await env.DB.prepare("UPDATE ai_runtime_state SET value='failed',updated_at=CURRENT_TIMESTAMP WHERE key=?").bind(identity).run().catch(()=>{});
-    await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});
+    try{await aiLog(env,{chat_id:message?.chat?.id||null,actor:"ai_moderator",target:message?.from?.id||null,type:"telegram_update_failed",severity:"error",details:{update_id:update?.update_id||null,message_id:messageId,error:String(error).slice(0,700)}});}
+    catch(logError){console.error("AI update failure logging failed:",String(logError).slice(0,300));}
     try{await aiNotifyOwner(env,"⚠️ Не удалось полностью обработать обновление группы"+(messageId?" · сообщение №"+messageId:"")+". Ошибка: "+String(error).slice(0,300));}
     catch(notifyError){console.error("AI update failure notification failed:",String(notifyError).slice(0,300));}
     return true;
