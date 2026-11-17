@@ -3,7 +3,7 @@ import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyP
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
 const UI_MOTION_DEFAULTS = {
-  enabled:true, easing:"soft", pageTransition:"fade", pageDuration:320,
+  enabled:true, intensity:70, speed:100, easing:"soft", pageTransition:"fade", pageDuration:320,
   buttonEffect:"ios", buttonOpacity:0.76, buttonScale:0.975, buttonDuration:180,
   cardStagger:true, cardEffect:"fade-up", cardDuration:240, cardInterval:45,
   modalEffect:"slide-up", modalDuration:280, navDuration:220,
@@ -16,6 +16,8 @@ function normalizeUiMotion(input) {
   const choice=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
   return {
     enabled:v.enabled!==false,
+    intensity:number(v.intensity,0,100,UI_MOTION_DEFAULTS.intensity),
+    speed:number(v.speed,50,200,UI_MOTION_DEFAULTS.speed),
     easing:choice(v.easing,["soft","standard","spring","linear"],UI_MOTION_DEFAULTS.easing),
     pageTransition:choice(v.pageTransition,["none","fade","slide","fade-slide"],UI_MOTION_DEFAULTS.pageTransition),
     pageDuration:number(v.pageDuration,100,1000,UI_MOTION_DEFAULTS.pageDuration),
