@@ -615,6 +615,11 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   }
     answer=String(answer||"").replace(/\*{1,2}/g,"").trim();
   if(!/[🎁✨📱💬🎨😊🙂😉🌷🧸🎉💡]/u.test(answer))answer+=" 😊";
+  if(!recommendedProductIds.length && /(фото|картин|изображ|покаж)/i.test(text)){
+    const normalized=text.toLowerCase();
+    recommendedProductIds=(products.results||[]).filter(p=>p.image_url&&normalized.includes(String(p.title||"").toLowerCase())).map(p=>String(p.id)).slice(0,3);
+    if(!recommendedProductIds.length && !/(картины|картин|рисунк)/i.test(text))recommendedProductIds=(products.results||[]).filter(p=>p.image_url).map(p=>String(p.id)).slice(0,3);
+  }
   const replyMarkup=aiBuildGroupKeyboard(text,answer,needsOwner);
   if(replyMarkup && !/Agentstvo_podarkov_bot|Откройте бота|нажмите Start/i.test(answer))answer += "\n\nЕсли кнопка не откроется: найдите @Agentstvo_podarkov_bot, нажмите Start, затем «Открыть Агентство». Выберите нужный раздел вручную.";
   const sent=await aiGroupReply(env,chatId,user.id,answer,replyToMessageId,replyMarkup);
