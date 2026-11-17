@@ -1,4 +1,5 @@
 import { handleAiTelegramUpdate, handleAiScheduled, handleAiAdminRoute, aiApplyPromoToDraft } from "./ai-moderator.js";
+import { openAiFetch, getOpenAiRetryDelaySeconds, formatOpenAiWait } from "./openai-client.js";
 
 const SITE_ORIGIN = "https://iliamironov333-arch.github.io";
 const DISCOUNT_PERCENT = 10;
@@ -405,7 +406,7 @@ async function createOrderChatAnswer(env, history, orderContext) {
     orderContext?.order_type==="gift_builder_draft_not_yet_ordered" ? "Это ещё не оформленный черновик подарка. Не называй его заказом, не утверждай, что что-либо уже куплено или отправлено владельцу. Помоги подобрать дополнения и улучшить идею. Если клиент просит изменить параметры черновика, подскажи ему, что можно вернуться к настройкам конструктора." : "",
     "Контекст заказа: " + JSON.stringify(orderContext).slice(0,5000)
   ].join("\n");
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await openAiFetch(env, {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", instructions,
@@ -443,7 +444,7 @@ async function createGiftBuilderAnswer(env,history,bundle,catalog,vipActive,allo
     "Текущий черновик: "+JSON.stringify(bundle).slice(0,5000),
     "Каталог: "+JSON.stringify(catalog.map(p=>({id:String(p.id),title:p.title}))).slice(0,3000)
   ].join("\n");
-  const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:history.slice(-24).map(x=>({role:x.role,content:x.content})),max_output_tokens:850})});
+  const response=await openAiFetch(env,{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:history.slice(-24).map(x=>({role:x.role,content:x.content})),max_output_tokens:850})});
   const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error("ИИ-помощник не смог ответить. Попробуйте позже.");
   let output=typeof data.output_text==="string"?data.output_text:"";if(!output&&Array.isArray(data.output))output=data.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
   const match=output.match(/\{[\s\S]*\}/);if(!match)throw new Error("ИИ-помощник вернул некорректный ответ.");
@@ -478,7 +479,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   const fallbackModel = env.OPENAI_MODEL || "gpt-4o-mini";
   const requestModel = async (model) => {
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await openAiFetch(env, {
         method: "POST",
         headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ model, instructions,
@@ -493,8 +494,15 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   let attempt = await requestModel(primaryModel);
   // VIP uses the same API key as standard mode. If the VIP model or its request fails,
   // preserve VIP instructions and retry with the configured standard model.
-  if (isVip && primaryModel !== fallbackModel && (!attempt.response || !attempt.response.ok)) {
-    const firstError = attempt.data?.error || {};
+  const firstError = attempt.data?.error || {};
+  const firstErrorMessage = String(firstError.message || "");
+  const firstIsRateLimited = firstError.code === "rate_limit_exceeded"
+    || firstError.code === "insufficient_quota"
+    || firstError.code === "organization_usage_limit_exceeded"
+    || firstError.code === "credit_balance_exhausted"
+    || /tokens?\s+per\s+min|\bTPM\b/i.test(firstErrorMessage);
+  // Do not send a second request when the organization/model is already rate-limited.
+  if (isVip && primaryModel !== fallbackModel && (!attempt.response || !attempt.response.ok) && !firstIsRateLimited) {
     console.warn("VIP support model failed; retrying with standard model:", JSON.stringify({
       model: primaryModel, http_status: attempt.response?.status || null,
       error_code: firstError.code || null, error_type: firstError.type || null,
@@ -506,6 +514,11 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   const model = response?.ok ? (data?.model || primaryModel) : primaryModel;
   if (!response?.ok) {
     const apiError = data?.error || {};
+    const errorMessage = String(apiError.message || networkError || "OpenAI returned a non-2xx response");
+    const isTpmRateLimited = /tokens?\s+per\s+min|\bTPM\b/i.test(errorMessage) && /rate limit/i.test(errorMessage);
+    const retryAfterSeconds = isTpmRateLimited
+      ? (getOpenAiRetryDelaySeconds(response, data) || 60)
+      : getOpenAiRetryDelaySeconds(response, data);
     const diagnostic = {
       stage: networkError ? "openai_network" : "openai_request",
       model,
@@ -513,13 +526,18 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
       error_code: apiError.code || null,
       error_type: apiError.type || null,
       error_param: apiError.param || null,
-      error_message: String(apiError.message || networkError || "OpenAI returned a non-2xx response").slice(0, 350),
+      error_message: errorMessage.slice(0, 350),
+      retry_after_seconds: retryAfterSeconds || null,
       request_id: response?.headers?.get("x-request-id") || null,
       history_messages: history.length,
       question_count: questionsUsed
     };
     console.error("OpenAI support request failed:", JSON.stringify(diagnostic));
-    const failure = new Error("Сервис помощника временно недоступен. Попробуй позже.");
+    const failure = new Error(isTpmRateLimited
+      ? "ИИ временно достиг лимита токенов в минуту. История переписки сохранена. Попробуйте снова через " + formatOpenAiWait(retryAfterSeconds) + "."
+      : "Сервис помощника временно недоступен. Попробуй позже.");
+    failure.status = isTpmRateLimited ? 429 : (response?.status || 503);
+    failure.retryAfterSeconds = retryAfterSeconds || null;
     failure.diagnostic = diagnostic;
     throw failure;
   }
@@ -606,7 +624,7 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
     "Данные заказа: " + JSON.stringify(answers).slice(0,3500)
   ].join("\n");
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await openAiFetch(env, {
       method: "POST",
       headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4o-mini", input: prompt, max_output_tokens: 220 })
@@ -670,7 +688,7 @@ async function createCraftAnswer(env,messages){
   "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ принят или оплачен."
  ].join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
+ const r=await openAiFetch(env,{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_MODEL||"gpt-4o-mini",instructions,input,max_output_tokens:1400})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("Craft assistant failed:",r.status,d.error?.message||"");throw new Error(d.error?.message||"Не удалось получить ответ ИИ-мастерской.");}
  let answer=typeof d.output_text==="string"?d.output_text:"";if(!answer&&Array.isArray(d.output))answer=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!answer.trim())throw new Error("ИИ-мастерская не вернула ответ.");
  answer=answer.trim();const ready=answer.startsWith("[READY]");answer=answer.replace(/^\[(?:READY|ASK)\]\s*/,"").slice(0,5000);
@@ -678,7 +696,7 @@ async function createCraftAnswer(env,messages){
 }
 async function createVipSupportAnswer(env,message){
  const instructions=[await getGlobalAiToneInstruction(env),"Ты — старший специалист VIP-поддержки официального Агентства подарков.","Отвечай по-русски уважительно, внимательно и конкретно. У пользователя действующая VIP-подписка.","Помогай по заказам, каталогу, оплате, балансу и услугам Агентства. Не выдумывай статусы, платежи, сроки, цены или выполненные действия.","Если для решения нужен владелец, предложи явно запросить передачу обращения. Не обещай срок ответа."].join("\n");
- const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:1000})});
+ const r=await openAiFetch(env,{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:env.OPENAI_VIP_MODEL||env.OPENAI_MODEL||"gpt-4o-mini",instructions,input:message,max_output_tokens:1000})});
  const d=await r.json().catch(()=>({}));if(!r.ok){console.error("VIP support failed:",r.status,JSON.stringify(d).slice(0,800));throw new Error("VIP-помощь временно недоступна.");}
  let a=typeof d.output_text==="string"?d.output_text:"";if(!a&&Array.isArray(d.output))a=d.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text"&&typeof x.text==="string").map(x=>x.text).join("\n");if(!a.trim())throw new Error("VIP-помощник не вернул ответ.");return a.trim().slice(0,4000);
 }
@@ -3704,7 +3722,10 @@ if(activeCraftDraft){
           reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext, actions);
         } catch (error) {
           console.error("Support assistant failed:", String(error));
-          return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
+          return json({
+            error: error.message || "Не удалось получить ответ помощника.",
+            retry_after_seconds: Number(error.retryAfterSeconds) || null
+          }, Number(error.status) === 429 ? 429 : 503, origin);
         }
         await env.DB.prepare("INSERT INTO support_chat_messages (telegram_id,conversation_id,assistant_type,role,content,sender_type) VALUES (?,?,?,'assistant',?,'ai')")
           .bind(telegramId, conversationId, assistantType, reply).run();
