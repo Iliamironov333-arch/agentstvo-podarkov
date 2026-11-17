@@ -578,7 +578,7 @@ async function buildSupportNavigationActions(env, message) {
   }
   const matched=matchedProduct?{id:String(matchedProduct.id),title:String(matchedProduct.title||""),description:String(matchedProduct.description||"").slice(0,1000),category:String(matchedProduct.category||""),price_stars:Number(matchedProduct.price_stars||0)}:null;
   const catalogContext=catalog.map(item=>({id:String(item.id),title:String(item.title||""),description:String(item.description||"").slice(0,500),category:String(item.category||""),price_stars:Number(item.price_stars||0)}));
-  return {actions,catalog:catalogContext,matchedProduct:matched};
+  return {actions,catalog:catalogContext,matchedProduct:matched,productIntent};
 }
 
 async function estimateCustomOrderPrice(env, answers, fallbackStars) {
@@ -3696,6 +3696,19 @@ if(activeCraftDraft){
         let reply;
         try {
           reply = await createSupportAnswer(env, history, assistantType === "vip", customerContext, actions, catalogContext);
+          // Product lookup is deterministic: never let a model guess availability or invent a product.
+          if (catalogContext.matchedProduct) {
+            const item = catalogContext.matchedProduct;
+            const detail = String(item.description || "").trim();
+            const buttonLabel = actions.find(action => action.view === "product")?.label || "🎁 Открыть работу";
+            reply = "Нашёл в актуальном каталоге работу «" + item.title + "». "
+              + (detail ? detail + " " : "")
+              + "Цена: " + Number(item.price_stars || 0) + " Stars. "
+              + "Нажмите кнопку «" + buttonLabel + "» под сообщением — она откроет карточку именно этой работы. 🎁";
+          } else if (catalogContext.productIntent) {
+            reply = "Я проверил актуальный каталог Агентства, но точную работу по этому названию среди активных товаров не нашёл. Не буду придумывать похожую работу. "
+              + "Откройте каталог кнопкой ниже — там можно посмотреть все доступные варианты. Если уточните название или опишете работу, я проверю ещё раз. 🎁";
+          }
         } catch (error) {
           console.error("Support assistant failed:", String(error));
           return json({ error: error.message || "Не удалось получить ответ помощника." }, 503, origin);
