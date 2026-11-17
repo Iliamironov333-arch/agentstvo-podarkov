@@ -1058,6 +1058,18 @@ export default {
       const telegramId = String(user.id).trim();
       await ensureUser(env, user);
 
+      if (path === "/api/ranks" && method === "GET") {
+        if (!(await tableExists(env,"reputation_profiles"))) return json({ok:true,ranks:REPUTATION_RANKS,members:[],me:{rank:reputationRank("ordinary"),discount:0},migration_pending:true},200,origin);
+        await ensureReputationProfile(env,telegramId);
+        const [mine,members]=await Promise.all([
+          env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first(),
+          env.DB.prepare("SELECT u.telegram_id,u.username,u.first_name,COALESCE(p.rank_code,'ordinary') AS rank_code FROM users u LEFT JOIN reputation_profiles p ON p.telegram_id=u.telegram_id ORDER BY CASE COALESCE(p.rank_code,'ordinary') WHEN 'secret' THEN 5 WHEN 'god' THEN 4 WHEN 'vip' THEN 3 WHEN 'regular' THEN 2 ELSE 1 END DESC, u.first_name COLLATE NOCASE ASC LIMIT 100").all()
+        ]);
+        const meRank=reputationRank(mine?.rank_code);
+        const publicMembers=(members.results||[]).map(row=>({name:row.first_name||(row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,rank_code:row.rank_code,is_me:String(row.telegram_id)===telegramId}));
+        return json({ok:true,ranks:REPUTATION_RANKS.map(({code,label,discount})=>({code,label,discount})),me:{rank:meRank,discount:meRank.discount},members:publicMembers},200,origin);
+      }
+
       if (path === "/api/announcements" && method === "GET") {
         const rows = await env.DB.prepare(
           "SELECT id,title,body,link_url,starts_at,ends_at,emoji,background,image_url,button_text,placement,sort_order,slide_type,poll_options_json,auto_advance_enabled,auto_advance_seconds,manual_swipe_enabled FROM announcements WHERE status='published' AND (starts_at IS NULL OR starts_at='' OR datetime(starts_at)<=datetime('now')) AND (ends_at IS NULL OR ends_at='' OR datetime(ends_at)>=datetime('now')) AND (audience_type='all' OR (audience_type='selected' AND EXISTS (SELECT 1 FROM json_each(announcements.audience_ids) WHERE CAST(value AS TEXT)=?))) ORDER BY sort_order ASC,id ASC LIMIT 50"
@@ -1098,7 +1110,8 @@ export default {
         if (!(await tableExists(env,"reputation_profiles")) || !(await tableExists(env,"reputation_transactions"))) return json({ok:true,leaderboard:[],migration_pending:true},200,origin);
         const monthKey=ekaterinburgMonthKey();
         const rows=await getReputationMonthRows(env,monthKey);
-        const leaderboard=(rows.results||[]).filter(row=>Number(row.leaderboard_opt_in)!==0&&Number(row.monthly_points)>0).slice(0,10).map((row,index)=>({place:index+1,name:row.first_name|| (row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,monthly_points:Number(row.monthly_points)}));
+        const ranked=(rows.results||[]).filter(row=>Number(row.leaderboard_opt_in)!==0&&Number(row.monthly_points)>0).slice(0,10);
+        const leaderboard=Array.from({length:10},(_,index)=>{const row=ranked[index];return row?{place:index+1,name:row.first_name||(row.username?"@"+row.username:"Участник"),rank:reputationRank(row.rank_code).label,monthly_points:Number(row.monthly_points),occupied:true}:{place:index+1,name:null,rank:null,monthly_points:0,occupied:false};});
         return json({ok:true,month:monthKey,leaderboard},200,origin);
       }
 
