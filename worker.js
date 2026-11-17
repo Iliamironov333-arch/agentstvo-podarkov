@@ -714,7 +714,14 @@ async function handleWebhook(request, env) {
   const groupUpdateMessage = update.message || update.edited_message;
   if (groupUpdateMessage && !groupUpdateMessage.successful_payment &&
       (groupUpdateMessage.chat?.type === "group" || groupUpdateMessage.chat?.type === "supergroup")) {
-    await handleAiTelegramUpdate(update, env);
+    try {
+      await handleAiTelegramUpdate(update, env);
+    } catch (error) {
+      console.error("Group Telegram update failed; acknowledging to prevent endless retries:", String(error).slice(0,500));
+      try { await writeSystemError(env,error,"/api/telegram/webhook"); } catch (logError) {
+        console.error("Could not persist group webhook error:",String(logError).slice(0,250));
+      }
+    }
     return json({ ok: true });
   }
   // Personal bot commands must be handled separately from group moderation.
