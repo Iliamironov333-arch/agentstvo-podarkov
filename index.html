@@ -5220,9 +5220,10 @@ async function loadAiOrders(){
    }else{
     card.append(aiAdminNode('p',details.chat_deleted===true?'🔒 Чат удалён. Переписка очищена, ответы заблокированы.':'🔒 Чат заказа закрыт по сроку хранения (более трёх дней после завершения). История доступна только для просмотра.','notice'));
    }
+   if(o.status==='collecting'&&details.proposal_pending_customer===true)card.append(aiAdminNode('p','⏳ Предложение уже отправлено покупателю. Счёт станет доступен после явного согласия клиента и проверки владельцем.','notice'));
    if(o.status==='review'){
     const save=aiAdminNode('button','Сохранить изменения','primary');save.addEventListener('click',async()=>{try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'update',id:o.id,subject:subject.value,summary:summary.value,approved_stars:Number(price.value)})});toast('Заказ обновлён.');loadAiOrders();}catch(e){toast(e.message);}});card.append(save);
-    if(adminSession?.root_owner&&details.customer_accepted===true){const approve=aiAdminNode('button','Подтвердить и отправить счёт','secondary');approve.addEventListener('click',async()=>{if(!confirm('Подтвердить заказ и отправить покупателю счёт в Telegram?'))return;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'approve',id:o.id})});toast('Заказ подтверждён. Счёт отправлен покупателю в Telegram.');loadAiOrders();}catch(e){toast(e.message);}});card.append(approve);}
+    if(adminSession?.root_owner&&details.customer_accepted===true){const approve=aiAdminNode('button','Отправить счёт покупателю','secondary');approve.addEventListener('click',async()=>{if(!confirm('Подтвердить заказ и отправить счёт покупателю в Telegram?'))return;try{await apiFetch('/api/admin/ai-orders',{method:'POST',body:JSON.stringify({action:'approve',id:o.id})});toast('Заказ подтверждён. Счёт отправлен покупателю в Telegram.');loadAiOrders();}catch(e){toast(e.message);}});card.append(approve);}
     const cancel=aiAdminNode('button','Отклонить заказ','secondary');cancel.addEventListener('click',()=>aiCancelOrder(o.id));card.append(cancel);
    }else if(['approved','paid'].includes(o.status)){
     card.append(aiAdminNode('p',(o.payment_status==='paid'?'Оплачен':'Счёт отправлен')+' · заказ Mini App: '+(o.order_id||'—')+(o.paid_at?' · оплата: '+formatDate(o.paid_at):''),'muted'));
