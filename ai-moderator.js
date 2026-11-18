@@ -426,15 +426,16 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
     }
     const linkedExpiry=linked?.status==="paid"?(linked.paid_at||linked.updated_at):(linked?.last_activity_at||linked?.updated_at);
     if(linked&&await env.DB.prepare("SELECT 1 AS expired WHERE datetime(?)<=datetime('now','-3 days')").bind(linkedExpiry).first())return true;
-    if(!linked){
-      // Не прикрепляем ответ на чужое или постороннее сообщение к активному заказу.
+    if(!linked&&!explicit){
+      // Не прикрепляем ответ на чужое сообщение к заказу, но явное намерение
+      // оформить заказ всё равно может начать новый черновик.
       return false;
     }
-    if(navigationIntent)return false;
-    matchedOrderThread=true;
-    if(linked.status==="collecting"){
+    if(linked&&navigationIntent)return false;
+    if(linked)matchedOrderThread=true;
+    if(linked?.status==="collecting"){
       active=linked;
-    }else{
+    }else if(linked){
       linkedDetails.conversation=Array.isArray(linkedDetails.conversation)?linkedDetails.conversation:[];
       linkedDetails.conversation.push({role:"user",content:String(text).slice(0,1000)});
       if(linkedDetails.ai_enabled===false){
