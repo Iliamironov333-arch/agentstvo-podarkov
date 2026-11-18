@@ -3744,7 +3744,10 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
           if (/срок|к какому числу|когда необходим/.test(question)) askedOrderTopics.add("deadline");
         }
         const userDetailTurns = supportContextHistory.filter(item => item.role === "user" && String(item.content || "").trim().length >= 8).length;
-        const assistantCollectedCustomDetails = askedOrderTopics.size >= 3 && userDetailTurns >= 3;
+        const userClearlyWantsCustomWork = supportContextHistory.some(item => item.role === "user"
+          && /хочу|нужн|надо|заказать|закаж|сделать|создать|изготовить|мне бы|можно ли сделать/i.test(String(item.content || ""))
+          && /картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет|оформлени/i.test(String(item.content || "")));
+        const assistantCollectedCustomDetails = askedOrderTopics.size >= 3 && userDetailTurns >= 3 && userClearlyWantsCustomWork;
         const startsCustomWorkOrder = (/^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\s]*)?(?:(?:я\s+)?хочу\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\s+(?:нужно|надо)|давайте|помогите(?:\s+мне)?|можно(?:\s+мне)?)\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\s+(?:мне\s+)?(?:индивидуальн[а-яё]*\s+)?заказ|закаж[а-яё]*\s+мне|(?:нужен|нужна|нужно)\s+(?:индивидуальн[а-яё]*\s+)?заказ|(?:я\s+)?хочу\s+(?:индивидуальн[а-яё]*\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
           && !/^(?:(?:если|когда)\s+я\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\s+)?не\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message)) || assistantCollectedCustomDetails;
         if (conversationControl?.mode === "human" && !startsCustomWorkOrder) {
@@ -3789,7 +3792,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
             // явный запрос покупателя останется в разделе «Незавершённые».
             let createdCraftDraft = false;
             if (!activeCraftDraft) {
-              const initialSubject = String(message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+              const initialSubject = String(draftConversation.find(item => item.role === "user")?.content || message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
               draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
                 ai_enabled: true, order_intent: true, summary: message.slice(0,2000), conversation: draftConversation.slice(-24) };
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'collecting')")
