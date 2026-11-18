@@ -1437,7 +1437,18 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #gamesView .game-stage-head b{color:var(--gold2)}
 #gamesView .game-options{display:grid;grid-template-columns:1fr;gap:10px;margin-top:16px}
 #gamesView .game-options button{min-height:48px;text-align:left;white-space:normal}
-#adminGamesPanel textarea{width:100%;min-height:340px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;tab-size:2}
+#adminGamesPanel .game-admin-toggle{display:flex;align-items:center;gap:10px;margin:12px 0;font-weight:700}
+#adminGamesPanel .game-admin-secret{display:grid;grid-template-columns:1fr;gap:12px;margin:14px 0}
+#adminGamesPanel .game-admin-level{border:1px solid var(--line);border-radius:14px;padding:12px;margin:12px 0;background:var(--panel)}
+#adminGamesPanel .game-admin-level summary{font-weight:800;cursor:pointer;padding:4px}
+#adminGamesPanel .game-admin-stage-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+#adminGamesPanel .game-admin-stage{border:1px solid var(--line);border-radius:12px;padding:12px}
+#adminGamesPanel .game-admin-stage h4{margin:0 0 10px}
+#adminGamesPanel .game-admin-stage label,#adminGamesPanel .game-admin-secret label{display:grid;gap:6px;margin:9px 0;font-size:12px}
+#adminGamesPanel .game-admin-options{display:grid;grid-template-columns:1fr;gap:8px}
+#adminGamesPanel textarea{width:100%;min-height:72px;resize:vertical}
+#gamesView .game-reward-history{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+@media(min-width:650px){#adminGamesPanel .game-admin-secret{grid-template-columns:repeat(2,minmax(0,1fr))}#adminGamesPanel .game-admin-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#adminGamesPanel .game-admin-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:650px){#gamesView .game-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
@@ -1498,8 +1509,12 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div class="panel" id="adminGamesPanel">
   <h3>🎮 Управление играми</h3>
   <p class="notice">Настройте 4 последовательных уровня, по 4 этапа в каждом, включение игры и единственную активную картину Радужного SECRET пака. Сохранение выполняется в D1.</p>
-  <label for="adminGamesConfigJson">Конфигурация игры (JSON)</label>
-  <textarea id="adminGamesConfigJson" rows="22" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+  <label class="game-admin-toggle"><input id="adminGamesEnabled" type="checkbox"> Включить игру для покупателей</label>
+  <div class="game-admin-secret">
+   <label>Название активной картины<input id="adminGamesSecretTitle" type="text" maxlength="100" placeholder="Радужный SECRET пак"></label>
+   <label>HTTPS-ссылка на картину<input id="adminGamesSecretImage" type="url" maxlength="1000" placeholder="https://..."></label>
+  </div>
+  <div id="adminGamesEditor"></div>
   <div class="row-actions"><button class="secondary" type="button" onclick="loadAdminGamesConfig()">Загрузить настройки</button><button class="primary" type="button" onclick="saveAdminGamesConfig()">Сохранить настройки</button></div>
   <p id="adminGamesConfigStatus" class="notice" aria-live="polite">Настройки ещё не загружены.</p>
  </div>
@@ -4262,18 +4277,50 @@ function gameConfigTemplate(){
  const names=['Деревянный','Серебряный','Золотой','Рубиновый'];
  return {enabled:false,levels:names.map(title=>({title,stages:Array.from({length:4},()=>({prompt:'',options:['',''],correct_option:0}))})),active_secret:{title:'Радужный SECRET пак',image_url:''}};
 }
+function renderAdminGamesEditor(config){
+ const root=document.getElementById('adminGamesEditor');if(!root)return;
+ const names=['Деревянный','Серебряный','Золотой','Рубиновый'];
+ root.innerHTML=(config.levels||[]).map((level,li)=>'<details class="game-admin-level" '+(li===0?'open':'')+'><summary>'+names[li]+' уровень · 4 этапа</summary><div class="game-admin-stage-grid">'+(level.stages||[]).map((stage,si)=>{
+  const options=Array.isArray(stage.options)?stage.options:[];
+  const count=Math.min(6,Math.max(4,options.length));
+  return '<div class="game-admin-stage"><h4>Этап '+(si+1)+'</h4><label>Условие<textarea rows="3" maxlength="700" data-stage-prompt="'+li+'-'+si+'">'+escapeHtml(stage.prompt||'')+'</textarea></label><div class="game-admin-options">'+Array.from({length:count},(_,oi)=>'<label>Вариант '+(oi+1)+'<input type="text" maxlength="120" data-stage-option="'+li+'-'+si+'-'+oi+'" value="'+escapeHtml(options[oi]||'')+'"></label>').join('')+'</div><label>Правильный ответ<select data-stage-correct="'+li+'-'+si+'">'+Array.from({length:count},(_,oi)=>'<option value="'+oi+'" '+(Number(stage.correct_option)===oi?'selected':'')+'>Вариант '+(oi+1)+'</option>').join('')+'</select></label></div>';
+ }).join('')+'</div></details>').join('');
+}
 async function loadAdminGamesConfig(){
- const status=document.getElementById('adminGamesConfigStatus'),field=document.getElementById('adminGamesConfigJson');if(!field)return;
- if(status)status.textContent='Загружаем настройки из D1…';
- try{const d=await apiFetch('/api/admin/games/config');field.value=JSON.stringify(d.config||gameConfigTemplate(),null,2);if(status)status.textContent='Настройки загружены из D1.';}
- catch(e){if(status)status.textContent=e.message||'Не удалось загрузить настройки.';}
+ const status=document.getElementById('adminGamesConfigStatus');if(!status)return;
+ status.textContent='Загружаем настройки из D1…';
+ try{
+  const d=await apiFetch('/api/admin/games/config'),config=d.config||gameConfigTemplate();
+  document.getElementById('adminGamesEnabled').checked=config.enabled===true;
+  document.getElementById('adminGamesSecretTitle').value=config.active_secret?.title||'Радужный SECRET пак';
+  document.getElementById('adminGamesSecretImage').value=config.active_secret?.image_url||'';
+  renderAdminGamesEditor(config);status.textContent='Настройки загружены из D1.';
+ }catch(e){status.textContent=e.message||'Не удалось загрузить настройки.';}
 }
 async function saveAdminGamesConfig(){
- const field=document.getElementById('adminGamesConfigJson'),status=document.getElementById('adminGamesConfigStatus');if(!field)return;
- let config;try{config=JSON.parse(field.value);}catch(e){if(status)status.textContent='Ошибка JSON: '+e.message;return;}
- if(!confirm('Сохранить настройки игры в D1?'))return;
- try{const d=await apiFetch('/api/admin/games/config',{method:'POST',body:JSON.stringify({config})});field.value=JSON.stringify(d.config,null,2);if(status)status.textContent='Сохранено. '+(config.enabled?'Игра включена.':'Игра выключена.');toast('Настройки игр сохранены.');}
- catch(e){if(status)status.textContent=e.message||'Не удалось сохранить настройки.';}
+ const status=document.getElementById('adminGamesConfigStatus');if(!status)return;
+ const names=['Деревянный','Серебряный','Золотой','Рубиновый'];
+ const config={enabled:document.getElementById('adminGamesEnabled').checked,active_secret:{title:document.getElementById('adminGamesSecretTitle').value.trim(),image_url:document.getElementById('adminGamesSecretImage').value.trim()},levels:[]};
+ for(let li=0;li<4;li++){
+  const stages=[];
+  for(let si=0;si<4;si++){
+   const prompt=document.querySelector('[data-stage-prompt="'+li+'-'+si+'"]')?.value||'';
+   const entries=[];
+   for(let oi=0;oi<6;oi++){
+    const field=document.querySelector('[data-stage-option="'+li+'-'+si+'-'+oi+'"]');
+    if(field&&field.value.trim())entries.push({slot:oi,value:field.value.trim()});
+   }
+   const selected=Number(document.querySelector('[data-stage-correct="'+li+'-'+si+'"]')?.value||0);
+   stages.push({prompt,options:entries.map(x=>x.value),correct_option:Math.max(0,entries.findIndex(x=>x.slot===selected))});
+  }
+  config.levels.push({title:names[li],stages});
+ }
+ if(!confirm('Сохранить 4 уровня и 16 этапов в D1?'))return;
+ status.textContent='Проверяем и сохраняем настройки…';
+ try{
+  const d=await apiFetch('/api/admin/games/config',{method:'POST',body:JSON.stringify({config})});
+  renderAdminGamesEditor(d.config);status.textContent='Сохранено. '+(config.enabled?'Игра включена.':'Игра выключена.');toast('Настройки игр сохранены.');
+ }catch(e){status.textContent=e.message||'Не удалось сохранить настройки.';}
 }
 
 async function apiFetch(path,options={}) {
