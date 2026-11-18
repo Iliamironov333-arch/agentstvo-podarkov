@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS game_progress (
   stage_index INTEGER NOT NULL DEFAULT 0 CHECK(stage_index BETWEEN 0 AND 3),
   loss_count INTEGER NOT NULL DEFAULT 0 CHECK(loss_count >= 0),
   status TEXT NOT NULL DEFAULT 'idle' CHECK(status IN ('idle','playing','lost','completed')),
+  reward_json TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(telegram_id,game_key),
   FOREIGN KEY(telegram_id) REFERENCES users(telegram_id)
