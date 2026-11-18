@@ -1462,6 +1462,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выберите раздел</span></div>
  <div class="menu-grid">
+  <button class="menu-card" onclick="loadGamesView()"><strong>🎮 Игры и испытания</strong><span>Четыре уровня · 16 этапов</span></button>
   <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
   <button class="menu-card" onclick="openCustomWizard()"><strong>🎨 Создать своё</strong><span>Индивидуальная работа за 8 шагов</span></button>
   <button class="menu-card" onclick="showView('vipView')"><strong>👑 VIP-подписка</strong><span>VIP-поддержка и ассистент</span></button>
@@ -1476,10 +1477,24 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
   <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Open admin panel"><span>ADMIN</span></button>
  </div>
 </section>
+<section id="gamesView" class="hidden">
+ <div class="sectionhead"><h2>🎮 Игры и испытания</h2><button class="secondary" type="button" onclick="loadGamesView()">↻ Обновить</button></div>
+ <div class="hero"><small>Четыре последовательных уровня</small><h2>Путь к Радужному SECRET паку</h2><p>Пройдите 16 этапов: Деревянный, Серебряный, Золотой и Рубиновый. Для продолжения после поражения используются GAME-купоны.</p></div>
+ <div id="gamesStatus" class="notice" aria-live="polite">Загружаем игровую систему…</div>
+ <div id="gamesContent" class="panel"></div>
+</section>
 <section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Репутация и ранги</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="row-actions"><button id="leaderboardTabButton" class="primary" type="button" onclick="showLeaderboardSection('leaders')">🏆 Таблица лидеров</button><button id="ranksTabButton" class="secondary" type="button" onclick="showLeaderboardSection('ranks')">🎖️ Посмотреть ранги</button></div><div id="publicLeaderboardSection"><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Учитываются баллы репутации, заработанные за текущий календарный месяц. Пустые места не дают наград.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div class="panel"><p id="leaderboardParticipationText" class="muted">Проверяем участие в рейтинге…</p><button id="leaderboardParticipationButton" class="secondary" type="button" onclick="toggleLeaderboardParticipation()" disabled>Загрузка…</button></div><div id="publicLeaderboardList" class="panel"></div></div><div id="publicRanksSection" class="hidden"><div class="hero"><small>Ваш ранг и другие участники</small><h2>Система рангов</h2><p>Посмотрите свой ранг, скидку и ранги остальных клиентов Агентства подарков.</p></div><div id="publicRanksStatus" class="notice" aria-live="polite">Загрузка рангов…</div><div id="publicMyRank" class="panel"></div><div id="publicRanksList" class="panel"></div></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
 <section id="adminPanelView" class="hidden">
  <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
+ <div class="panel" id="adminGamesPanel">
+  <h3>🎮 Управление играми</h3>
+  <p class="notice">Настройте 4 последовательных уровня, по 4 этапа в каждом, включение игры и единственную активную картину Радужного SECRET пака. Сохранение выполняется в D1.</p>
+  <label for="adminGamesConfigJson">Конфигурация игры (JSON)</label>
+  <textarea id="adminGamesConfigJson" rows="22" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+  <div class="row-actions"><button class="secondary" type="button" onclick="loadAdminGamesConfig()">Загрузить настройки</button><button class="primary" type="button" onclick="saveAdminGamesConfig()">Сохранить настройки</button></div>
+  <p id="adminGamesConfigStatus" class="notice" aria-live="polite">Настройки ещё не загружены.</p>
+ </div>
  <div class="panel" id="adminStaffPanel" hidden>
   <h3>🛡️ Должности и права доступа</h3>
   <p class="notice">Управление доступно владельцу. Модератору можно выдавать и отзывать каждое разрешение отдельно.</p>
@@ -1966,7 +1981,7 @@ let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
 try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));window.pendingGiftBundlePriority=localStorage.getItem('gift-pending-bundle-priority')==='1';}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
-const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','dealsView','aboutView','leaderboardView'];
+const allViews = ['gamesView','menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','supportView','balanceView','profileView','dealsView','aboutView','leaderboardView'];
 
 // Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
 document.addEventListener('click', event => {
@@ -1980,19 +1995,20 @@ function initAdminCategories(){
  const root=document.getElementById('adminPanelView');if(!root||root.dataset.categoriesReady==='1')return;
  const hero=root.querySelector(':scope > .hero');if(!hero)return;
  const nav=document.createElement('div');nav.className='admin-category-nav';nav.setAttribute('aria-label','Разделы панели владельца');
- const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['reputation','🏆 Ранги и репутация','Ранги, баллы и таблица лидеров'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','🤖 ИИ-заказы','Переписки, обращения и заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
+ const definitions=[['store','🛍️ Магазин','Добавление и редактирование поделок'],['photos','📸 Фотостудия','Загрузка и очистка фотографий товаров'],['cheats','🎛️ Чит-панель','Включение и отключение функций'],['marketing','📣 Маркетинг','Рекламные слайды, опросы и рассылки'],['operations','👤 Пользователи','Карточки покупателей и доступы'],['games','🎮 Игры','Уровни, этапы и SECRET-награда'],['reputation','🏆 Ранги и репутация','Ранги, баллы и таблица лидеров'],['ai','🤖 ИИ-бот','Настройки модерации и поведения'],['aiorders','🤖 ИИ-заказы','Переписки, обращения и заказы из Mini App и групп'],['reports','📊 Отчёты','Еженедельная аналитика'],['server','🖥️ Серверная часть','D1, резервные копии, Mini App и webhook']];
  const sections={};
  definitions.forEach(([key,title,subtitle])=>{
   const button=document.createElement('button');button.type='button';button.innerHTML=title+'<small>'+subtitle+'</small>';button.onclick=()=>showAdminCategory(key);button.dataset.category=key;nav.appendChild(button);
   const section=document.createElement('div');section.className='admin-category-section';section.dataset.category=key;section.classList.toggle('hidden',key!=='operations');sections[key]=section;
  });
  hero.after(nav);
- let anchor=nav;for(const key of ['store','photos','cheats','marketing','operations','reputation','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
+ let anchor=nav;for(const key of ['store','photos','cheats','marketing','operations','games','reputation','ai','aiorders','reports','server']){anchor.after(sections[key]);anchor=sections[key];}
  const returnButton=Array.from(root.children).find(el=>el.tagName==='BUTTON'&&el.textContent.includes('Вернуться в главное меню'));
  const original=Array.from(root.children).filter(el=>el!==hero&&el!==nav&&!Object.values(sections).includes(el)&&el!==returnButton);
  original.forEach(node=>{
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
-  if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
+  if(id==='adminGamesPanel')key='games';
+  else if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
   else if(id==='adminUiMotionPanel'||id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
   else if(id==='adminSupportPanel')key='aiorders';
@@ -2216,6 +2232,7 @@ function showView(id) {
  if (id === 'leaderboardView') loadPublicLeaderboard();
  if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
+ if (id === 'adminPanelView') loadAdminGamesConfig();
 }
 
 function openBot(action) {
@@ -4179,6 +4196,73 @@ async function saveAdminStaffPermissions(){
   await apiFetch('/api/admin/staff/permissions',{method:'POST',body:JSON.stringify({telegram_id:adminStaffSelected.telegram_id,permissions})});
   toast('Права модератора сохранены.');await loadAdminStaff();
  }catch(e){toast(e.message||'Не удалось сохранить права.');}
+}
+
+function renderGameStage(data){
+ const root=document.getElementById('gamesContent');if(!root)return;
+ const stage=data.stage;
+ if(!stage){root.innerHTML='<p class="muted">Владелец ещё не настроил этапы игры.</p>';return;}
+ const p=data.progress||{};
+ const level=(data.levels||[])[Number(p.level_index)||0];
+ root.innerHTML='<div class="game-stage-head"><b>'+escapeHtml(level?.title||'Уровень')+'</b><span>Этап '+(Number(p.stage_index||0)+1)+' из 4</span></div><h3>'+escapeHtml(stage.prompt)+'</h3><div class="game-options">'+stage.options.map((option,index)=>'<button class="secondary" type="button" data-game-answer="'+index+'">'+escapeHtml(option)+'</button>').join('')+'</div>';
+ root.querySelectorAll('[data-game-answer]').forEach(button=>button.addEventListener('click',()=>submitGameAnswer(Number(button.dataset.gameAnswer))));
+}
+async function loadGamesView(){
+ showView('gamesView');
+ const status=document.getElementById('gamesStatus'),root=document.getElementById('gamesContent');if(!status||!root)return;
+ status.textContent='Загружаем состояние игры…';
+ try{
+  const data=await apiFetch('/api/games/state');
+  if(!data.enabled){status.textContent='Игра пока выключена владельцем.';root.innerHTML='<p class="muted">Испытания появятся после настройки игры.</p>';return;}
+  status.textContent='Ваши GAME-купоны: '+Number(data.game_coupons||0)+' шт.';
+  const p=data.progress;
+  if(!p||p.status==='idle'||p.status==='completed'){
+   if(p?.status==='completed'&&data.secret_unlocked?.image_url)root.innerHTML='<h3>🏆 Все 16 этапов пройдены!</h3><p>Вы открыли картину: <b>'+escapeHtml(data.secret_unlocked.title||'Радужный SECRET пак')+'</b></p><img src="'+escapeHtml(data.secret_unlocked.image_url)+'" alt="SECRET-награда" style="width:100%;max-width:360px;border-radius:16px">';
+   else if(p?.status==='completed')root.innerHTML='<h3>🏆 Прохождение завершено!</h3><p>Владелец ещё не назначил картину для SECRET-награды.</p>';
+   else root.innerHTML='<h3>Готовы начать?</h3><p>Первое прохождение начинается без списания GAME-купонов.</p><button class="primary" type="button" id="gameStartButton">Начать игру</button>';
+   document.getElementById('gameStartButton')?.addEventListener('click',startGame);
+  }else if(p.status==='lost'){
+   const cost=Number(data.continue_cost||Number(p.loss_count)+1);
+   root.innerHTML='<h3>⛔ Этап не пройден</h3><p>Поражений в этом прохождении: '+Number(p.loss_count||0)+'. Для продолжения требуется <b>'+cost+' GAME-купона</b>.</p><button class="primary" type="button" id="gameContinueButton" '+(Number(data.game_coupons)<cost?'disabled':'')+'>Продолжить за '+cost+' купона</button>';
+   document.getElementById('gameContinueButton')?.addEventListener('click',continueGame);
+  }else renderGameStage(data);
+ }catch(error){status.textContent=error.message||'Не удалось загрузить игру.';root.innerHTML='';}
+}
+async function startGame(){
+ try{const d=await apiFetch('/api/games/start',{method:'POST',body:'{}'});renderGameStage(d);document.getElementById('gamesStatus').textContent='Прохождение началось. Удачи!';}
+ catch(e){toast(e.message||'Не удалось начать игру.');}
+}
+async function continueGame(){
+ const button=document.getElementById('gameContinueButton');if(button)button.disabled=true;
+ try{const d=await apiFetch('/api/games/continue',{method:'POST',body:'{}'});document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d);}
+ catch(e){toast(e.message||'Не удалось продолжить.');if(button)button.disabled=false;}
+}
+async function submitGameAnswer(answerIndex){
+ document.querySelectorAll('[data-game-answer]').forEach(button=>button.disabled=true);
+ try{
+  const d=await apiFetch('/api/games/answer',{method:'POST',body:JSON.stringify({answer_index:answerIndex,idempotency_key:'ans_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)})});
+  if(d.correct){
+   if(d.status==='completed'){document.getElementById('gamesStatus').textContent='🏆 Все уровни пройдены!';await loadGamesView();}
+   else{document.getElementById('gamesStatus').textContent='Верно! Переходим к следующему этапу.';renderGameStage(d);}
+  }else{document.getElementById('gamesStatus').textContent='Ответ не подошёл. Для продолжения понадобится '+d.continue_cost+' GAME-купона.';await loadGamesView();}
+ }catch(e){toast(e.message||'Не удалось проверить ответ.');await loadGamesView();}
+}
+function gameConfigTemplate(){
+ const names=['Деревянный','Серебряный','Золотой','Рубиновый'];
+ return {enabled:false,levels:names.map(title=>({title,stages:Array.from({length:4},()=>({prompt:'',options:['',''],correct_option:0}))})),active_secret:{title:'Радужный SECRET пак',image_url:''}};
+}
+async function loadAdminGamesConfig(){
+ const status=document.getElementById('adminGamesConfigStatus'),field=document.getElementById('adminGamesConfigJson');if(!field)return;
+ if(status)status.textContent='Загружаем настройки из D1…';
+ try{const d=await apiFetch('/api/admin/games/config');field.value=JSON.stringify(d.config||gameConfigTemplate(),null,2);if(status)status.textContent='Настройки загружены из D1.';}
+ catch(e){if(status)status.textContent=e.message||'Не удалось загрузить настройки.';}
+}
+async function saveAdminGamesConfig(){
+ const field=document.getElementById('adminGamesConfigJson'),status=document.getElementById('adminGamesConfigStatus');if(!field)return;
+ let config;try{config=JSON.parse(field.value);}catch(e){if(status)status.textContent='Ошибка JSON: '+e.message;return;}
+ if(!confirm('Сохранить настройки игры в D1?'))return;
+ try{const d=await apiFetch('/api/admin/games/config',{method:'POST',body:JSON.stringify({config})});field.value=JSON.stringify(d.config,null,2);if(status)status.textContent='Сохранено. '+(config.enabled?'Игра включена.':'Игра выключена.');toast('Настройки игр сохранены.');}
+ catch(e){if(status)status.textContent=e.message||'Не удалось сохранить настройки.';}
 }
 
 async function apiFetch(path,options={}) {
