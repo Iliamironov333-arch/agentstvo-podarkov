@@ -4905,7 +4905,7 @@ const BONUS_INVENTORY_DEFINITIONS=[
  {type:"vip_days",key:"vip_days",title:"👑 Подарочная VIP-подписка",unit:"дней",price:10,description:"Каждая единица — один день VIP-подписки."},
  {type:"campaign_priority",key:"campaign_priority",title:"🏁 Приоритетное начало в акции",unit:"шт.",price:60,description:"Используется при участии в акции, которую владелец проводит в офисе."},
  {type:"extra_attempt",key:"extra_attempts",title:"🔄 Дополнительная попытка",unit:"шт.",price:50,description:"Дополнительная попытка в акции при проигрыше."},
- {type:"game_coupon",key:"game_coupons",title:"🎮 GAME-купон",unit:"шт.",price:50,description:"Даёт право начать одно прохождение игрового раздела. Можно использовать для игры или обменять на 50 ⭐."}
+ {type:"game_coupon",key:"game_coupons",title:"🎮 GAME-купон",unit:"шт.",price:50,description:"Используется для продолжения после поражения: сначала 2 купона, затем на 1 больше за каждое следующее поражение в этом прохождении. Можно обменять на 50 ⭐."}
 ];
 function renderBonusInventory(bonuses) {
  const root=document.getElementById("bonusInventory");if(!root)return;root.replaceChildren();
