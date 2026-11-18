@@ -1000,7 +1000,21 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const replied=message.reply_to_message?.from?.is_bot===true;
     const mentionedBot=(message.entities||[]).some(entity=>entity.type==="text_mention"&&entity.user?.is_bot) || (!!env.BOT_USERNAME&&new RegExp("@"+String(env.BOT_USERNAME).replace(/^@/,""),"i").test(text));
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text));
+    const recentOrderMessages=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(chatId,String(user.id)).all();
+    const orderHistory=(recentOrderMessages.results||[]).reverse();
+    const orderTopicsAsked=new Set();
+    for(const item of orderHistory){
+      if(item.role!=="assistant")continue;
+      const question=String(item.content||"").toLowerCase();
+      if(/бюджет|стоимост|цен[уы]|рубл/.test(question))orderTopicsAsked.add("budget");
+      if(/для кого|получател|повод/.test(question))orderTopicsAsked.add("recipient");
+      if(/размер|формат|стил|цвет|гамм/.test(question))orderTopicsAsked.add("appearance");
+      if(/материал|техник|детализац|подробн|сложност/.test(question))orderTopicsAsked.add("craft");
+      if(/срок|к какому числу|когда необходим/.test(question))orderTopicsAsked.add("deadline");
+    }
+    const orderIntentAlreadyExpressed=orderHistory.some(item=>item.role==="user"&&/(хочу|нужн|надо|заказать|закаж|сделать|сделайте|создать|изготовить|нарисовать|нарисуйте|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
+    const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\\b(?:ии|бот|помощник)\\b/i.test(text));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
