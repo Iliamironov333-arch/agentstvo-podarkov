@@ -4274,16 +4274,24 @@ async function startGame(){
 }
 async function continueGame(){
  const button=document.getElementById('gameContinueButton');if(button)button.disabled=true;
- try{const d=await apiFetch('/api/games/continue',{method:'POST',body:JSON.stringify({idempotency_key:'cont_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)})});if(d.already_processed){await loadGamesView();return;}document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d,'game-stage-enter');}
- catch(e){toast(e.message||'Не удалось продолжить.');if(button)button.disabled=false;}
+ const requestKey=window.pendingGameContinueKey||(window.pendingGameContinueKey='cont_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9));
+ try{
+  const d=await apiFetch('/api/games/continue',{method:'POST',body:JSON.stringify({idempotency_key:requestKey})});
+  window.pendingGameContinueKey=null;
+  if(d.already_processed){await loadGamesView();return;}
+  document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';
+  renderGameStage(d,'game-stage-enter');
+ }catch(e){toast(e.message||'Не удалось продолжить.');await loadGamesView();}
 }
 async function exitGame(){
  const button=document.getElementById('gameExitButton');if(button)button.disabled=true;
+ const requestKey=window.pendingGameExitKey||(window.pendingGameExitKey='exit_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9));
  try{
-  await apiFetch('/api/games/exit',{method:'POST',body:JSON.stringify({idempotency_key:'exit_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)})});
+  await apiFetch('/api/games/exit',{method:'POST',body:JSON.stringify({idempotency_key:requestKey})});
+  window.pendingGameExitKey=null;
   document.getElementById('gamesStatus').textContent='Вы вышли из прохождения. При новой игре счётчик поражений начнётся заново.';
   await loadGamesView();
- }catch(e){toast(e.message||'Не удалось выйти из игры.');if(button)button.disabled=false;}
+ }catch(e){toast(e.message||'Не удалось выйти из игры.');await loadGamesView();}
 }
 async function submitGameAnswer(answerIndex){
  document.querySelectorAll('[data-game-answer]').forEach(button=>button.disabled=true);
