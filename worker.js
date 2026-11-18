@@ -2798,7 +2798,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const answer=Number(body.answer_index);
         const key=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,80):"";
         if(!Number.isSafeInteger(answer)||answer<0||! /^[a-zA-Z0-9_-]{8,80}$/.test(key))return json({error:"Некорректный ответ."},400,origin);
-        const progress=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
+        const progress=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status,secret_snapshot_json FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
         if(!progress||progress.status!=="playing")return json({error:"Нет активного прохождения."},409,origin);
         const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
         const stage=config.levels[progress.level_index]?.stages[progress.stage_index];
