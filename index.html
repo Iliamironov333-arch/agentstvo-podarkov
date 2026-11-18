@@ -1431,6 +1431,14 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid input[type=range]{width:100%;accent-color:var(--gold);padding:0}
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* GAME area only: isolated from the shop and global theme. */
+#gamesView .game-stage-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+#gamesView .game-stage-head b{color:var(--gold2)}
+#gamesView .game-options{display:grid;grid-template-columns:1fr;gap:10px;margin-top:16px}
+#gamesView .game-options button{min-height:48px;text-align:left;white-space:normal}
+#adminGamesPanel textarea{width:100%;min-height:340px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;tab-size:2}
+@media(min-width:650px){#gamesView .game-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -4203,7 +4211,7 @@ function renderGameStage(data){
  const stage=data.stage;
  if(!stage){root.innerHTML='<p class="muted">Владелец ещё не настроил этапы игры.</p>';return;}
  const p=data.progress||{};
- const level=(data.levels||[])[Number(p.level_index)||0];
+ const level=(data.levels||[])[Number(p.level_index)||0]||{title:['Деревянный','Серебряный','Золотой','Рубиновый'][Number(p.level_index)||0]||'Уровень'};
  root.innerHTML='<div class="game-stage-head"><b>'+escapeHtml(level?.title||'Уровень')+'</b><span>Этап '+(Number(p.stage_index||0)+1)+' из 4</span></div><h3>'+escapeHtml(stage.prompt)+'</h3><div class="game-options">'+stage.options.map((option,index)=>'<button class="secondary" type="button" data-game-answer="'+index+'">'+escapeHtml(option)+'</button>').join('')+'</div>';
  root.querySelectorAll('[data-game-answer]').forEach(button=>button.addEventListener('click',()=>submitGameAnswer(Number(button.dataset.gameAnswer))));
 }
