@@ -1697,17 +1697,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
             optionalTableRows(env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId), "user_blocks"),
             optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND created_at>=datetime('now','-90 days') ORDER BY id DESC LIMIT 100").bind(targetId), "admin_action_log"),
-            optionalTableRows(env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId), "user_bonus_balances")
+            optionalTableRows(env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(targetId), "user_bonus_balances")
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          const bonuses = bonusBalances.results?.[0] || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
+          const bonuses = bonusBalances.results?.[0] || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0,game_coupons:0};
           return json({ ok: true, user: profile, bonuses, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending || bonusBalances.migration_pending) }, 200, origin);
         }
         if (path === "/api/admin/user-bonuses" && method === "POST") {
           if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Сначала примените миграцию 0027_user_bonus_system.sql."},503,origin);
           const body=await readJson(request);
           const targetId=typeof body.telegram_id==="string"?body.telegram_id.trim().slice(0,64):"";
-          const fields={priority_order_coupons:"priority_order",vip_days:"vip_days",campaign_priority:"campaign_priority",extra_attempts:"extra_attempt"};
+          const fields={priority_order_coupons:"priority_order",vip_days:"vip_days",campaign_priority:"campaign_priority",extra_attempts:"extra_attempt",game_coupons:"game_coupon"};
           const values={};
           for(const key of Object.keys(fields)){
             const value=body[key]===undefined?0:Number(body[key]);
@@ -1721,15 +1721,15 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(!target)return json({error:"Пользователь не найден."},404,origin);
           const operationId=makeId();
           const results=await env.DB.batch([
-            env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons,vip_days,campaign_priority,extra_attempts,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=user_bonus_balances.priority_order_coupons+excluded.priority_order_coupons,vip_days=user_bonus_balances.vip_days+excluded.vip_days,campaign_priority=user_bonus_balances.campaign_priority+excluded.campaign_priority,extra_attempts=user_bonus_balances.extra_attempts+excluded.extra_attempts,updated_at=CURRENT_TIMESTAMP")
-              .bind(targetId,values.priority_order_coupons,values.vip_days,values.campaign_priority,values.extra_attempts),
+            env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=user_bonus_balances.priority_order_coupons+excluded.priority_order_coupons,vip_days=user_bonus_balances.vip_days+excluded.vip_days,campaign_priority=user_bonus_balances.campaign_priority+excluded.campaign_priority,extra_attempts=user_bonus_balances.extra_attempts+excluded.extra_attempts,game_coupons=user_bonus_balances.game_coupons+excluded.game_coupons,updated_at=CURRENT_TIMESTAMP")
+              .bind(targetId,values.priority_order_coupons,values.vip_days,values.campaign_priority,values.extra_attempts,values.game_coupons),
             ...Object.entries(fields).map(([key,type])=>env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) SELECT ?,?, ?,?,'grant',0,? WHERE ?>0")
               .bind(targetId,telegramId,type,values[key],"bonus-grant:"+operationId+":"+type,values[key])),
             env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)")
               .bind(telegramId,targetId,"bonuses_granted",JSON.stringify({operation_id:operationId,bonuses:values}))
           ]);
           if(results[0]?.meta?.changes!==1)return json({error:"Не удалось выдать бонусы. Данные не изменены."},409,origin);
-          const current=await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId).first();
+          const current=await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(targetId).first();
           return json({ok:true,telegram_id:targetId,bonuses:current},200,origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
@@ -2729,9 +2729,9 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const rankRow = await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
         const customerRank = reputationRank(rankRow?.rank_code);
         const bonusRow = await tableExists(env,"user_bonus_balances")
-          ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+          ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
           : null;
-        const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
+        const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0,game_coupons:0};
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
@@ -3189,7 +3189,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           priority_order:{column:"priority_order_coupons",label:"Купон на приоритетный заказ",price:50,unit:"шт."},
           vip_days:{column:"vip_days",label:"Подарочная VIP-подписка",price:10,unit:"дн."},
           campaign_priority:{column:"campaign_priority",label:"Приоритетное начало в акции",price:60,unit:"шт."},
-          extra_attempt:{column:"extra_attempts",label:"Дополнительная попытка",price:50,unit:"шт."}
+          extra_attempt:{column:"extra_attempts",label:"Дополнительная попытка",price:50,unit:"шт."},
+          game_coupon:{column:"game_coupons",label:"GAME-купон",price:50,unit:"шт."}
         };
         const bonus=definitions[type];
         if(!bonus)return json({error:"Выберите корректный бонус."},400,origin);
@@ -3211,7 +3212,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно бонусов для продажи. Обновите профиль."},409,origin);
         const [latest,inventory]=await Promise.all([
           env.DB.prepare("SELECT balance_stars,first_name,username FROM users WHERE telegram_id=?").bind(telegramId).first(),
-          env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+          env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
         ]);
         const buyerName=latest?.first_name||user.first_name||"Покупатель";
         await notifyOwner(env,"💰 ПРОДАЖА БОНУСОВ\nПокупатель: "+buyerName+(latest?.username?" (@"+latest.username+")":"")+"\nTelegram ID: "+telegramId+"\nБонус: "+bonus.label+"\nКоличество: "+quantity+" "+bonus.unit+"\nНачислено: "+amount+" ⭐");
