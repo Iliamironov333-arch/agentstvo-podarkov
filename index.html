@@ -4225,8 +4225,8 @@ async function loadGamesView(){
   status.textContent='Ваши GAME-купоны: '+Number(data.game_coupons||0)+' шт.';
   const p=data.progress;
   if(!p||p.status==='idle'||p.status==='completed'){
-   if(p?.status==='completed'&&data.secret_unlocked?.image_url)root.innerHTML='<h3>🏆 Все 16 этапов пройдены!</h3><p>Вы открыли картину: <b>'+escapeHtml(data.secret_unlocked.title||'Радужный SECRET пак')+'</b></p><img src="'+escapeHtml(data.secret_unlocked.image_url)+'" alt="SECRET-награда" style="width:100%;max-width:360px;border-radius:16px">';
-   else if(p?.status==='completed')root.innerHTML='<h3>🏆 Прохождение завершено!</h3><p>Владелец ещё не назначил картину для SECRET-награды.</p>';
+   if(p?.status==='completed'&&data.secret_unlocked?.image_url)root.innerHTML='<h3>🏆 Все 16 этапов пройдены!</h3><p>Ваша награда: <b>'+escapeHtml(data.secret_unlocked.title||'Радужный SECRET пак')+'</b></p><img src="'+escapeHtml(data.secret_unlocked.image_url)+'" alt="SECRET-награда" style="width:100%;max-width:360px;border-radius:16px"><button class="primary" type="button" id="gameStartButton">Начать новую игру</button>';
+   else if(p?.status==='completed')root.innerHTML='<h3>🏆 Прохождение завершено!</h3><p>Награда сохранена в истории. Владелец ещё не назначил картину для SECRET-пака.</p><button class="primary" type="button" id="gameStartButton">Начать новую игру</button>';
    else root.innerHTML='<h3>Готовы начать?</h3><p>Первое прохождение начинается без списания GAME-купонов.</p><button class="primary" type="button" id="gameStartButton">Начать игру</button>';
    document.getElementById('gameStartButton')?.addEventListener('click',startGame);
   }else if(p.status==='lost'){
@@ -4234,6 +4234,9 @@ async function loadGamesView(){
    root.innerHTML='<h3>⛔ Этап не пройден</h3><p>Поражений в этом прохождении: '+Number(p.loss_count||0)+'. Для продолжения требуется <b>'+cost+' GAME-купона</b>.</p><button class="primary" type="button" id="gameContinueButton" '+(Number(data.game_coupons)<cost?'disabled':'')+'>Продолжить за '+cost+' купона</button>';
    document.getElementById('gameContinueButton')?.addEventListener('click',continueGame);
   }else renderGameStage(data);
+  if((data.rewards||[]).length){
+   const gallery=document.createElement('div');gallery.className='game-reward-history';gallery.innerHTML='<h3>🎁 Полученные картины</h3>'+data.rewards.map(reward=>'<div class="lineitem"><span><b>'+escapeHtml(reward.reward_title)+'</b><br><small>'+formatDate(reward.created_at)+'</small></span><a href="'+escapeHtml(reward.image_url)+'" target="_blank" rel="noopener">Открыть</a></div>').join('');root.append(gallery);
+  }
  }catch(error){status.textContent=error.message||'Не удалось загрузить игру.';root.innerHTML='';}
 }
 async function startGame(){
