@@ -3745,8 +3745,8 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         }
         const userDetailTurns = supportContextHistory.filter(item => item.role === "user" && String(item.content || "").trim().length >= 8).length;
         const assistantCollectedCustomDetails = askedOrderTopics.size >= 3 && userDetailTurns >= 3;
-        const startsCustomWorkOrder = (/^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\\s]*)?(?:(?:я\\s+)?хочу\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\\s+(?:нужно|надо)|давайте|помогите(?:\\s+мне)?|можно(?:\\s+мне)?)\\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\\s+(?:мне\\s+)?(?:индивидуальн[а-яё]*\\s+)?заказ|закаж[а-яё]*\\s+мне|(?:нужен|нужна|нужно)\\s+(?:индивидуальн[а-яё]*\\s+)?заказ|(?:я\\s+)?хочу\\s+(?:индивидуальн[а-яё]*\\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
-          && !/^(?:(?:если|когда)\\s+я\\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\\s+)?не\\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message)) || assistantCollectedCustomDetails;
+        const startsCustomWorkOrder = (/^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\s]*)?(?:(?:я\s+)?хочу\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\s+(?:нужно|надо)|давайте|помогите(?:\s+мне)?|можно(?:\s+мне)?)\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\s+(?:мне\s+)?(?:индивидуальн[а-яё]*\s+)?заказ|закаж[а-яё]*\s+мне|(?:нужен|нужна|нужно)\s+(?:индивидуальн[а-яё]*\s+)?заказ|(?:я\s+)?хочу\s+(?:индивидуальн[а-яё]*\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
+          && !/^(?:(?:если|когда)\s+я\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\s+)?не\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message)) || assistantCollectedCustomDetails;
         if (conversationControl?.mode === "human" && !startsCustomWorkOrder) {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
           const reply = "Сообщение передано владельцу. ИИ-помощник временно приостановлен.";
@@ -3772,8 +3772,6 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
                 role: ["user","assistant","owner"].includes(item.role) ? item.role : "user",
                 content: String(item.content || "").slice(0,1500)
               }));
-            } else if (draftConversation[draftConversation.length - 1]?.content !== message) {
-              draftConversation.push({ role: "user", content: message.slice(0,700) });
             }
             if(activeCraftDraft){
  const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,draftDetails,activeCraftDraft.estimated_stars||0);
@@ -3786,7 +3784,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
   return json({ok:true,reply:promoResult.reply,vip:!!vip,saved:true,conversation_id:conversationId,order_draft:true,draft_id:draftId,offer_pending:draftDetails.proposal_pending_customer===true,estimated_stars:activeCraftDraft.estimated_stars||0,status:"collecting"},200,origin);
  }
 }
-            draftConversation.push({ role: "user", content: message.slice(0,700) });
+            if (draftConversation[draftConversation.length - 1]?.content !== message) draftConversation.push({ role: "user", content: message.slice(0,700) });
             // Сначала сохраняем черновик, затем вызываем ИИ: даже при временной ошибке модели
             // явный запрос покупателя останется в разделе «Незавершённые».
             let createdCraftDraft = false;
