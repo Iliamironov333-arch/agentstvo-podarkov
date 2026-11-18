@@ -2776,8 +2776,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
         const config=parseGameConfig(configRow?.config_json);
         if(!config.enabled)return json({error:"Игра временно отключена владельцем."},403,origin);
-        const current=await env.DB.prepare("SELECT status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-        if(current?.status==="playing")return json({error:"У Вас уже есть активное прохождение. Продолжите его."},409,origin);
+        const current=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
+        if(current?.status==="playing")return json({ok:true,already_active:true,progress:current,stage:publicGameStage(config.levels[current.level_index]?.stages[current.stage_index])},200,origin);
         if(current?.status==="lost")return json({error:"Сначала используйте GAME-купоны, чтобы продолжить это прохождение."},409,origin);
         await env.DB.prepare("INSERT INTO game_progress(telegram_id,game_key,level_index,stage_index,loss_count,status,reward_json,secret_snapshot_json,updated_at) VALUES(?,'main',0,0,0,'playing',NULL,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id,game_key) DO UPDATE SET level_index=0,stage_index=0,loss_count=0,status='playing',reward_json=NULL,secret_snapshot_json=excluded.secret_snapshot_json,updated_at=CURRENT_TIMESTAMP").bind(telegramId,JSON.stringify(config.active_secret)).run();
         return json({ok:true,progress:{level_index:0,stage_index:0,loss_count:0,status:"playing"},stage:publicGameStage(config.levels[0].stages[0])},200,origin);
