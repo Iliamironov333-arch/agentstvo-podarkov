@@ -467,7 +467,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
     "Если клиент ищет готовую работу, сначала проверь реальный каталог и не выдавай придуманные варианты за существующие товары. Если клиент хочет индивидуальную работу на заказ, можешь предложить 2–3 концепции только как идеи будущей работы, прямо обозначая, что это не готовые товары каталога. Предварительная цена индивидуальной работы не является окончательной и подтверждается владельцем.",
     "Не превращай консультацию в мастер-класс: не объясняй, как самостоятельно изготовить работу, и не выдавай пошаговые инструкции. Помогай выбрать и заказать готовую работу Агентства.",
     "Каталог Агентства — обязательный источник истины. Ниже передан актуальный список активных товаров из базы мини-приложения. Если клиент ищет готовый товар, проверяй точные названия и не выдумывай наличие. Если товара нет, честно сообщи об этом только когда клиент именно ищет готовый товар. Если клиент спрашивает, как заказать отсутствующую работу, хочет новую или индивидуальную работу, не отвечай отказом и не отправляй в каталог: такой запрос должен обрабатываться сценарием индивидуального заказа прямо в этом чате.",
-    "Проверенные сведения об Агентстве: готовые работы находятся в каталоге; «ИИ-помощник» самостоятельно консультирует покупателей и помогает оформить индивидуальные заказы прямо в текущем чате; «Мои заказы» показывает статусы и историю; «Мой баланс» показывает баллы и операции; «Пополнить баланс» — оплата Telegram Stars; «VIP-подписка» открывает VIP-возможности; «Скидки и акции» показывает активные предложения; «Поддержка» позволяет связаться с командой; «О проекте» содержит информацию и правила. Не упоминай и не предлагай покупателю раздел «Создать своё» ни при каких обстоятельствах. Если нужной работы нет в каталоге, это повод помочь оформить индивидуальный заказ здесь, а не завершать поиск отказом.",
+    "Проверенные сведения об Агентстве: готовые работы находятся в каталоге; «ИИ-помощник» самостоятельно консультирует покупателей и помогает оформить индивидуальные заказы прямо в текущем чате; «Мои заказы» показывает статусы и историю; «Мой баланс» показывает баллы и операции; «Пополнить баланс» — оплата Telegram Stars; «VIP-подписка» открывает VIP-возможности; «Скидки и акции» показывает активные предложения; «Поддержка» позволяет связаться с командой; «О проекте» содержит информацию и правила. «Создать своё» — отдельный восьмишаговый опрос с выбором параметров поделки, это другой режим и не часть оформления заказа в переписке. Не отправляй покупателя в этот опрос вместо оформления индивидуального заказа в чате. Показывай кнопку опроса только если покупатель прямо спрашивает про него или хочет его открыть. Если нужной работы нет в каталоге, помоги оформить индивидуальный заказ здесь, а не завершай поиск отказом.",
     "Готовая работа: клиент открывает карточку товара, добавляет его в корзину или выбирает «Купить сразу», затем оформляет заказ. Индивидуальная работа: ИИ-помощник собирает пожелания в текущем диалоге, сохраняет черновик заказа, предлагает концепцию и предварительную оценку, затем получает явное согласие покупателя; после согласия заказ передаётся владельцу на проверку. Цена, сроки и возможность выполнения подтверждаются владельцем. Никогда не отправляй покупателя в другой раздел и не проси повторить уже сообщённые сведения.",
     "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
@@ -549,7 +549,31 @@ function normalizeSupportNavigationText(value) {
   return String(value || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/gi, " ").trim();
 }
 
-async function buildSupportNavigationActions(env, message) {
+async function classifySupportNavigationView(env, message, history = []) {
+ if(!env.AI)return null;
+ const allowed=["menuView","catalogView","giftBuilderView","cartView","ordersView","balanceView","profileView","vipView","supportView","aboutView","dealsView","customWizardView"];
+ const context=(Array.isArray(history)?history:[]).slice(-8).map(item=>({role:item.role,content:String(item.content||"").slice(0,700)}));
+ const instructions=[
+  "Ты классификатор намерения навигации мини-приложения «Агентство подарков». Учитывай смысл сообщения и контекст, а не совпадение отдельных слов.",
+  "Верни только JSON-объект с полем view. Допустимые значения: "+allowed.join(", ")+", none.",
+  "Выбирай раздел только если покупатель хочет его открыть, найти, посмотреть, перейти туда или прямо спрашивает, где он находится. Не создавай кнопку для обычного обсуждения темы, если переход не нужен.",
+  "Индивидуальный заказ по новой идее оформляется прямо в текущем чате ИИ-помощника. Не направляй такой запрос в «Создать своё».",
+  "customWizardView разрешён ТОЛЬКО когда покупатель явно спрашивает про отдельный восьмишаговый опрос/анкету «Создать своё» или прямо хочет открыть этот опрос.",
+  "Не используй разделы, которых нет в списке. Не угадывай между похожими разделами; при сомнении верни none."
+ ].join(" ");
+ try{
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input:[...context,{role:"user",content:String(message||"").slice(0,1000)}],max_output_tokens:80})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return null;
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join(" ");
+  const first=output.indexOf("{"),last=output.lastIndexOf("}");
+  if(first<0||last<=first)return null;
+  const parsed=JSON.parse(output.slice(first,last+1));
+  return allowed.includes(parsed.view)?parsed.view:null;
+ }catch(error){console.error("Support navigation intent classification failed:",String(error).slice(0,250));return null;}
+}
+async function buildSupportNavigationActions(env, message, history = []) {
   const text=normalizeSupportNavigationText(message),actions=[];
   const add=action=>{if(actions.length<4&&!actions.some(x=>x.view===action.view&&x.product_id===action.product_id))actions.push(action);};
   let catalog=[];try{catalog=await getProducts(env);}catch(error){console.error("Support catalog lookup failed:",String(error).slice(0,250));}
@@ -569,12 +593,16 @@ async function buildSupportNavigationActions(env, message) {
     if(/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
     if(/(профиль|личный кабинет)/i.test(text))add({label:"👤 Мой профиль",view:"profileView"});
     if(/(vip|вип)/i.test(text))add({label:"👑 VIP",view:"vipView"});
-    if(/(создать индивидуальн.{0,12}заказ|оформить индивидуальн.{0,12}заказ|конструктор индивидуальн.{0,12}заказ)/i.test(text))add({label:"📝 Индивидуальный заказ",view:"customWizardView"});
-    else if(/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text))add({label:"🧵 ИИ-мастерская",view:"aiWorkshopView"});
+    if(/(опрос|анкета|раздел создать свое|открыть создать свое|кнопка создать свое)/i.test(text))add({label:"🎨 Открыть опрос «Создать своё»",view:"customWizardView"});
     if(/(поддержк|помощник|помощники)/i.test(text))add({label:"🤖 ИИ помощник",view:"supportView"});
     if(/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text))add({label:"✉️ Написать владельцу",view:"owner"});
     if(/сертификат/i.test(text)&&/(активир|баланс|начисл)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
     if(/(о проекте|информаци[яю] о проекте|правила)/i.test(text))add({label:"ℹ️ О проекте",view:"aboutView"});
+  }
+  if(actions.length===0){
+    const semanticView=await classifySupportNavigationView(env,message,history);
+    const labels={menuView:"🏠 Главное меню",catalogView:"🎁 Открыть каталог",giftBuilderView:"🎁 Конструктор подарка",cartView:"🛒 Открыть корзину",ordersView:"📦 Мои заказы",balanceView:"⭐ Мой баланс",profileView:"👤 Мой профиль",vipView:"👑 VIP",supportView:"🤖 ИИ помощник",aboutView:"ℹ️ О проекте",dealsView:"🍂 Скидки и акции",customWizardView:"🎨 Открыть опрос «Создать своё»"};
+    if(semanticView&&labels[semanticView])add({label:labels[semanticView],view:semanticView});
   }
   const matched=matchedProduct?{id:String(matchedProduct.id),title:String(matchedProduct.title||""),description:String(matchedProduct.description||"").slice(0,1000),category:String(matchedProduct.category||""),price_stars:Number(matchedProduct.price_stars||0)}:null;
   const catalogContext=catalog.map(item=>({id:String(item.id),title:String(item.title||""),description:String(item.description||"").slice(0,500),category:String(item.category||""),price_stars:Number(item.price_stars||0)}));
@@ -613,13 +641,34 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   }
 }
 
-function isCraftOrderAcceptance(message) {
- const value=String(message||"").trim().toLowerCase().replace(/ё/g,"е").replace(/[!.,;:]+$/g,"").trim();
- return /^(?:да|ага|угу|(?:да,?\s*)?(?:я\s+)?согласен(?:на)?|подтверждаю|оформляй(?:те)?|оформляем|заказываем|беру|подходит|все подходит|(?:да,?\s*)?(?:мне\s+)?(?:все\s+)?(?:подходит|устраивает)|(?:да,?\s*)?давайте оформим|(?:да,?\s*)?давайте закажем|хочу оформить|да,? хочу оформить|можно оформлять|да,? оформляем|да,? заказываем|да,? все подходит|все отлично,? давайте оформим)$/i.test(value);
+async function classifyCraftOrderAcceptance(env, conversation) {
+ if(!env.AI||!Array.isArray(conversation)||!conversation.length)return false;
+ const input=conversation.slice(-12).map(item=>({role:item.role==="owner"?"assistant":item.role,content:String(item.content||"").slice(0,1200)}));
+ const instructions=[
+  "Определи намерение покупателя в контексте предложения индивидуальной поделки.",
+  "Верни только JSON-объект с полем decision. Допустимые значения: accept, revise, question, reject, unclear.",
+  "accept — покупатель ясно согласен именно с предложенным вариантом и предварительной оценкой и хочет передать заказ владельцу на проверку. Короткое «да» может быть согласием, только если из предыдущих сообщений однозначно следует, что это ответ на предложение.",
+  "revise — покупатель хочет изменить хотя бы одну деталь, цену, срок или концепцию; даже если одновременно выражает одобрение.",
+  "question — покупатель задаёт вопрос или просит уточнение, не подтверждая оформление.",
+  "reject — покупатель отказывается от предложения.",
+  "unclear — намерение нельзя уверенно определить.",
+  "Не считай благодарность, похвалу, интерес, вопрос об оплате или согласие продолжить обсуждение подтверждением заказа. Не делай вывод только по одному слову вне истории."
+ ].join(" ");
+ try{
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:100})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return false;
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join(" ");
+  const first=output.indexOf("{"),last=output.lastIndexOf("}");
+  if(first<0||last<=first)return false;
+  const parsed=JSON.parse(output.slice(first,last+1));
+  return parsed.decision==="accept";
+ }catch(error){console.error("Craft order intent classification failed:",String(error).slice(0,250));return false;}
 }
 function buildCraftOfferReply(reply, priceStars) {
  return String(reply||"Предлагаю этот вариант индивидуальной работы.").trim().slice(0,5000)
-  + "\n\nПредварительная оценка: " + Number(priceStars) + " ⭐. Это не окончательная цена — её проверит владелец Агентства.\nЕсли вариант и оценка Вам подходят, напишите «Да, оформляем». Если хотите что-то изменить, просто расскажите что именно.";
+  + "\n\nПредварительная оценка: " + Number(priceStars) + " ⭐. Это не окончательная цена — её проверит владелец Агентства.\nЕсли Вы хотите передать именно этот вариант владельцу на проверку, подтвердите это любыми понятными словами. Если хотите что-то изменить или уточнить, просто напишите об этом.";
 }
 
 async function getGlobalAiToneInstruction(env){
@@ -1004,29 +1053,6 @@ function adminPermissionForPath(path, method) {
       path === "/api/admin/webhook-reconnect") return "system_manage";
   return "owner_only";
 }
-
-function publicGameStage(stage) {
-  if(!stage)return null;
-  return {prompt:String(stage.prompt||""),options:Array.isArray(stage.options)?stage.options.map(value=>String(value)):[]};
-}
-function parseGameConfig(raw) {
-  const fallback={enabled:false,levels:[
-    {title:"Деревянный",stages:[]},{title:"Серебряный",stages:[]},
-    {title:"Золотой",stages:[]},{title:"Рубиновый",stages:[]}
-  ],active_secret:null};
-  try {
-    const value=typeof raw==="string"?JSON.parse(raw):raw;
-    if(!value||!Array.isArray(value.levels)||value.levels.length!==4)return fallback;
-    const levels=value.levels.map((level,index)=>({
-      title:String(level.title||["Деревянный","Серебряный","Золотой","Рубиновый"][index]).slice(0,40),
-      stages:Array.from({length:4},(_,stageIndex)=>{
-        const stage=Array.isArray(level.stages)?level.stages[stageIndex]||{}:{};
-        return {prompt:String(stage.prompt||"").slice(0,700),options:Array.isArray(stage.options)?stage.options.slice(0,6).map(x=>String(x).slice(0,120)):["",""],correct_option:Number.isSafeInteger(Number(stage.correct_option))?Number(stage.correct_option):0};
-      })
-    }));
-    return {enabled:value.enabled===true,levels,active_secret:value.active_secret&&typeof value.active_secret==="object"?{title:String(value.active_secret.title||"Радужный SECRET пак").slice(0,100),image_url:String(value.active_secret.image_url||"").slice(0,1000)}:null};
-  } catch { return fallback; }
-}
 function defaultAdminPermissions(role = "owner") {
   return Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, !AI_ADMIN_PERMISSION_KEYS.includes(key) || role === "owner" || key === "ai_bot_manage"]));
 }
@@ -1226,30 +1252,6 @@ export default {
           return json({ error: "Управление должностями доступно только основному владельцу." }, 403, origin);
         }
 
-
-        if (path === "/api/admin/games/config" && method === "GET") {
-          const row=await env.DB.prepare("SELECT config_json,updated_at FROM game_config WHERE game_key='main'").first();
-          return json({ok:true,config:parseGameConfig(row?.config_json),updated_at:row?.updated_at||null},200,origin);
-        }
-        if (path === "/api/admin/games/config" && method === "POST") {
-          const body=await readJson(request);
-          const config=parseGameConfig(body.config);
-          if(!body.config||!Array.isArray(body.config.levels)||body.config.levels.length!==4)return json({error:"Нужно настроить ровно 4 уровня."},400,origin);
-          for(let li=0;li<4;li++){
-            if(!Array.isArray(body.config.levels[li]?.stages)||body.config.levels[li].stages.length!==4)return json({error:"В каждом уровне должно быть ровно 4 этапа."},400,origin);
-            for(let si=0;si<4;si++){
-              const stage=body.config.levels[li].stages[si];
-              if(typeof stage.prompt!=="string"||stage.prompt.trim().length<3||stage.prompt.length>700||!Array.isArray(stage.options)||stage.options.length<2||stage.options.length>6||stage.options.some(option=>typeof option!=="string"||!option.trim()||option.length>120)||!Number.isSafeInteger(Number(stage.correct_option))||Number(stage.correct_option)<0||Number(stage.correct_option)>=stage.options.length)return json({error:"Проверьте условие, варианты и правильный номер ответа на этапе "+(li*4+si+1)+"."},400,origin);
-            }
-          }
-          const secret=body.config.active_secret;
-          if(secret&&secret.image_url&&!/^https:\/\//i.test(String(secret.image_url)))return json({error:"Ссылка на SECRET-картину должна начинаться с https://."},400,origin);
-          if(body.config.enabled===true&&(!secret||!secret.image_url))return json({error:"Перед включением игры выберите активную картину Радужного SECRET пака."},400,origin);
-          config.enabled=body.config.enabled===true;
-          await env.DB.prepare("INSERT INTO game_config(game_key,config_json,updated_by,updated_at) VALUES('main',?,?,CURRENT_TIMESTAMP) ON CONFLICT(game_key) DO UPDATE SET config_json=excluded.config_json,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(config),telegramId).run();
-          await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,NULL,'game_config_updated',?)").bind(telegramId,JSON.stringify({enabled:config.enabled,levels:4,stages:16,secret_configured:!!config.active_secret?.image_url})).run().catch(()=>{});
-          return json({ok:true,config},200,origin);
-        }
         if (path === "/api/admin/server-diagnostics" && method === "GET") {
           const checkedAt = new Date().toISOString();
           const expectedWebhookUrl = new URL("/api/telegram/webhook", request.url).toString();
@@ -1744,17 +1746,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             env.DB.prepare("SELECT amount_stars,operation_type,description,created_at FROM balance_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 50").bind(targetId).all(),
             optionalTableRows(env.DB.prepare("SELECT id,block_type,reason,status,blocked_by,blocked_at,unblocked_by,unblocked_at FROM user_blocks WHERE telegram_id=? ORDER BY blocked_at DESC LIMIT 30").bind(targetId), "user_blocks"),
             optionalTableRows(env.DB.prepare("SELECT actor_telegram_id,action_type,details,created_at FROM admin_action_log WHERE target_telegram_id=? AND created_at>=datetime('now','-90 days') ORDER BY id DESC LIMIT 100").bind(targetId), "admin_action_log"),
-            optionalTableRows(env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(targetId), "user_bonus_balances")
+            optionalTableRows(env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId), "user_bonus_balances")
           ]);
           if (!profile) return json({ error: "Пользователь не найден." }, 404, origin);
-          const bonuses = bonusBalances.results?.[0] || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0,game_coupons:0};
+          const bonuses = bonusBalances.results?.[0] || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
           return json({ ok: true, user: profile, bonuses, orders: orders.results || [], balance_history: transactions.results || [], block_history: blocks.results || [], admin_history: adminHistory.results || [], migrations_pending: !!(blocks.migration_pending || adminHistory.migration_pending || bonusBalances.migration_pending) }, 200, origin);
         }
         if (path === "/api/admin/user-bonuses" && method === "POST") {
           if (!(await tableExists(env,"user_bonus_balances")) || !(await tableExists(env,"bonus_transactions"))) return json({error:"Сначала примените миграцию 0027_user_bonus_system.sql."},503,origin);
           const body=await readJson(request);
           const targetId=typeof body.telegram_id==="string"?body.telegram_id.trim().slice(0,64):"";
-          const fields={priority_order_coupons:"priority_order",vip_days:"vip_days",campaign_priority:"campaign_priority",extra_attempts:"extra_attempt",game_coupons:"game_coupon"};
+          const fields={priority_order_coupons:"priority_order",vip_days:"vip_days",campaign_priority:"campaign_priority",extra_attempts:"extra_attempt"};
           const values={};
           for(const key of Object.keys(fields)){
             const value=body[key]===undefined?0:Number(body[key]);
@@ -1768,15 +1770,15 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(!target)return json({error:"Пользователь не найден."},404,origin);
           const operationId=makeId();
           const results=await env.DB.batch([
-            env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=user_bonus_balances.priority_order_coupons+excluded.priority_order_coupons,vip_days=user_bonus_balances.vip_days+excluded.vip_days,campaign_priority=user_bonus_balances.campaign_priority+excluded.campaign_priority,extra_attempts=user_bonus_balances.extra_attempts+excluded.extra_attempts,game_coupons=user_bonus_balances.game_coupons+excluded.game_coupons,updated_at=CURRENT_TIMESTAMP")
-              .bind(targetId,values.priority_order_coupons,values.vip_days,values.campaign_priority,values.extra_attempts,values.game_coupons),
+            env.DB.prepare("INSERT INTO user_bonus_balances(telegram_id,priority_order_coupons,vip_days,campaign_priority,extra_attempts,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id) DO UPDATE SET priority_order_coupons=user_bonus_balances.priority_order_coupons+excluded.priority_order_coupons,vip_days=user_bonus_balances.vip_days+excluded.vip_days,campaign_priority=user_bonus_balances.campaign_priority+excluded.campaign_priority,extra_attempts=user_bonus_balances.extra_attempts+excluded.extra_attempts,updated_at=CURRENT_TIMESTAMP")
+              .bind(targetId,values.priority_order_coupons,values.vip_days,values.campaign_priority,values.extra_attempts),
             ...Object.entries(fields).map(([key,type])=>env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) SELECT ?,?, ?,?,'grant',0,? WHERE ?>0")
               .bind(targetId,telegramId,type,values[key],"bonus-grant:"+operationId+":"+type,values[key])),
             env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)")
               .bind(telegramId,targetId,"bonuses_granted",JSON.stringify({operation_id:operationId,bonuses:values}))
           ]);
           if(results[0]?.meta?.changes!==1)return json({error:"Не удалось выдать бонусы. Данные не изменены."},409,origin);
-          const current=await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(targetId).first();
+          const current=await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(targetId).first();
           return json({ok:true,telegram_id:targetId,bonuses:current},200,origin);
         }
         if (path === "/api/admin/balance-adjust" && method === "POST") {
@@ -2761,101 +2763,6 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
 
-
-      // GAME engine: all progress, answers, and coupon deductions are server-authoritative.
-      if (path === "/api/games/state" && method === "GET") {
-        if (!(await tableExists(env,"game_config")) || !(await tableExists(env,"game_progress"))) return json({error:"Игровая система ещё не подключена."},503,origin);
-        const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
-        const config=parseGameConfig(configRow?.config_json);
-        const progress=await env.DB.prepare("SELECT game_key,level_index,stage_index,loss_count,status,reward_json,secret_snapshot_json,updated_at FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-        const bonus=await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
-        const rewards=await env.DB.prepare("SELECT id,reward_title,image_url,created_at FROM game_rewards WHERE telegram_id=? AND game_key='main' ORDER BY id DESC LIMIT 20").bind(telegramId).all().catch(()=>({results:[]}));
-        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?publicGameStage(config.levels[progress.level_index]?.stages[progress.stage_index]):null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?(progress.reward_json?(()=>{try{return JSON.parse(progress.reward_json)}catch{return null}})():null):null,rewards:rewards.results||[]},200,origin);
-      }
-      if (path === "/api/games/start" && method === "POST") {
-        const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
-        const config=parseGameConfig(configRow?.config_json);
-        if(!config.enabled)return json({error:"Игра временно отключена владельцем."},403,origin);
-        const current=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-        if(current?.status==="playing")return json({ok:true,already_active:true,progress:current,stage:publicGameStage(config.levels[current.level_index]?.stages[current.stage_index])},200,origin);
-        if(current?.status==="lost")return json({error:"Сначала используйте GAME-купоны, чтобы продолжить это прохождение."},409,origin);
-        await env.DB.prepare("INSERT INTO game_progress(telegram_id,game_key,level_index,stage_index,loss_count,status,reward_json,secret_snapshot_json,updated_at) VALUES(?,'main',0,0,0,'playing',NULL,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id,game_key) DO UPDATE SET level_index=0,stage_index=0,loss_count=0,status='playing',reward_json=NULL,secret_snapshot_json=excluded.secret_snapshot_json,updated_at=CURRENT_TIMESTAMP").bind(telegramId,JSON.stringify(config.active_secret)).run();
-        return json({ok:true,progress:{level_index:0,stage_index:0,loss_count:0,status:"playing"},stage:publicGameStage(config.levels[0].stages[0])},200,origin);
-      }
-      if (path === "/api/games/continue" && method === "POST") {
-        const body=await readJson(request);
-        const clientKey=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,80):"";
-        if(!/^[a-zA-Z0-9_-]{8,80}$/.test(clientKey))return json({error:"Не удалось подтвердить продолжение. Повторите попытку."},400,origin);
-        const eventKey="game-continue:"+telegramId+":"+clientKey;
-        const prior=await env.DB.prepare("SELECT details_json FROM game_events WHERE idempotency_key=?").bind(eventKey).first();
-        if(prior){
-          const current=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-          const cfg=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
-          const remaining=await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first();
-          return json({ok:true,already_processed:true,...JSON.parse(prior.details_json),game_coupons:Number(remaining?.game_coupons||0),progress:current||null,stage:current?.status==="playing"?publicGameStage(cfg.levels[current.level_index]?.stages[current.stage_index]):null},200,origin);
-        }
-        const progress=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-        if(!progress||progress.status!=="lost")return json({error:"Сейчас продолжение не требуется."},409,origin);
-        const cost=Number(progress.loss_count||0)+1;
-        const results=await env.DB.batch([
-          env.DB.prepare("UPDATE game_progress SET status='playing',updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='lost' AND loss_count=? AND level_index=? AND stage_index=? AND EXISTS(SELECT 1 FROM user_bonus_balances WHERE telegram_id=? AND game_coupons>=?)").bind(telegramId,progress.loss_count,progress.level_index,progress.stage_index,telegramId,cost),
-          env.DB.prepare("UPDATE user_bonus_balances SET game_coupons=game_coupons-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_coupons>=? AND changes()=1").bind(cost,telegramId,cost),
-          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main','continue',?,? WHERE changes()=1").bind(telegramId,JSON.stringify({coupons_spent:cost,loss_count:progress.loss_count}),eventKey)
-        ]);
-        if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно GAME-купонов или состояние игры уже изменилось. Для продолжения требуется "+cost+" шт."},409,origin);
-        if(results[1]?.meta?.changes!==1)return json({error:"Не удалось списать GAME-купоны. Обновите экран."},409,origin);
-        const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
-        return json({ok:true,coupons_spent:cost,game_coupons:Number((await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first())?.game_coupons||0),progress:{...progress,status:"playing"},stage:publicGameStage(config.levels[progress.level_index].stages[progress.stage_index])},200,origin);
-      }
-      if (path === "/api/games/exit" && method === "POST") {
-        const body=await readJson(request);
-        const clientKey=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,80):"";
-        if(!/^[a-zA-Z0-9_-]{8,80}$/.test(clientKey))return json({error:"Не удалось подтвердить выход из игры."},400,origin);
-        const eventKey="game-exit:"+telegramId+":"+clientKey;
-        const prior=await env.DB.prepare("SELECT details_json FROM game_events WHERE idempotency_key=?").bind(eventKey).first();
-        if(prior)return json({ok:true,already_processed:true},200,origin);
-        const result=await env.DB.batch([
-          env.DB.prepare("UPDATE game_progress SET status='idle',level_index=0,stage_index=0,loss_count=0,reward_json=NULL,secret_snapshot_json=NULL,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='lost'").bind(telegramId),
-          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main','exit','{}',? WHERE changes()=1").bind(telegramId,eventKey)
-        ]);
-        if(result[0]?.meta?.changes!==1||result[1]?.meta?.changes!==1)return json({error:"Сейчас нельзя выйти: состояние игры уже изменилось."},409,origin);
-        return json({ok:true},200,origin);
-      }
-
-      if (path === "/api/games/answer" && method === "POST") {
-        const body=await readJson(request);
-        const answer=Number(body.answer_index);
-        const key=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,80):"";
-        if(!Number.isSafeInteger(answer)||answer<0||! /^[a-zA-Z0-9_-]{8,80}$/.test(key))return json({error:"Некорректный ответ."},400,origin);
-        const eventKey="game-answer:"+telegramId+":"+key;
-        const prior=await env.DB.prepare("SELECT details_json FROM game_events WHERE idempotency_key=?").bind(eventKey).first();
-        if(prior)return json({ok:true,already_processed:true,...JSON.parse(prior.details_json)},200,origin);
-        const progress=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status,secret_snapshot_json FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
-        if(!progress||progress.status!=="playing")return json({error:"Нет активного прохождения."},409,origin);
-        const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
-        const stage=config.levels[progress.level_index]?.stages[progress.stage_index];
-        if(!stage)return json({error:"Этап не настроен владельцем."},503,origin);
-        if(answer>=stage.options.length)return json({error:"Выберите один из предложенных вариантов."},400,origin);
-        const correct=answer===stage.correct_option;
-        const nextLevel=correct&&progress.stage_index===3&&progress.level_index===3;
-        const nextStage=correct&&!nextLevel?(progress.stage_index===3?0:progress.stage_index+1):progress.stage_index;
-        const nextLevelIndex=correct&&!nextLevel&&progress.stage_index===3?progress.level_index+1:progress.level_index;
-        const status=nextLevel?"completed":correct?"playing":"lost";
-        let attemptSecret=null;try{attemptSecret=progress.secret_snapshot_json?JSON.parse(progress.secret_snapshot_json):config.active_secret||null;}catch{attemptSecret=config.active_secret||null;}
-        const secretSnapshot=nextLevel?attemptSecret:null;
-        const responseData=correct?{correct:true,status,progress:{level_index:nextLevelIndex,stage_index:nextLevel?3:nextStage,loss_count:progress.loss_count,status},stage:nextLevel?null:publicGameStage(config.levels[nextLevelIndex].stages[nextStage]),secret:secretSnapshot}:{correct:false,status:"lost",loss_count:Number(progress.loss_count)+1,continue_cost:Number(progress.loss_count)+2};
-        const result=await env.DB.batch([
-          env.DB.prepare("UPDATE game_progress SET level_index=?,stage_index=?,loss_count=loss_count+?,status=?,reward_json=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='playing' AND level_index=? AND stage_index=?")
-            .bind(nextLevelIndex,nextStage,correct?0:1,status,secretSnapshot?JSON.stringify(secretSnapshot):null,telegramId,progress.level_index,progress.stage_index),
-          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main',?,?,? WHERE changes()=1")
-            .bind(telegramId,correct?"answer_correct":"answer_wrong",JSON.stringify(responseData),eventKey),
-          env.DB.prepare("INSERT INTO game_rewards(telegram_id,game_key,reward_title,image_url,completion_key) SELECT ?,'main',?,?,? WHERE changes()=1 AND ?='completed' AND ? IS NOT NULL")
-            .bind(telegramId,String(secretSnapshot?.title||"Радужный SECRET пак"),String(secretSnapshot?.image_url||""),eventKey,status,secretSnapshot?.image_url||null)
-        ]);
-        if(result[0]?.meta?.changes!==1||result[1]?.meta?.changes!==1||(nextLevel&&result[2]?.meta?.changes!==1))return json({error:"Не удалось зафиксировать ответ и награду. Обновите экран."},409,origin);
-        return json({ok:true,...responseData},200,origin);
-      }
-
       if (path === "/api/products" && method === "GET") {
         return json({ products: await getProducts(env) }, 200, origin);
       }
@@ -2871,9 +2778,9 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const rankRow = await env.DB.prepare("SELECT rank_code FROM reputation_profiles WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
         const customerRank = reputationRank(rankRow?.rank_code);
         const bonusRow = await tableExists(env,"user_bonus_balances")
-          ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+          ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
           : null;
-        const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0,game_coupons:0};
+        const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
@@ -3331,8 +3238,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           priority_order:{column:"priority_order_coupons",label:"Купон на приоритетный заказ",price:50,unit:"шт."},
           vip_days:{column:"vip_days",label:"Подарочная VIP-подписка",price:10,unit:"дн."},
           campaign_priority:{column:"campaign_priority",label:"Приоритетное начало в акции",price:60,unit:"шт."},
-          extra_attempt:{column:"extra_attempts",label:"Дополнительная попытка",price:50,unit:"шт."},
-          game_coupon:{column:"game_coupons",label:"GAME-купон",price:50,unit:"шт."}
+          extra_attempt:{column:"extra_attempts",label:"Дополнительная попытка",price:50,unit:"шт."}
         };
         const bonus=definitions[type];
         if(!bonus)return json({error:"Выберите корректный бонус."},400,origin);
@@ -3354,7 +3260,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно бонусов для продажи. Обновите профиль."},409,origin);
         const [latest,inventory]=await Promise.all([
           env.DB.prepare("SELECT balance_stars,first_name,username FROM users WHERE telegram_id=?").bind(telegramId).first(),
-          env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts,game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
+          env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
         ]);
         const buyerName=latest?.first_name||user.first_name||"Покупатель";
         await notifyOwner(env,"💰 ПРОДАЖА БОНУСОВ\nПокупатель: "+buyerName+(latest?.username?" (@"+latest.username+")":"")+"\nTelegram ID: "+telegramId+"\nБонус: "+bonus.label+"\nКоличество: "+quantity+" "+bonus.unit+"\nНачислено: "+amount+" ⭐");
@@ -3486,7 +3392,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
             await notifyOwner(env,"💬 Новое сообщение в заказе ИИ-помощника (автоответы выключены)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+String(latest.content||"").slice(0,700)+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");
             return json({ok:true,reply:handoff,ready:false,questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:false,handoff:true,conversation},200,origin);
           }
-          if(existing&&previous.proposal_pending_customer===true&&isCraftOrderAcceptance(latest.content)){
+          if(existing&&previous.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,conversation)){
             const acceptedReply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
             conversation.push({role:"assistant",content:acceptedReply});conversation=conversation.slice(-24);
             const details={...previous,source:"miniapp_workshop",ai_enabled:true,proposal_pending_customer:false,customer_accepted:true,customer_accepted_at:new Date().toISOString(),conversation,owner_messages:ownerMessages};
@@ -3551,7 +3457,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
          details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
         let reply=null,handoff=false,nextStatus=draft.status,estimatedStars=Number(draft.estimated_stars||0);
-        if(draft.status==="collecting"&&details.proposal_pending_customer===true&&isCraftOrderAcceptance(message)){
+        if(draft.status==="collecting"&&details.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,details.conversation)){
           reply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
           details.proposal_pending_customer=false;details.customer_accepted=true;details.customer_accepted_at=new Date().toISOString();nextStatus="review";
           await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
@@ -3629,7 +3535,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const lastUserMessage = messages.length && messages[messages.length - 1].role === "assistant"
           ? [...messages].reverse().find(item => item.role === "user")?.content || ""
           : "";
-        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : { actions: [] };
+        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage, messages) : { actions: [] };
         const actions = actionContext.actions || [];
         return json({
           conversations,
@@ -3805,7 +3711,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
               .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
             let craftReply = "";
             let offerReady = false;
-            const customerAccepted = !!(activeCraftDraft&&draftDetails.proposal_pending_customer===true&&isCraftOrderAcceptance(message));
+            const customerAccepted = !!(activeCraftDraft&&draftDetails.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,draftConversation));
             let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
             let status = "collecting";
             if(customerAccepted){
@@ -3861,7 +3767,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
-        const catalogContext = await buildSupportNavigationActions(env, message);
+        const catalogContext = await buildSupportNavigationActions(env, message, history);
         const actions = catalogContext.actions;
         let reply;
         try {
