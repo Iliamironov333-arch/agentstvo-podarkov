@@ -2,6 +2,8 @@
 ALTER TABLE user_bonus_balances ADD COLUMN game_coupons INTEGER NOT NULL DEFAULT 0 CHECK (game_coupons >= 0);
 
 -- Extend the bonus ledger's allowed types without losing existing history.
+-- Drop the old index first so it is recreated on the replacement table, not the legacy table.
+DROP INDEX IF EXISTS idx_bonus_transactions_user;
 ALTER TABLE bonus_transactions RENAME TO bonus_transactions_legacy;
 CREATE TABLE bonus_transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
