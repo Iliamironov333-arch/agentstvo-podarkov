@@ -512,22 +512,23 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 .ai-instructions-card{border-color:#c28b39}
 @media(max-width:420px){.ai-feature-head{grid-template-columns:minmax(0,1fr) 44px auto;gap:6px}.ai-feature-head button{font-size:11px;padding:8px 7px}.ai-two-fields{grid-template-columns:1fr}}
 @media(min-width:650px){.ai-control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-instructions-card{grid-column:1/-1}}
-/* Полноэкранная самостоятельная страница товара; стили каталога не затрагиваются. */
-.work-detail-overlay{position:fixed;inset:0;z-index:9999;background:var(--panel,#fff);display:none;align-items:stretch;justify-content:center;padding:0;box-sizing:border-box}
+/* Отдельная полноэкранная страница товара. Стили карточек каталога не затрагиваются. */
+.work-detail-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:stretch;justify-content:center;padding:0;background:var(--bg,#fffaf3);box-sizing:border-box;isolation:isolate}
 .work-detail-overlay.open{display:flex}
-.work-detail-panel{position:relative;width:100%;height:100%;max-height:100dvh;overflow-y:auto;overscroll-behavior:contain;background:var(--panel,#fff);color:var(--text,#24180f);padding:env(safe-area-inset-top) 0 calc(22px + env(safe-area-inset-bottom));box-sizing:border-box}
-.work-detail-topbar{position:sticky;top:0;z-index:3;min-height:58px;display:flex;align-items:center;justify-content:space-between;padding:8px 18px;background:var(--panel,#fff);border-bottom:1px solid var(--line,#ead9c4)}
-.work-detail-close{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text,#24180f);font:600 15px inherit;padding:8px 4px;cursor:pointer}
-.work-detail-close span:first-child{font-size:30px;line-height:20px;font-weight:400}
+.work-detail-panel{position:relative;width:100%;height:100%;height:100dvh;max-height:100dvh;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--bg,#fffaf3);color:var(--text,#24180f);padding:env(safe-area-inset-top) 0 calc(22px + env(safe-area-inset-bottom));box-sizing:border-box}
+.work-detail-topbar{position:sticky;top:0;z-index:3;min-height:62px;display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:7px 16px;background:var(--bg,#fffaf3);border:0;border-bottom:1px solid var(--line,#ead9c4)}
+.work-detail-close{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border:1px solid var(--line,#ead9c4);border-radius:50%;background:var(--panel,#fff);color:var(--text,#24180f);font:600 25px/1 system-ui,-apple-system,sans-serif;padding:0;cursor:pointer;box-shadow:0 2px 9px #4a2b1010}
+.work-detail-close span:first-child{font-size:27px;line-height:1;font-weight:400}
+.work-detail-close span:last-child{display:none}
 .work-detail-kicker{font-size:10px;letter-spacing:1.5px;font-weight:800;color:var(--muted,#8b7762)}
-.work-detail-content{width:min(100%,760px);margin:0 auto;padding:18px 22px 30px;box-sizing:border-box}
-.work-detail-image{width:100%;min-height:0;aspect-ratio:auto;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:4px 0 24px;padding:12px;box-sizing:border-box}
-.work-detail-image img{display:block;width:auto;height:auto;max-width:100%;max-height:min(58vh,620px);object-fit:contain;object-position:center;border-radius:12px}
+.work-detail-content{width:min(100%,760px);min-height:calc(100% - 62px);margin:0 auto;padding:18px 20px calc(30px + env(safe-area-inset-bottom));box-sizing:border-box}
+.work-detail-image{width:100%;min-height:clamp(220px,38vh,430px);max-height:66vh;border:0;outline:0;border-radius:18px;background:var(--panel2,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:4px 0 22px;padding:10px;box-sizing:border-box;box-shadow:none}
+.work-detail-image img{display:block;width:auto;height:auto;max-width:100%;max-height:calc(66vh - 20px);object-fit:contain;object-position:center;border:0;outline:0;border-radius:10px;box-shadow:none}
 .work-detail-content h2{font-size:clamp(23px,4vw,30px);line-height:1.2;margin:0 0 10px}
 .work-detail-price{font-size:23px;font-weight:800;margin:10px 0 16px}
 .work-detail-description{font-size:15px;line-height:1.7;white-space:pre-wrap;margin:0 0 22px}
 .work-detail-content>.primary{width:100%;max-width:440px;min-height:50px;border-radius:15px}
-@media(min-width:700px){.work-detail-content{padding-top:28px}.work-detail-image img{max-height:62vh}}
+@media(min-width:700px){.work-detail-content{padding-top:28px}.work-detail-image{min-height:320px}.work-detail-image img{max-height:62vh}}
 /* Фото в карточке каталога всегда остаётся внутри компактной области и не растягивает карточку. */
 .product .art{height:112px;min-height:112px;max-height:112px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .product .art img{display:block;width:100%;height:100%;min-height:0;max-height:100%;object-fit:cover;border-radius:0}@media(min-width:600px){.product .art{height:140px;min-height:140px;max-height:140px}}
@@ -2500,14 +2501,14 @@ function openProductDetail(product){
  let modal=document.getElementById('workDetailModal');
  if(!modal){
   modal=document.createElement('div');modal.id='workDetailModal';modal.className='work-detail-overlay';
-  modal.innerHTML='<div class="work-detail-panel" role="dialog" aria-modal="true" aria-label="Страница товара"><div class="work-detail-topbar"><button type="button" class="work-detail-close" aria-label="Вернуться в каталог"><span aria-hidden="true">‹</span><span>Назад</span></button><span class="work-detail-kicker">АГЕНТСТВО ПОДАРКОВ</span></div><div class="work-detail-content"></div></div>';
+  modal.innerHTML='<div class="work-detail-panel" role="dialog" aria-modal="true" aria-label="Страница товара"><div class="work-detail-topbar"><button type="button" class="work-detail-close" aria-label="Вернуться в каталог" title="Назад"><span aria-hidden="true">←</span></button><span class="work-detail-kicker">АГЕНТСТВО ПОДАРКОВ</span></div><div class="work-detail-content"></div></div>';
   modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
   modal.querySelector('.work-detail-close').addEventListener('click',()=>modal.classList.remove('open'));
   document.body.append(modal);
  }
  const content=modal.querySelector('.work-detail-content');content.replaceChildren();
  const image=document.createElement('div');image.className='work-detail-image';
- if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];image.append(img);}else image.textContent=product[3]||'🎁';
+ if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];img.loading='eager';img.decoding='async';img.addEventListener('error',()=>{img.remove();image.textContent=product[3]||'🎁';},{once:true});image.append(img);}else image.textContent=product[3]||'🎁';
  const title=document.createElement('h2');title.textContent=product[1];
  const price=document.createElement('div');price.className='work-detail-price';price.textContent=money(product[2]);
  const description=document.createElement('p');description.className='work-detail-description';description.textContent=product[6]||'Описание этой работы скоро появится.';
