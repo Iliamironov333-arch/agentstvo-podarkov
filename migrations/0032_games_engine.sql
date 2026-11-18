@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS game_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   telegram_id TEXT NOT NULL,
   game_key TEXT NOT NULL,
-  event_type TEXT NOT NULL CHECK(event_type IN ('continue','answer_correct','answer_wrong')),
+  event_type TEXT NOT NULL CHECK(event_type IN ('continue','exit','answer_correct','answer_wrong')),
   details_json TEXT NOT NULL DEFAULT '{}',
   idempotency_key TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
