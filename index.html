@@ -1433,6 +1433,16 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* GAME area only: isolated from the shop and global theme. */
+@keyframes game-stage-in{from{opacity:0;transform:translateY(12px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes game-level-in{0%{opacity:0;transform:translateY(18px) scale(.97)}65%{opacity:1;transform:translateY(-2px) scale(1.01)}100%{transform:translateY(0) scale(1)}}
+@keyframes game-reward-in{0%{opacity:0;transform:scale(.92)}70%{opacity:1;transform:scale(1.02)}100%{transform:scale(1)}}
+#gamesView .game-stage-enter,#gamesView .game-correct-enter,#gamesView .game-lost-enter{animation:game-stage-in .32s ease-out both}
+#gamesView .game-level-enter{animation:game-level-in .55s cubic-bezier(.2,.8,.2,1) both}
+#gamesView .game-reward-enter{animation:game-reward-in .65s cubic-bezier(.2,.8,.2,1) both}
+#gamesView .game-progress-meta{display:flex;justify-content:space-between;margin:16px 0 7px;font-size:12px;color:var(--muted)}
+#gamesView .game-progress-track{height:7px;border-radius:99px;background:var(--line);overflow:hidden}
+#gamesView .game-progress-track span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .35s ease}
+#gamesView .game-reward-card{border:1px solid var(--gold);border-radius:16px;padding:14px}
 #gamesView .game-stage-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
 #gamesView .game-stage-head b{color:var(--gold2)}
 #gamesView .game-options{display:grid;grid-template-columns:1fr;gap:10px;margin-top:16px}
@@ -4221,13 +4231,16 @@ async function saveAdminStaffPermissions(){
  }catch(e){toast(e.message||'Не удалось сохранить права.');}
 }
 
-function renderGameStage(data){
+function renderGameStage(data,transition='game-stage-enter'){
  const root=document.getElementById('gamesContent');if(!root)return;
  const stage=data.stage;
  if(!stage){root.innerHTML='<p class="muted">Владелец ещё не настроил этапы игры.</p>';return;}
- const p=data.progress||{};
- const level=(data.levels||[])[Number(p.level_index)||0]||{title:['Деревянный','Серебряный','Золотой','Рубиновый'][Number(p.level_index)||0]||'Уровень'};
- root.innerHTML='<div class="game-stage-head"><b>'+escapeHtml(level?.title||'Уровень')+'</b><span>Этап '+(Number(p.stage_index||0)+1)+' из 4</span></div><h3>'+escapeHtml(stage.prompt)+'</h3><div class="game-options">'+stage.options.map((option,index)=>'<button class="secondary" type="button" data-game-answer="'+index+'">'+escapeHtml(option)+'</button>').join('')+'</div>';
+ const p=data.progress||{},levelIndex=Number(p.level_index)||0,stageIndex=Number(p.stage_index)||0;
+ const names=['Деревянный','Серебряный','Золотой','Рубиновый'];
+ const level=(data.levels||[])[levelIndex]||{title:names[levelIndex]||'Уровень'};
+ const total=levelIndex*4+stageIndex+1,percent=Math.round(total/16*100);
+ root.dataset.levelIndex=String(levelIndex);
+ root.innerHTML='<div class="game-stage-card '+transition+'"><div class="game-stage-head"><b>'+escapeHtml(level.title||names[levelIndex])+'</b><span>Этап '+(stageIndex+1)+' из 4</span></div><div class="game-progress-meta"><span>Общий прогресс</span><b>'+total+' / 16</b></div><div class="game-progress-track"><span style="width:'+percent+'%"></span></div><h3>'+escapeHtml(stage.prompt)+'</h3><div class="game-options">'+stage.options.map((option,index)=>'<button class="secondary" type="button" data-game-answer="'+index+'">'+escapeHtml(option)+'</button>').join('')+'</div></div>';
  root.querySelectorAll('[data-game-answer]').forEach(button=>button.addEventListener('click',()=>submitGameAnswer(Number(button.dataset.gameAnswer))));
 }
 async function loadGamesView(){
@@ -4240,13 +4253,13 @@ async function loadGamesView(){
   status.textContent='Ваши GAME-купоны: '+Number(data.game_coupons||0)+' шт.';
   const p=data.progress;
   if(!p||p.status==='idle'||p.status==='completed'){
-   if(p?.status==='completed'&&data.secret_unlocked?.image_url)root.innerHTML='<h3>🏆 Все 16 этапов пройдены!</h3><p>Ваша награда: <b>'+escapeHtml(data.secret_unlocked.title||'Радужный SECRET пак')+'</b></p><img src="'+escapeHtml(data.secret_unlocked.image_url)+'" alt="SECRET-награда" style="width:100%;max-width:360px;border-radius:16px"><button class="primary" type="button" id="gameStartButton">Начать новую игру</button>';
+   if(p?.status==='completed'&&data.secret_unlocked?.image_url)root.innerHTML='<div class="game-reward-card game-reward-enter"><h3>🏆 Все 16 этапов пройдены!</h3><p>Ваша награда: <b>'+escapeHtml(data.secret_unlocked.title||'Радужный SECRET пак')+'</b></p><img src="'+escapeHtml(data.secret_unlocked.image_url)+'" alt="SECRET-награда" style="width:100%;max-width:360px;border-radius:16px"><button class="primary" type="button" id="gameStartButton">Начать новую игру</button></div>';
    else if(p?.status==='completed')root.innerHTML='<h3>🏆 Прохождение завершено!</h3><p>Награда сохранена в истории. Владелец ещё не назначил картину для SECRET-пака.</p><button class="primary" type="button" id="gameStartButton">Начать новую игру</button>';
    else root.innerHTML='<h3>Готовы начать?</h3><p>Первое прохождение начинается без списания GAME-купонов.</p><button class="primary" type="button" id="gameStartButton">Начать игру</button>';
    document.getElementById('gameStartButton')?.addEventListener('click',startGame);
   }else if(p.status==='lost'){
    const cost=Number(data.continue_cost||Number(p.loss_count)+1);
-   root.innerHTML='<h3>⛔ Этап не пройден</h3><p>Поражений в этом прохождении: '+Number(p.loss_count||0)+'. Для продолжения требуется <b>'+cost+' GAME-купона</b>.</p><button class="primary" type="button" id="gameContinueButton" '+(Number(data.game_coupons)<cost?'disabled':'')+'>Продолжить за '+cost+' купона</button>';
+   root.innerHTML='<div class="game-lost-card game-lost-enter"><h3>⛔ Этап не пройден</h3><p>Поражений в этом прохождении: '+Number(p.loss_count||0)+'. Для продолжения требуется <b>'+cost+' GAME-купона</b>.</p><button class="primary" type="button" id="gameContinueButton" '+(Number(data.game_coupons)<cost?'disabled':'')+'>Продолжить за '+cost+' купона</button></div>';
    document.getElementById('gameContinueButton')?.addEventListener('click',continueGame);
   }else renderGameStage(data);
   if((data.rewards||[]).length){
@@ -4255,12 +4268,12 @@ async function loadGamesView(){
  }catch(error){status.textContent=error.message||'Не удалось загрузить игру.';root.innerHTML='';}
 }
 async function startGame(){
- try{const d=await apiFetch('/api/games/start',{method:'POST',body:'{}'});renderGameStage(d);document.getElementById('gamesStatus').textContent='Прохождение началось. Удачи!';}
+ try{const d=await apiFetch('/api/games/start',{method:'POST',body:'{}'});renderGameStage(d,'game-stage-enter');document.getElementById('gamesStatus').textContent='Прохождение началось. Удачи!';}
  catch(e){toast(e.message||'Не удалось начать игру.');}
 }
 async function continueGame(){
  const button=document.getElementById('gameContinueButton');if(button)button.disabled=true;
- try{const d=await apiFetch('/api/games/continue',{method:'POST',body:'{}'});document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d);}
+ try{const d=await apiFetch('/api/games/continue',{method:'POST',body:'{}'});document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d,'game-stage-enter');}
  catch(e){toast(e.message||'Не удалось продолжить.');if(button)button.disabled=false;}
 }
 async function submitGameAnswer(answerIndex){
@@ -4269,7 +4282,7 @@ async function submitGameAnswer(answerIndex){
   const d=await apiFetch('/api/games/answer',{method:'POST',body:JSON.stringify({answer_index:answerIndex,idempotency_key:'ans_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)})});
   if(d.correct){
    if(d.status==='completed'){document.getElementById('gamesStatus').textContent='🏆 Все уровни пройдены!';await loadGamesView();}
-   else{document.getElementById('gamesStatus').textContent='Верно! Переходим к следующему этапу.';renderGameStage(d);}
+   else{const previousLevel=Number(document.getElementById('gamesContent')?.dataset.levelIndex||0);const changedLevel=Number(d.progress.level_index)>previousLevel;document.getElementById('gamesStatus').textContent=changedLevel?'✨ Уровень пройден! Открывается следующий уровень.':'Верно! Переходим к следующему этапу.';renderGameStage(d,changedLevel?'game-level-enter':'game-correct-enter');}
   }else{document.getElementById('gamesStatus').textContent='Ответ не подошёл. Для продолжения понадобится '+d.continue_cost+' GAME-купона.';await loadGamesView();}
  }catch(e){toast(e.message||'Не удалось проверить ответ.');await loadGamesView();}
 }
