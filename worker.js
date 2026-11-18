@@ -466,12 +466,12 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
     "Для индивидуального заказа уточняй бюджет только в рублях. Никогда не спрашивай, предпочитает ли клиент рубли или Telegram Stars, и не предлагай выбор валюты/способа оплаты в ходе консультации. Не путай бюджет в рублях с оплатой товаров каталога через Telegram Stars.",
     "Если клиент ищет готовую работу, сначала проверь реальный каталог и не выдавай придуманные варианты за существующие товары. Если клиент хочет индивидуальную работу на заказ, можешь предложить 2–3 концепции только как идеи будущей работы, прямо обозначая, что это не готовые товары каталога. Предварительная цена индивидуальной работы не является окончательной и подтверждается владельцем.",
     "Не превращай консультацию в мастер-класс: не объясняй, как самостоятельно изготовить работу, и не выдавай пошаговые инструкции. Помогай выбрать и заказать готовую работу Агентства.",
-    "Каталог Агентства — обязательный источник истины. Ниже передан актуальный список активных товаров из базы мини-приложения с точными названиями, описаниями, категориями и ценами. Ищи товар по смыслу и названию в этом списке, а не по памяти. Никогда не выдумывай товары, не говори, что не видишь каталог, если данные переданы. Если работа найдена, назови её точное название и цену из каталога. Если сервер подобрал конкретную работу, под ответом будет реальная кнопка открытия карточки именно этой работы — обязательно скажи клиенту, что кнопка уже прикреплена, и не заменяй её инструкцией искать вручную. Если точного совпадения нет, честно скажи, что именно эта работа не найдена среди активных товаров, и предложи открыть каталог кнопкой. Не называй похожую работу точным совпадением.",
-    "Проверенные сведения об Агентстве: готовые авторские работы находятся в разделе «Магазин»; индивидуальную работу можно описать через «Создать своё»; «ИИ помощник» отвечает на вопросы, помогает найти готовую работу и подобрать подарок; «Мои заказы» показывает статусы и историю; «Мой баланс» показывает баллы и операции; «Пополнить баланс» — оплата Telegram Stars; «VIP-подписка» открывает VIP-возможности; «Скидки и акции» показывает активные предложения; «Поддержка» позволяет связаться с командой; «О проекте» содержит информацию и правила. Не придумывай другие разделы.",
-    "Готовая работа: клиент открывает карточку товара, добавляет его в корзину или выбирает «Купить сразу», затем оформляет заказ. Индивидуальная работа: клиент описывает пожелания в «Создать своё», запрос поступает владельцу на проверку; цена и возможность выполнения подтверждаются владельцем. Не утверждай, что индивидуальная работа уже существует в каталоге или гарантированно будет выполнена.",
+    "Каталог Агентства — обязательный источник истины. Ниже передан актуальный список активных товаров из базы мини-приложения. Если клиент ищет готовый товар, проверяй точные названия и не выдумывай наличие. Если товара нет, честно сообщи об этом только когда клиент именно ищет готовый товар. Если клиент спрашивает, как заказать отсутствующую работу, хочет новую или индивидуальную работу, не отвечай отказом и не отправляй в каталог: такой запрос должен обрабатываться сценарием индивидуального заказа прямо в этом чате.",
+    "Проверенные сведения об Агентстве: готовые работы находятся в каталоге; «ИИ-помощник» самостоятельно консультирует покупателей и помогает оформить индивидуальные заказы прямо в текущем чате; «Мои заказы» показывает статусы и историю; «Мой баланс» показывает баллы и операции; «Пополнить баланс» — оплата Telegram Stars; «VIP-подписка» открывает VIP-возможности; «Скидки и акции» показывает активные предложения; «Поддержка» позволяет связаться с командой; «О проекте» содержит информацию и правила. «Создать своё» — отдельный восьмишаговый опрос с выбором параметров поделки, это другой режим и не часть оформления заказа в переписке. Не отправляй покупателя в этот опрос вместо оформления индивидуального заказа в чате. Показывай кнопку опроса только если покупатель прямо спрашивает про него или хочет его открыть. Если нужной работы нет в каталоге, помоги оформить индивидуальный заказ здесь, а не завершай поиск отказом.",
+    "Готовая работа: клиент открывает карточку товара, добавляет его в корзину или выбирает «Купить сразу», затем оформляет заказ. Индивидуальная работа: ИИ-помощник собирает пожелания в текущем диалоге, сохраняет черновик заказа, предлагает концепцию и предварительную оценку, затем получает явное согласие покупателя; после согласия заказ передаётся владельцу на проверку. Цена, сроки и возможность выполнения подтверждаются владельцем. Никогда не отправляй покупателя в другой раздел и не проси повторить уже сообщённые сведения.",
     "Не выдумывай наличие товара, статус заказа, факт оплаты, сроки доставки, баланс или условия, которых нет в проверенных данных.",
     "Не проси пароли, токены, API-ключи, коды Telegram или платёжные реквизиты.",
-    "Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
+    "Если клиент недоволен предыдущим ответом, указывает на повторение или спрашивает, почему ты не понял запрос, признай ошибку, внимательно перечитай историю и ответь по существу иначе. Не копируй предыдущий ответ и не повторяй ту же инструкцию. Если не знаешь ответ, честно скажи об этом и предложи обратиться к владельцу. Не утверждай, что сам изменил заказ, баланс или оплату.",
     "Не обещай возврат, доставку или изменение данных без подтверждения владельца.",
     "Ты не знаешь местоположение клиента и не имеешь доступа к его геолокации. Не угадывай и не называй город, адрес или регион клиента. Если местоположение действительно важно, сначала прямо спроси клиента.",
     "Проверенные сервером данные текущего покупателя (используй их для ответов о балансе и заказах; не показывай Telegram ID): " + JSON.stringify(customerContext).slice(0,5000),
@@ -549,7 +549,31 @@ function normalizeSupportNavigationText(value) {
   return String(value || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]+/gi, " ").trim();
 }
 
-async function buildSupportNavigationActions(env, message) {
+async function classifySupportNavigationView(env, message, history = []) {
+ if(!env.AI)return null;
+ const allowed=["menuView","catalogView","giftBuilderView","cartView","ordersView","balanceView","profileView","vipView","supportView","aboutView","dealsView","customWizardView"];
+ const context=(Array.isArray(history)?history:[]).slice(-8).map(item=>({role:item.role,content:String(item.content||"").slice(0,700)}));
+ const instructions=[
+  "Ты классификатор намерения навигации мини-приложения «Агентство подарков». Учитывай смысл сообщения и контекст, а не совпадение отдельных слов.",
+  "Верни только JSON-объект с полем view. Допустимые значения: "+allowed.join(", ")+", none.",
+  "Выбирай раздел только если покупатель хочет его открыть, найти, посмотреть, перейти туда или прямо спрашивает, где он находится. Не создавай кнопку для обычного обсуждения темы, если переход не нужен.",
+  "Индивидуальный заказ по новой идее оформляется прямо в текущем чате ИИ-помощника. Не направляй такой запрос в «Создать своё».",
+  "customWizardView разрешён ТОЛЬКО когда покупатель явно спрашивает про отдельный восьмишаговый опрос/анкету «Создать своё» или прямо хочет открыть этот опрос.",
+  "Не используй разделы, которых нет в списке. Не угадывай между похожими разделами; при сомнении верни none."
+ ].join(" ");
+ try{
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input:[...context,{role:"user",content:String(message||"").slice(0,1000)}],max_output_tokens:80})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return null;
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join(" ");
+  const first=output.indexOf("{"),last=output.lastIndexOf("}");
+  if(first<0||last<=first)return null;
+  const parsed=JSON.parse(output.slice(first,last+1));
+  return allowed.includes(parsed.view)?parsed.view:null;
+ }catch(error){console.error("Support navigation intent classification failed:",String(error).slice(0,250));return null;}
+}
+async function buildSupportNavigationActions(env, message, history = []) {
   const text=normalizeSupportNavigationText(message),actions=[];
   const add=action=>{if(actions.length<4&&!actions.some(x=>x.view===action.view&&x.product_id===action.product_id))actions.push(action);};
   let catalog=[];try{catalog=await getProducts(env);}catch(error){console.error("Support catalog lookup failed:",String(error).slice(0,250));}
@@ -569,12 +593,16 @@ async function buildSupportNavigationActions(env, message) {
     if(/(баланс|баллы|пополнить счет|пополнить баланс)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
     if(/(профиль|личный кабинет)/i.test(text))add({label:"👤 Мой профиль",view:"profileView"});
     if(/(vip|вип)/i.test(text))add({label:"👑 VIP",view:"vipView"});
-    if(/(создать индивидуальн.{0,12}заказ|оформить индивидуальн.{0,12}заказ|конструктор индивидуальн.{0,12}заказ)/i.test(text))add({label:"📝 Индивидуальный заказ",view:"customWizardView"});
-    else if(/(ии мастерск|мастерск|индивидуальн.*заказ)/i.test(text))add({label:"🧵 ИИ-мастерская",view:"aiWorkshopView"});
+    if(/(опрос|анкета|раздел создать свое|открыть создать свое|кнопка создать свое)/i.test(text))add({label:"🎨 Открыть опрос «Создать своё»",view:"customWizardView"});
     if(/(поддержк|помощник|помощники)/i.test(text))add({label:"🤖 ИИ помощник",view:"supportView"});
     if(/(владелец|оператор|человек|администратор|связаться с владельцем)/i.test(text))add({label:"✉️ Написать владельцу",view:"owner"});
     if(/сертификат/i.test(text)&&/(активир|баланс|начисл)/i.test(text))add({label:"⭐ Мой баланс",view:"balanceView"});
     if(/(о проекте|информаци[яю] о проекте|правила)/i.test(text))add({label:"ℹ️ О проекте",view:"aboutView"});
+  }
+  if(actions.length===0){
+    const semanticView=await classifySupportNavigationView(env,message,history);
+    const labels={menuView:"🏠 Главное меню",catalogView:"🎁 Открыть каталог",giftBuilderView:"🎁 Конструктор подарка",cartView:"🛒 Открыть корзину",ordersView:"📦 Мои заказы",balanceView:"⭐ Мой баланс",profileView:"👤 Мой профиль",vipView:"👑 VIP",supportView:"🤖 ИИ помощник",aboutView:"ℹ️ О проекте",dealsView:"🍂 Скидки и акции",customWizardView:"🎨 Открыть опрос «Создать своё»"};
+    if(semanticView&&labels[semanticView])add({label:labels[semanticView],view:semanticView});
   }
   const matched=matchedProduct?{id:String(matchedProduct.id),title:String(matchedProduct.title||""),description:String(matchedProduct.description||"").slice(0,1000),category:String(matchedProduct.category||""),price_stars:Number(matchedProduct.price_stars||0)}:null;
   const catalogContext=catalog.map(item=>({id:String(item.id),title:String(item.title||""),description:String(item.description||"").slice(0,500),category:String(item.category||""),price_stars:Number(item.price_stars||0)}));
@@ -613,13 +641,34 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   }
 }
 
-function isCraftOrderAcceptance(message) {
- const value=String(message||"").trim().toLowerCase().replace(/ё/g,"е").replace(/[!.,;:]+$/g,"").trim();
- return /^(?:да|ага|угу|(?:да,?\s*)?(?:я\s+)?согласен(?:на)?|подтверждаю|оформляй(?:те)?|оформляем|заказываем|беру|подходит|все подходит|(?:да,?\s*)?(?:мне\s+)?(?:все\s+)?(?:подходит|устраивает)|(?:да,?\s*)?давайте оформим|(?:да,?\s*)?давайте закажем|хочу оформить|да,? хочу оформить|можно оформлять|да,? оформляем|да,? заказываем|да,? все подходит|все отлично,? давайте оформим)$/i.test(value);
+async function classifyCraftOrderAcceptance(env, conversation) {
+ if(!env.AI||!Array.isArray(conversation)||!conversation.length)return false;
+ const input=conversation.slice(-12).map(item=>({role:item.role==="owner"?"assistant":item.role,content:String(item.content||"").slice(0,1200)}));
+ const instructions=[
+  "Определи намерение покупателя в контексте предложения индивидуальной поделки.",
+  "Верни только JSON-объект с полем decision. Допустимые значения: accept, revise, question, reject, unclear.",
+  "accept — покупатель ясно согласен именно с предложенным вариантом и предварительной оценкой и хочет передать заказ владельцу на проверку. Короткое «да» может быть согласием, только если из предыдущих сообщений однозначно следует, что это ответ на предложение.",
+  "revise — покупатель хочет изменить хотя бы одну деталь, цену, срок или концепцию; даже если одновременно выражает одобрение.",
+  "question — покупатель задаёт вопрос или просит уточнение, не подтверждая оформление.",
+  "reject — покупатель отказывается от предложения.",
+  "unclear — намерение нельзя уверенно определить.",
+  "Не считай благодарность, похвалу, интерес, вопрос об оплате или согласие продолжить обсуждение подтверждением заказа. Не делай вывод только по одному слову вне истории."
+ ].join(" ");
+ try{
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:100})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return false;
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join(" ");
+  const first=output.indexOf("{"),last=output.lastIndexOf("}");
+  if(first<0||last<=first)return false;
+  const parsed=JSON.parse(output.slice(first,last+1));
+  return parsed.decision==="accept";
+ }catch(error){console.error("Craft order intent classification failed:",String(error).slice(0,250));return false;}
 }
 function buildCraftOfferReply(reply, priceStars) {
  return String(reply||"Предлагаю этот вариант индивидуальной работы.").trim().slice(0,5000)
-  + "\n\nПредварительная оценка: " + Number(priceStars) + " ⭐. Это не окончательная цена — её проверит владелец Агентства.\nЕсли вариант и оценка Вам подходят, напишите «Да, оформляем». Если хотите что-то изменить, просто расскажите что именно.";
+  + "\n\nПредварительная оценка: " + Number(priceStars) + " ⭐. Это не окончательная цена — её проверит владелец Агентства.\nЕсли Вы хотите передать именно этот вариант владельцу на проверку, подтвердите это любыми понятными словами. Если хотите что-то изменить или уточнить, просто напишите об этом.";
 }
 
 async function getGlobalAiToneInstruction(env){
@@ -642,7 +691,7 @@ async function createCraftAnswer(env,messages){
  const questionsUsed=Math.max(0,assistantTurns-1);
  const instructions=[
   await getGlobalAiToneInstruction(env),
-  "Ты — консультант по индивидуальным заказам Агентства подарков. Помоги клиенту выбрать готовую авторскую работу, а не учи делать её самостоятельно.",
+   "Ты — консультант, который помогает оформить индивидуальный заказ прямо в этом чате. Не отправляй клиента в другие разделы Mini App и никогда не упоминай «Создать своё». Если клиент спрашивает, как заказать работу, которой нет в каталоге, сразу начни оформление здесь: признай, что её нет среди готовых товаров, и задай первый уместный вопрос о желаемой работе.",
   "Сначала естественно выясни: что именно нужно; для кого и по какому поводу; бюджет в рублях (или явный отказ назвать бюджет); желаемый размер; стиль и цвета; материалы/технику; уровень детализации; важные элементы; желаемый срок. Не повторяй вопросы, на которые уже ответили.",
   "Считай информацию достаточной, когда понятна сама идея, назначение/получатель, бюджет или отказ его называть, основные параметры внешнего вида и сложности, а срок известен либо клиенту он не важен. Если какой-то параметр клиент оставляет на усмотрение мастера, считай его уточнённым. Не выдумывай ответы за клиента.",
   "Задавай строго один короткий уместный вопрос за сообщение. Не превращай разговор в анкету. Если клиент затрудняется, предложи 2–3 понятных варианта ответа.",
@@ -652,7 +701,7 @@ async function createCraftAnswer(env,messages){
   "Не пиши мастер-классы, инструкции по изготовлению или советы «сделай сам». Описывай только готовый результат и то, что получит заказчик.",
   "Не дави на клиента и не торопи с покупкой. Согласие на оформление должно быть добровольным и явным.",
   "Учитывай безопасность: не предлагай опасные материалы, огонь, токсичные вещества, опасные конструкции или рискованные действия.",
-  "Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ принят или оплачен."
+   "Если клиент жалуется на прежний ответ, повторение или отказ, сначала коротко извинись и признай ошибку. Не копируй прежнюю фразу, не спорь и не отправляй клиента в каталог или другой раздел. Используй уже собранные сведения и продолжай оформление с того места, где остановились. Пиши по-русски, дружелюбно, конкретно и аккуратно. Не обещай, что заказ принят или оплачен."
  ].join("\n");
  const input=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:String(m.content||"").slice(0,1500)}));
  const r=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:1400})});
@@ -3343,7 +3392,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
             await notifyOwner(env,"💬 Новое сообщение в заказе ИИ-помощника (автоответы выключены)\nЗаказ: "+draftId+"\nПокупатель: "+telegramId+"\n\n"+String(latest.content||"").slice(0,700)+"\n\nОтветьте вручную в Админ-панели → ИИ-заказы.");
             return json({ok:true,reply:handoff,ready:false,questions_used:conversation.filter(m=>m.role==="user").length,draft_id:draftId,estimated_stars:estimatedStars,ai_enabled:false,handoff:true,conversation},200,origin);
           }
-          if(existing&&previous.proposal_pending_customer===true&&isCraftOrderAcceptance(latest.content)){
+          if(existing&&previous.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,conversation)){
             const acceptedReply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
             conversation.push({role:"assistant",content:acceptedReply});conversation=conversation.slice(-24);
             const details={...previous,source:"miniapp_workshop",ai_enabled:true,proposal_pending_customer:false,customer_accepted:true,customer_accepted_at:new Date().toISOString(),conversation,owner_messages:ownerMessages};
@@ -3408,7 +3457,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
          details.conversation.push({role:"user",content:message});details.conversation=details.conversation.slice(-24);
         details.owner_messages=Array.isArray(details.owner_messages)?details.owner_messages.slice(-12):[];
         let reply=null,handoff=false,nextStatus=draft.status,estimatedStars=Number(draft.estimated_stars||0);
-        if(draft.status==="collecting"&&details.proposal_pending_customer===true&&isCraftOrderAcceptance(message)){
+        if(draft.status==="collecting"&&details.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,details.conversation)){
           reply="Спасибо! Ваше согласие записано. Я передал предложение владельцу Агентства для проверки описания и окончательной цены. После подтверждения Вы получите дальнейшие инструкции. ✨";
           details.proposal_pending_customer=false;details.customer_accepted=true;details.customer_accepted_at=new Date().toISOString();nextStatus="review";
           await notifyOwner(env,"🎁 ПОКУПАТЕЛЬ СОГЛАСИЛСЯ ОФОРМИТЬ ИНДИВИДУАЛЬНЫЙ ЗАКАЗ\nID: "+draftId+"\nКлиент: "+telegramId+"\nПредварительная оценка: "+estimatedStars+" ⭐\n\nПокупатель явно согласился с предложением. Проверьте описание и цену в Админ-панели → ИИ-заказы.");
@@ -3486,7 +3535,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const lastUserMessage = messages.length && messages[messages.length - 1].role === "assistant"
           ? [...messages].reverse().find(item => item.role === "user")?.content || ""
           : "";
-        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage) : { actions: [] };
+        const actionContext = lastUserMessage ? await buildSupportNavigationActions(env, lastUserMessage, messages) : { actions: [] };
         const actions = actionContext.actions || [];
         return json({
           conversations,
@@ -3587,8 +3636,28 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         await env.DB.prepare("UPDATE support_conversations SET title=CASE WHEN title='Новый диалог' THEN ? ELSE title END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
           .bind(message.slice(0, 42), conversationId, telegramId).run();
 
-        const startsCustomWorkOrder = /^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\s]*)?(?:(?:я\s+)?хочу\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\s+(?:нужно|надо)|давайте|помогите(?:\s+мне)?|можно(?:\s+мне)?)\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\s+(?:мне\s+)?(?:индивидуальн[а-яё]*\s+)?заказ|закаж[а-яё]*\s+мне|(?:нужен|нужна|нужно)\s+(?:индивидуальн[а-яё]*\s+)?заказ|(?:я\s+)?хочу\s+(?:индивидуальн[а-яё]*\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
-          && !/^(?:(?:если|когда)\s+я\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\s+)?не\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message);
+        const supportContextRows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
+          .bind(telegramId,conversationId).all();
+        const supportContextHistory = (supportContextRows.results || []).reverse();
+        const askedOrderTopics = new Set();
+        for (const item of supportContextHistory) {
+          if (item.role !== "assistant") continue;
+          const question = String(item.content || "").toLowerCase();
+          if (/бюджет|стоимост|цен[уы]|рубл/.test(question)) askedOrderTopics.add("budget");
+          if (/для кого|получател|кому предназнач|повод/.test(question)) askedOrderTopics.add("recipient");
+          if (/размер|формат|стил|цвет|гамм/.test(question)) askedOrderTopics.add("appearance");
+          if (/материал|техник|детализац|подробн|сложност/.test(question)) askedOrderTopics.add("craft");
+          if (/срок|к какому числу|когда необходим/.test(question)) askedOrderTopics.add("deadline");
+        }
+        const userDetailTurns = supportContextHistory.filter(item => item.role === "user" && String(item.content || "").trim().length >= 8).length;
+        const userClearlyWantsCustomWork = supportContextHistory.some(item => item.role === "user"
+          && /хочу|нужн|надо|заказать|закаж|сделать|создать|изготовить|мне бы|можно ли сделать/i.test(String(item.content || ""))
+          && /картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет|оформлени/i.test(String(item.content || "")));
+        const assistantCollectedCustomDetails = askedOrderTopics.size >= 3 && userDetailTurns >= 3 && userClearlyWantsCustomWork;
+         const asksHowToOrderUnavailableWork = /(?:как\s+(?:мне\s+)?(?:заказать|оформить|получить)|хочу\s+заказать|можно\s+(?:ли\s+)?заказать|заказать\s+(?:у\s+вас\s+)?(?:новую|индивидуальн|работ|то,?\s*чего)|работ[уы]?\s+(?:нет|отсутству)\s+(?:в\s+)?каталог|нет\s+(?:такой\s+)?работ[уы]?\s+(?:в\s+)?каталог|изготовить\s+на\s+заказ|сделать\s+на\s+заказ)/iu.test(message);
+         const complainsAboutRejectedCustomOrder = /(?:почему|зачем).{0,80}(?:не\s+наш[её]л|каталог|повторя|одно\s+и\s+то\s+же)|(?:не\s+повторя|опять\s+то\s+же|ты\s+повторя|вы\s+повторя)/iu.test(message);
+         const startsCustomWorkOrder = asksHowToOrderUnavailableWork || (/^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\s]*)?(?:(?:я\s+)?хочу\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\s+(?:нужно|надо)|давайте|помогите(?:\s+мне)?|можно(?:\s+мне)?)\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\s+(?:мне\s+)?(?:индивидуальн[а-яё]*\s+)?заказ|закаж[а-яё]*\s+мне|(?:нужен|нужна|нужно)\s+(?:индивидуальн[а-яё]*\s+)?заказ|(?:я\s+)?хочу\s+(?:индивидуальн[а-яё]*\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
+           && !/^(?:(?:если|когда)\s+я\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\s+)?не\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message)) || assistantCollectedCustomDetails || (userClearlyWantsCustomWork && complainsAboutRejectedCustomOrder);
         if (conversationControl?.mode === "human" && !startsCustomWorkOrder) {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
           const reply = "Сообщение передано владельцу. ИИ-помощник временно приостановлен.";
@@ -3607,8 +3676,15 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
             const draftId = activeCraftDraft?.id || makeId();
             let draftDetails = {};
             if (activeCraftDraft) { try { draftDetails = JSON.parse(activeCraftDraft.details_json || "{}"); } catch {} }
-            const draftConversation = Array.isArray(draftDetails.conversation) ? draftDetails.conversation : [];
-if(activeCraftDraft){
+            let draftConversation = Array.isArray(draftDetails.conversation) ? draftDetails.conversation : [];
+            if (!activeCraftDraft) {
+              // Переносим собранную переписку обычного ИИ-помощника в черновик заказа.
+              draftConversation = supportContextHistory.slice(-24).map(item => ({
+                role: ["user","assistant","owner"].includes(item.role) ? item.role : "user",
+                content: String(item.content || "").slice(0,1500)
+              }));
+            }
+            if(activeCraftDraft){
  const promoResult=await aiApplyPromoToDraft(env,draftId,telegramId,message,draftDetails,activeCraftDraft.estimated_stars||0);
  if(promoResult){
   draftConversation.push({role:"user",content:message.slice(0,700)},{role:"assistant",content:promoResult.reply});
@@ -3619,12 +3695,12 @@ if(activeCraftDraft){
   return json({ok:true,reply:promoResult.reply,vip:!!vip,saved:true,conversation_id:conversationId,order_draft:true,draft_id:draftId,offer_pending:draftDetails.proposal_pending_customer===true,estimated_stars:activeCraftDraft.estimated_stars||0,status:"collecting"},200,origin);
  }
 }
-            draftConversation.push({ role: "user", content: message.slice(0,700) });
+            if (draftConversation[draftConversation.length - 1]?.content !== message) draftConversation.push({ role: "user", content: message.slice(0,700) });
             // Сначала сохраняем черновик, затем вызываем ИИ: даже при временной ошибке модели
             // явный запрос покупателя останется в разделе «Незавершённые».
             let createdCraftDraft = false;
             if (!activeCraftDraft) {
-              const initialSubject = String(message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+              const initialSubject = String(draftConversation.find(item => item.role === "user")?.content || message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
               draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
                 ai_enabled: true, order_intent: true, summary: message.slice(0,2000), conversation: draftConversation.slice(-24) };
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'collecting')")
@@ -3635,7 +3711,7 @@ if(activeCraftDraft){
               .slice(-24).map(item => ({ role: item.role === "owner" ? "assistant" : item.role, content: String(item.content || "").slice(0,1500) }));
             let craftReply = "";
             let offerReady = false;
-            const customerAccepted = !!(activeCraftDraft&&draftDetails.proposal_pending_customer===true&&isCraftOrderAcceptance(message));
+            const customerAccepted = !!(activeCraftDraft&&draftDetails.proposal_pending_customer===true&&await classifyCraftOrderAcceptance(env,draftConversation));
             let estimatedStars = Number(activeCraftDraft?.estimated_stars || 0);
             let status = "collecting";
             if(customerAccepted){
@@ -3691,7 +3767,7 @@ if(activeCraftDraft){
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
         const history = (rows.results || []).reverse();
-        const catalogContext = await buildSupportNavigationActions(env, message);
+        const catalogContext = await buildSupportNavigationActions(env, message, history);
         const actions = catalogContext.actions;
         let reply;
         try {
@@ -3705,7 +3781,7 @@ if(activeCraftDraft){
               + (detail ? detail + " " : "")
               + "Цена: " + Number(item.price_stars || 0) + " Stars. "
               + "Нажмите кнопку «" + buttonLabel + "» под сообщением — она откроет карточку именно этой работы. 🎁";
-          } else if (catalogContext.productIntent) {
+          } else if (catalogContext.productIntent && !startsCustomWorkOrder) {
             reply = "Я проверил актуальный каталог Агентства, но точную работу по этому названию среди активных товаров не нашёл. Не буду придумывать похожую работу. "
               + "Откройте каталог кнопкой ниже — там можно посмотреть все доступные варианты. Если уточните название или опишете работу, я проверю ещё раз. 🎁";
           }
