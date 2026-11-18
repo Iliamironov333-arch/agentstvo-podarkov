@@ -389,9 +389,25 @@ async function aiApplyPromoToDraft(env,draftId,telegramId,message,details,estima
 }
 async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,replyToOriginalId=null){
   const lower=String(text||"").toLowerCase().trim();
-  const orientationQuestion=/^(?:а\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\b/i.test(lower)&&/[?？]/.test(text);
-  const explicit=!orientationQuestion&&/(хочу\s+(?:оформить|заказать)|давайте\s+(?:оформим|закажем)|оформ(?:ить|ляем)\s+заказ|можно\s+(?:оформить|заказать)\s+сейчас|готов(?:а|о|ы)\s+оформить|(?:оформи(?:те)?|закажи(?:те)?)\s+(?:мне\s+)?(?:этот\s+)?заказ|мне\s+(?:нужно|надо)\s+(?:оформить|заказать)|я\s+решил(?:а)?\s+(?:оформить|заказать))/i.test(text)&&!/(не\s+хочу|не\s+надо|не\s+нужно|не\s+собираюсь)/i.test(text);
-  const navigationIntent=!explicit&&(orientationQuestion||/\b(?:каталог|меню|корзин\w*|акци\w*|магазин|раздел|кнопк\w*|открыть|перейти|показать)\b/i.test(lower));
+  const orientationQuestion=/^(?:а\\s+)?(?:как|где|когда|почему|зачем|что|сколько|можно ли|подскажите|расскажите|объясните)\\b/i.test(lower)&&/[?？]/.test(text);
+  const recentGroupRows=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(String(chatId),String(user.id)).all();
+  const recentGroupHistory=(recentGroupRows.results||[]).reverse();
+  const askedOrderTopics=new Set();
+  for(const item of recentGroupHistory){
+    if(item.role!=="assistant")continue;
+    const question=String(item.content||"").toLowerCase();
+    if(/бюджет|стоимост|цен[уы]|рубл/.test(question))askedOrderTopics.add("budget");
+    if(/для кого|получател|кому предназнач|повод/.test(question))askedOrderTopics.add("recipient");
+    if(/размер|формат|стил|цвет|гамм/.test(question))askedOrderTopics.add("appearance");
+    if(/материал|техник|детализац|подробн|сложност/.test(question))askedOrderTopics.add("craft");
+    if(/срок|к какому числу|когда необходим/.test(question))askedOrderTopics.add("deadline");
+  }
+  const groupUserTurns=recentGroupHistory.filter(item=>item.role==="user"&&String(item.content||"").trim().length>=8);
+  const groupCustomerIntent=groupUserTurns.some(item=>/(хочу|нужн|надо|заказать|закаж|сделать|создать|изготовить|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
+  const collectedGroupOrder=askedOrderTopics.size>=3&&groupUserTurns.length>=3&&groupCustomerIntent;
+  const directOrderIntent=!orientationQuestion&&/(хочу\\s+(?:оформить|заказать|(?:индивидуальн\\w*\\s+)?(?:картин|подар|открытк|поделк|издел|работ|рисунок))|давайте\\s+(?:оформим|закажем)|оформ(?:ить|ляем)\\s+заказ|можно\\s+(?:оформить|заказать)\\s+сейчас|готов(?:а|о|ы)\\s+оформить|(?:оформи(?:те)?|закажи(?:те)?)\\s+(?:мне\\s+)?(?:этот\\s+)?заказ|мне\\s+(?:нужно|надо)\\s+(?:оформить|заказать)|мне\\s+(?:нужна|нужен|нужно)\\s+(?:индивидуальн\\w*\\s+)?(?:картин|подар|открытк|поделк|издел|работ|рисунок)|я\\s+решил(?:а)?\\s+(?:оформить|заказать)|можно\\s+(?:сделать|изготовить)\\s+(?:мне\\s+)?(?:картин|подар|открытк|поделк|издел|работ|рисунок))/i.test(text)&&!/(не\\s+хочу|не\\s+надо|не\\s+нужно|не\\s+собираюсь)/i.test(text);
+  const explicit=directOrderIntent||collectedGroupOrder;
+  const navigationIntent=!explicit&&(orientationQuestion||/\\b(?:каталог|меню|корзин\\w*|акци\\w*|магазин|раздел|кнопк\\w*|открыть|перейти|показать)\\b/i.test(lower));
   let active=null;
   let matchedOrderThread=false;
   if(replyToOriginalId){
@@ -470,11 +486,23 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
   let details={};if(active){try{details=JSON.parse(active.details_json||"{}");}catch{}}
   if(!active){
     const id=crypto.randomUUID();
-    details={source:"group",ai_enabled:true,group_chat_id:String(chatId),conversation:[{role:"user",content:String(text).slice(0,1000)}],order_fields:{},step:"item"};
+    const historyUsers=recentGroupHistory.filter(item=>item.role==="user");
+    const originalIdea=historyUsers.find(item=>/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")))||historyUsers[0]||{content:text};
+    const priorDetails=historyUsers.filter(item=>item!==originalIdea).map(item=>String(item.content||"").trim()).filter(Boolean);
+    let knownQuantity="";
+    for(let i=1;i<recentGroupHistory.length;i++){
+      const previous=recentGroupHistory[i-1],current=recentGroupHistory[i];
+      if(previous.role==="assistant"&&/сколько|количество/i.test(String(previous.content||""))&&current.role==="user"&&/^(?:\\d+|один|одна|одно|две|два|три|четыре|пять|несколько|одно изделие|одна штука)[.! ]*$/i.test(String(current.content||"").trim()))knownQuantity=String(current.content||"").trim();
+    }
+    details={source:"group",ai_enabled:true,group_chat_id:String(chatId),
+      conversation:collectedGroupOrder?recentGroupHistory.slice(-24).map(item=>({role:item.role,content:String(item.content||"").slice(0,1000)})):[{role:"user",content:String(text).slice(0,1000)}],
+      order_fields:collectedGroupOrder?{item:String(originalIdea.content||text).slice(0,700),details:priorDetails.join(" · ").slice(0,1200),quantity:knownQuantity}:{},
+      step:collectedGroupOrder?(knownQuantity?"confirm":"quantity"):"item"};
     await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status,group_message_id) VALUES(?,?,?,?,?,?,?,0,'collecting',?)")
-      .bind(id,String(chatId),String(user.id),user.username||null,user.first_name||null,"Заказ из группы",JSON.stringify(details),replyToMessageId?Number(replyToMessageId):null).run();
-    await aiNotifyOwner(env,"🟢 НАЧАЛО ДИАЛОГА ПО ЗАКАЗУ ИЗ ГРУППЫ\nID: "+id+"\nКлиент: "+aiSafeName(user)+" ("+user.id+")\n\nПокупатель начал оформление в группе. Счёт недоступен до завершения диалога и проверки владельцем.");
-    await aiGroupOrderReply(env,chatId,user.id,id,details,"Конечно, помогу оформить — спокойно и по шагам 😊\nЧто именно Вы хотите заказать?",replyToMessageId);
+      .bind(id,String(chatId),String(user.id),user.username||null,user.first_name||null,String(originalIdea.content||"Заказ из группы").slice(0,120),JSON.stringify(details),replyToMessageId?Number(replyToMessageId):null).run();
+    await aiNotifyOwner(env,"🟢 НОВЫЙ ЧЕРНОВИК ИНДИВИДУАЛЬНОГО ЗАКАЗА ИЗ ГРУППЫ\\nID: "+id+"\\nКлиент: "+aiSafeName(user)+" ("+user.id+")\\n\\nПокупатель начал оформление в группе. Счёт недоступен до согласия покупателя и проверки владельцем.");
+    const nextQuestion=collectedGroupOrder?(knownQuantity?"Проверьте, пожалуйста, собранные пожелания и количество. Всё ли верно?\\n\\nИзделие: "+details.order_fields.item+"\\nПожелания: "+details.order_fields.details+"\\nКоличество: "+details.order_fields.quantity+"\\n\\nЕсли всё верно, ответьте «Да, всё верно».":"Я сохранил Вашу идею и уже собранные пожелания. Осталось уточнить только количество: сколько таких изделий Вам нужно?"):"Конечно, помогу оформить — спокойно и по шагам 😊\\nЧто именно Вы хотите заказать?";
+    await aiGroupOrderReply(env,chatId,user.id,id,details,nextQuestion,replyToMessageId);
     return true;
   }
   details.conversation=Array.isArray(details.conversation)?details.conversation:[];
@@ -560,7 +588,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
     "Если человек хочет понять, что можно заказать, опирайтесь на реальный каталог и реальные товары. Если подходящей готовой работы нет, можно помочь придумать индивидуальную идею, не обещая, что Агентство уже производит её.",
     "Помощь сделать поделку самостоятельно дома — запасной сценарий. Предлагайте её только если человек прямо просит инструкцию для самостоятельного изготовления либо явно выбирает самостоятельный вариант. Не переводите обычный запрос о товаре в DIY.",
     "Вы можете быть собеседником: поддержать человека, поговорить, отреагировать на его идею или сомнение. Не превращайте дружескую беседу в рекламу или заказ.",
-    "В групповой переписке Вы консультируете, но не создаёте заказ и не собираете персональные данные или детали оплаты. Для готовой работы объясните путь: «Магазин» → выбрать товар → «＋ В корзину» или «⚡ Купить сразу» → корзина → «Оформить заказ». Для индивидуальной работы: «Создать своё» → пройти 8 шагов; предварительная цена рассчитывается сервером в диапазоне 250–700 Stars, затем запрос проверяет владелец. Не обещайте подтверждение или срок до решения владельца.",
+    "В групповой переписке не отправляйте клиента повторно в «Создать своё», если он уже описал идею и отвечал на уточняющие вопросы. Если человек явно хочет заказать индивидуальную работу, серверный сценарий соберёт данные в отдельный черновик ИИ-заказа, сохранит переписку и уведомит владельца; продолжайте этот сценарий и не просите повторять сведения. Счёт не отправляется до явного согласия покупателя и подтверждения владельца. Если человек только спрашивает или выбирает идею, консультируйте без создания заказа. Для готовой работы объясните путь: «Магазин» → выбрать товар → «＋ В корзину» или «⚡ Купить сразу» → корзина → «Оформить заказ». Не обещайте подтверждение или срок до решения владельца.",
     "Не подталкивайте к покупке и не завершайте обычный ответ рекламным призывом. Если клиент сам прямо хочет купить, спокойно объясните точный путь в Mini App; не начинайте сбор заказа прямо в группе.",
     "Отвечайте на новую тему отдельно и не переносите пожелания одного участника в диалог другого. Используйте только историю текущего участника.",
     "Запрос из «Создать своё» поступает владельцу на проверку. Только владелец подтверждает индивидуальную работу и цену; до подтверждения счёт не отправляется.",
