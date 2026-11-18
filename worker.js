@@ -2807,6 +2807,21 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
         return json({ok:true,coupons_spent:cost,game_coupons:Number((await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first())?.game_coupons||0),progress:{...progress,status:"playing"},stage:publicGameStage(config.levels[progress.level_index].stages[progress.stage_index])},200,origin);
       }
+      if (path === "/api/games/exit" && method === "POST") {
+        const body=await readJson(request);
+        const clientKey=typeof body.idempotency_key==="string"?body.idempotency_key.trim().slice(0,80):"";
+        if(!/^[a-zA-Z0-9_-]{8,80}$/.test(clientKey))return json({error:"Не удалось подтвердить выход из игры."},400,origin);
+        const eventKey="game-exit:"+telegramId+":"+clientKey;
+        const prior=await env.DB.prepare("SELECT details_json FROM game_events WHERE idempotency_key=?").bind(eventKey).first();
+        if(prior)return json({ok:true,already_processed:true},200,origin);
+        const result=await env.DB.batch([
+          env.DB.prepare("UPDATE game_progress SET status='idle',level_index=0,stage_index=0,loss_count=0,reward_json=NULL,secret_snapshot_json=NULL,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='lost'").bind(telegramId),
+          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main','exit','{}',? WHERE changes()=1").bind(telegramId,eventKey)
+        ]);
+        if(result[0]?.meta?.changes!==1||result[1]?.meta?.changes!==1)return json({error:"Сейчас нельзя выйти: состояние игры уже изменилось."},409,origin);
+        return json({ok:true},200,origin);
+      }
+
       if (path === "/api/games/answer" && method === "POST") {
         const body=await readJson(request);
         const answer=Number(body.answer_index);
