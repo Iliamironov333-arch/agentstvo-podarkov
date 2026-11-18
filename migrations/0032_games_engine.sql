@@ -28,6 +28,17 @@ CREATE TABLE IF NOT EXISTS game_events (
   FOREIGN KEY(telegram_id) REFERENCES users(telegram_id)
 );
 CREATE INDEX IF NOT EXISTS idx_game_events_user ON game_events(telegram_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS game_rewards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  telegram_id TEXT NOT NULL,
+  game_key TEXT NOT NULL,
+  reward_title TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  completion_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(telegram_id) REFERENCES users(telegram_id)
+);
+CREATE INDEX IF NOT EXISTS idx_game_rewards_user ON game_rewards(telegram_id,created_at DESC);
 INSERT OR IGNORE INTO game_config(game_key,config_json,updated_by) VALUES(
  'main',
  '{"enabled":false,"levels":[{"title":"Деревянный","stages":[]},{"title":"Серебряный","stages":[]},{"title":"Золотой","stages":[]},{"title":"Рубиновый","stages":[]}],"active_secret":null}',
