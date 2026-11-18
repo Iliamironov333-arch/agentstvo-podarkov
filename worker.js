@@ -2765,7 +2765,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const config=parseGameConfig(configRow?.config_json);
         const progress=await env.DB.prepare("SELECT game_key,level_index,stage_index,loss_count,status,updated_at FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
         const bonus=await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
-        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?config.active_secret:null},200,origin);
+        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?config.levels[progress.level_index]?.stages[progress.stage_index]||null:null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?config.active_secret:null},200,origin);
       }
       if (path === "/api/games/start" && method === "POST") {
         const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
@@ -2783,12 +2783,12 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const cost=Number(progress.loss_count||0)+1;
         const opId=makeId();
         const results=await env.DB.batch([
-          env.DB.prepare("UPDATE user_bonus_balances SET game_coupons=game_coupons-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_coupons>=?").bind(cost,telegramId,cost),
-          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main','continue',?,? WHERE changes()=1").bind(telegramId,JSON.stringify({coupons_spent:cost,loss_count:progress.loss_count}),"game-continue:"+opId),
-          env.DB.prepare("UPDATE game_progress SET status='playing',updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='lost' AND loss_count=? AND level_index=? AND stage_index=? AND EXISTS(SELECT 1 FROM game_events WHERE idempotency_key=?)").bind(telegramId,progress.loss_count,progress.level_index,progress.stage_index,"game-continue:"+opId)
+          env.DB.prepare("UPDATE game_progress SET status='playing',updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='lost' AND loss_count=? AND level_index=? AND stage_index=? AND EXISTS(SELECT 1 FROM user_bonus_balances WHERE telegram_id=? AND game_coupons>=?)").bind(telegramId,progress.loss_count,progress.level_index,progress.stage_index,telegramId,cost),
+          env.DB.prepare("UPDATE user_bonus_balances SET game_coupons=game_coupons-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_coupons>=? AND changes()=1").bind(cost,telegramId,cost),
+          env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main','continue',?,? WHERE changes()=1").bind(telegramId,JSON.stringify({coupons_spent:cost,loss_count:progress.loss_count}),"game-continue:"+opId)
         ]);
-        if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно GAME-купонов. Для продолжения требуется "+cost+" шт."},409,origin);
-        if(results[2]?.meta?.changes!==1)return json({error:"Состояние игры изменилось. Обновите экран."},409,origin);
+        if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно GAME-купонов или состояние игры уже изменилось. Для продолжения требуется "+cost+" шт."},409,origin);
+        if(results[1]?.meta?.changes!==1)return json({error:"Не удалось списать GAME-купоны. Обновите экран."},409,origin);
         const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
         return json({ok:true,coupons_spent:cost,game_coupons:Number((await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first())?.game_coupons||0),progress:{...progress,status:"playing"},stage:config.levels[progress.level_index].stages[progress.stage_index]},200,origin);
       }
