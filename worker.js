@@ -2765,7 +2765,8 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const config=parseGameConfig(configRow?.config_json);
         const progress=await env.DB.prepare("SELECT game_key,level_index,stage_index,loss_count,status,reward_json,updated_at FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
         const bonus=await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
-        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?config.levels[progress.level_index]?.stages[progress.stage_index]||null:null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?(progress.reward_json?(()=>{try{return JSON.parse(progress.reward_json)}catch{return null}})():null):null},200,origin);
+        const rewards=await env.DB.prepare("SELECT id,reward_title,image_url,created_at FROM game_rewards WHERE telegram_id=? AND game_key='main' ORDER BY id DESC LIMIT 20").bind(telegramId).all().catch(()=>({results:[]}));
+        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?config.levels[progress.level_index]?.stages[progress.stage_index]||null:null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?(progress.reward_json?(()=>{try{return JSON.parse(progress.reward_json)}catch{return null}})():null):null,rewards:rewards.results||[]},200,origin);
       }
       if (path === "/api/games/start" && method === "POST") {
         const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
@@ -2816,9 +2817,11 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           env.DB.prepare("UPDATE game_progress SET level_index=?,stage_index=?,loss_count=loss_count+?,status=?,reward_json=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='playing' AND level_index=? AND stage_index=?")
             .bind(nextLevelIndex,nextStage,correct?0:1,status,secretSnapshot?JSON.stringify(secretSnapshot):null,telegramId,progress.level_index,progress.stage_index),
           env.DB.prepare("INSERT INTO game_events(telegram_id,game_key,event_type,details_json,idempotency_key) SELECT ?,'main',?,?,? WHERE changes()=1")
-            .bind(telegramId,correct?"answer_correct":"answer_wrong",JSON.stringify(responseData),eventKey)
+            .bind(telegramId,correct?"answer_correct":"answer_wrong",JSON.stringify(responseData),eventKey),
+          env.DB.prepare("INSERT INTO game_rewards(telegram_id,game_key,reward_title,image_url,completion_key) SELECT ?,'main',?,?,? WHERE changes()=1 AND ?='completed' AND ? IS NOT NULL")
+            .bind(telegramId,String(secretSnapshot?.title||"Радужный SECRET пак"),String(secretSnapshot?.image_url||""),eventKey,status,secretSnapshot?.image_url||null)
         ]);
-        if(result[0]?.meta?.changes!==1||result[1]?.meta?.changes!==1)return json({error:"Не удалось зафиксировать ответ. Обновите экран."},409,origin);
+        if(result[0]?.meta?.changes!==1||result[1]?.meta?.changes!==1||(nextLevel&&result[2]?.meta?.changes!==1))return json({error:"Не удалось зафиксировать ответ и награду. Обновите экран."},409,origin);
         return json({ok:true,...responseData},200,origin);
       }
 
