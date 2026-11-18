@@ -641,6 +641,31 @@ async function estimateCustomOrderPrice(env, answers, fallbackStars) {
   }
 }
 
+async function classifyCustomWorkOrderIntent(env, history) {
+ if(!env.AI||!Array.isArray(history)||!history.length)return false;
+ const input=history.filter(item=>["user","assistant","owner"].includes(item.role)).slice(-24).map(item=>({role:item.role==="owner"?"assistant":item.role,content:String(item.content||"").slice(0,1000)}));
+ if(!input.some(item=>item.role==="user"))return false;
+ const instructions=[
+  "Ты определяешь намерение покупателя в переписке с ИИ-помощником Агентства подарков.",
+  "Верни только JSON-объект с полем intent: start_custom_order или not_custom_order.",
+  "start_custom_order — человек по смыслу хочет заказать или получить изготовленную специально для него новую авторскую поделку, рисунок, открытку, подарок или другое изделие. Учитывай естественные косвенные фразы: «можете нарисовать для меня...», «мне бы хотелось открытку...», «нужен подарок с моим дизайном», «а можно сделать похожее, но с...». Слова «заказать», «купить» или «оформить» не обязательны.",
+  "Также start_custom_order, если в предыдущих сообщениях покупатель уже ясно начал обсуждать конкретный индивидуальный заказ, а сейчас отвечает на уточняющие вопросы ИИ. Учитывай всю историю, не только последнее сообщение.",
+  "Если человек спрашивает, как заказать работу, которой нет в каталоге, и по контексту хочет её получить, это start_custom_order.",
+  "not_custom_order — общий вопрос о возможностях, ценах или сроках без намерения заказать; поиск готового товара; обсуждение гипотетического примера, теста или чужого заказа; отказ от идеи; либо просьба открыть отдельный восьмишаговый опрос «Создать своё». Этот опрос — самостоятельный режим и не является индивидуальным заказом в текущем чате.",
+  "Не используй фиксированные слова как триггеры. Определи намерение по смыслу и контексту. При сомнении верни not_custom_order."
+ ].join(" ");
+ try{
+  const response=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:AGENCY_TEXT_MODEL,instructions,input,max_output_tokens:100})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return false;
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(item=>Array.isArray(item.content)?item.content:[]).filter(item=>item.type==="output_text").map(item=>item.text||"").join(" ");
+  const first=output.indexOf("{"),last=output.lastIndexOf("}");
+  if(first<0||last<=first)return false;
+  const parsed=JSON.parse(output.slice(first,last+1));
+  return parsed.intent==="start_custom_order";
+ }catch(error){console.error("Custom order intent classification failed:",String(error).slice(0,250));return false;}
+}
 async function classifyCraftOrderAcceptance(env, conversation) {
  if(!env.AI||!Array.isArray(conversation)||!conversation.length)return false;
  const input=conversation.slice(-12).map(item=>({role:item.role==="owner"?"assistant":item.role,content:String(item.content||"").slice(0,1200)}));
@@ -3639,25 +3664,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const supportContextRows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId,conversationId).all();
         const supportContextHistory = (supportContextRows.results || []).reverse();
-        const askedOrderTopics = new Set();
-        for (const item of supportContextHistory) {
-          if (item.role !== "assistant") continue;
-          const question = String(item.content || "").toLowerCase();
-          if (/бюджет|стоимост|цен[уы]|рубл/.test(question)) askedOrderTopics.add("budget");
-          if (/для кого|получател|кому предназнач|повод/.test(question)) askedOrderTopics.add("recipient");
-          if (/размер|формат|стил|цвет|гамм/.test(question)) askedOrderTopics.add("appearance");
-          if (/материал|техник|детализац|подробн|сложност/.test(question)) askedOrderTopics.add("craft");
-          if (/срок|к какому числу|когда необходим/.test(question)) askedOrderTopics.add("deadline");
-        }
-        const userDetailTurns = supportContextHistory.filter(item => item.role === "user" && String(item.content || "").trim().length >= 8).length;
-        const userClearlyWantsCustomWork = supportContextHistory.some(item => item.role === "user"
-          && /хочу|нужн|надо|заказать|закаж|сделать|создать|изготовить|мне бы|можно ли сделать/i.test(String(item.content || ""))
-          && /картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет|оформлени/i.test(String(item.content || "")));
-        const assistantCollectedCustomDetails = askedOrderTopics.size >= 3 && userDetailTurns >= 3 && userClearlyWantsCustomWork;
-         const asksHowToOrderUnavailableWork = /(?:как\s+(?:мне\s+)?(?:заказать|оформить|получить)|хочу\s+заказать|можно\s+(?:ли\s+)?заказать|заказать\s+(?:у\s+вас\s+)?(?:новую|индивидуальн|работ|то,?\s*чего)|работ[уы]?\s+(?:нет|отсутству)\s+(?:в\s+)?каталог|нет\s+(?:такой\s+)?работ[уы]?\s+(?:в\s+)?каталог|изготовить\s+на\s+заказ|сделать\s+на\s+заказ)/iu.test(message);
-         const complainsAboutRejectedCustomOrder = /(?:почему|зачем).{0,80}(?:не\s+наш[её]л|каталог|повторя|одно\s+и\s+то\s+же)|(?:не\s+повторя|опять\s+то\s+же|ты\s+повторя|вы\s+повторя)/iu.test(message);
-         const startsCustomWorkOrder = asksHowToOrderUnavailableWork || (/^(?:(?:здравствуйте|привет|добрый день|добрый вечер)[,!\s]*)?(?:(?:я\s+)?хочу\s+(?:заказ|закаж|оформ|сдела|созда)|(?:мне\s+(?:нужно|надо)|давайте|помогите(?:\s+мне)?|можно(?:\s+мне)?)\s+(?:заказ|закаж|оформ|сдела|созда)|(?:оформ|сдела|созда)[а-яё]*\s+(?:мне\s+)?(?:индивидуальн[а-яё]*\s+)?заказ|закаж[а-яё]*\s+мне|(?:нужен|нужна|нужно)\s+(?:индивидуальн[а-яё]*\s+)?заказ|(?:я\s+)?хочу\s+(?:индивидуальн[а-яё]*\s+)?(?:работ|поделк|издели|подар|картин|открытк|рисунок))/iu.test(message)
-           && !/^(?:(?:если|когда)\s+я\s+(?:напишу|скажу|спрошу)|пример|тест|проверка|(?:я\s+)?не\s+(?:хочу|надо|нужно|собираюсь))/iu.test(message)) || assistantCollectedCustomDetails || (userClearlyWantsCustomWork && complainsAboutRejectedCustomOrder);
+        const startsCustomWorkOrder = await classifyCustomWorkOrderIntent(env,supportContextHistory);
         if (conversationControl?.mode === "human" && !startsCustomWorkOrder) {
           await notifyOwner(env, "💬 Новое сообщение в диалоге под управлением владельца\nTelegram ID: " + telegramId + "\n\n" + message);
           const reply = "Сообщение передано владельцу. ИИ-помощник временно приостановлен.";
