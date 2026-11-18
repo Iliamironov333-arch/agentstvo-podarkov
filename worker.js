@@ -1005,6 +1005,10 @@ function adminPermissionForPath(path, method) {
   return "owner_only";
 }
 
+function publicGameStage(stage) {
+  if(!stage)return null;
+  return {prompt:String(stage.prompt||""),options:Array.isArray(stage.options)?stage.options.map(value=>String(value)):[]};
+}
 function parseGameConfig(raw) {
   const fallback={enabled:false,levels:[
     {title:"Деревянный",stages:[]},{title:"Серебряный",stages:[]},
@@ -1235,7 +1239,7 @@ export default {
             if(!Array.isArray(body.config.levels[li]?.stages)||body.config.levels[li].stages.length!==4)return json({error:"В каждом уровне должно быть ровно 4 этапа."},400,origin);
             for(let si=0;si<4;si++){
               const stage=body.config.levels[li].stages[si];
-              if(typeof stage.prompt!=="string"||stage.prompt.trim().length<3||!Array.isArray(stage.options)||stage.options.length<2||stage.options.length>6||!Number.isSafeInteger(Number(stage.correct_option))||Number(stage.correct_option)<0||Number(stage.correct_option)>=stage.options.length)return json({error:"Проверьте условие, варианты и правильный номер ответа на этапе "+(li*4+si+1)+"."},400,origin);
+              if(typeof stage.prompt!=="string"||stage.prompt.trim().length<3||stage.prompt.length>700||!Array.isArray(stage.options)||stage.options.length<2||stage.options.length>6||stage.options.some(option=>typeof option!=="string"||!option.trim()||option.length>120)||!Number.isSafeInteger(Number(stage.correct_option))||Number(stage.correct_option)<0||Number(stage.correct_option)>=stage.options.length)return json({error:"Проверьте условие, варианты и правильный номер ответа на этапе "+(li*4+si+1)+"."},400,origin);
             }
           }
           const secret=body.config.active_secret;
@@ -2766,7 +2770,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const progress=await env.DB.prepare("SELECT game_key,level_index,stage_index,loss_count,status,reward_json,secret_snapshot_json,updated_at FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
         const bonus=await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first().catch(()=>null);
         const rewards=await env.DB.prepare("SELECT id,reward_title,image_url,created_at FROM game_rewards WHERE telegram_id=? AND game_key='main' ORDER BY id DESC LIMIT 20").bind(telegramId).all().catch(()=>({results:[]}));
-        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?config.levels[progress.level_index]?.stages[progress.stage_index]||null:null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?(progress.reward_json?(()=>{try{return JSON.parse(progress.reward_json)}catch{return null}})():null):null,rewards:rewards.results||[]},200,origin);
+        return json({ok:true,enabled:config.enabled,levels:config.levels.map((level,index)=>({title:level.title,order:index+1})),progress:progress||null,stage:progress?.status==="playing"?publicGameStage(config.levels[progress.level_index]?.stages[progress.stage_index]):null,game_coupons:Number(bonus?.game_coupons||0),continue_cost:progress?.status==="lost"?Number(progress.loss_count||0)+1:0,secret_unlocked:progress?.status==="completed"?(progress.reward_json?(()=>{try{return JSON.parse(progress.reward_json)}catch{return null}})():null):null,rewards:rewards.results||[]},200,origin);
       }
       if (path === "/api/games/start" && method === "POST") {
         const configRow=await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first();
@@ -2776,7 +2780,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(current?.status==="playing")return json({error:"У Вас уже есть активное прохождение. Продолжите его."},409,origin);
         if(current?.status==="lost")return json({error:"Сначала используйте GAME-купоны, чтобы продолжить это прохождение."},409,origin);
         await env.DB.prepare("INSERT INTO game_progress(telegram_id,game_key,level_index,stage_index,loss_count,status,reward_json,secret_snapshot_json,updated_at) VALUES(?,'main',0,0,0,'playing',NULL,?,CURRENT_TIMESTAMP) ON CONFLICT(telegram_id,game_key) DO UPDATE SET level_index=0,stage_index=0,loss_count=0,status='playing',reward_json=NULL,secret_snapshot_json=excluded.secret_snapshot_json,updated_at=CURRENT_TIMESTAMP").bind(telegramId,JSON.stringify(config.active_secret)).run();
-        return json({ok:true,progress:{level_index:0,stage_index:0,loss_count:0,status:"playing"},stage:config.levels[0].stages[0]},200,origin);
+        return json({ok:true,progress:{level_index:0,stage_index:0,loss_count:0,status:"playing"},stage:publicGameStage(config.levels[0].stages[0])},200,origin);
       }
       if (path === "/api/games/continue" && method === "POST") {
         const progress=await env.DB.prepare("SELECT level_index,stage_index,loss_count,status,secret_snapshot_json FROM game_progress WHERE telegram_id=? AND game_key='main'").bind(telegramId).first();
@@ -2791,7 +2795,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         if(results[0]?.meta?.changes!==1)return json({error:"Недостаточно GAME-купонов или состояние игры уже изменилось. Для продолжения требуется "+cost+" шт."},409,origin);
         if(results[1]?.meta?.changes!==1)return json({error:"Не удалось списать GAME-купоны. Обновите экран."},409,origin);
         const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
-        return json({ok:true,coupons_spent:cost,game_coupons:Number((await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first())?.game_coupons||0),progress:{...progress,status:"playing"},stage:config.levels[progress.level_index].stages[progress.stage_index]},200,origin);
+        return json({ok:true,coupons_spent:cost,game_coupons:Number((await env.DB.prepare("SELECT game_coupons FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first())?.game_coupons||0),progress:{...progress,status:"playing"},stage:publicGameStage(config.levels[progress.level_index].stages[progress.stage_index])},200,origin);
       }
       if (path === "/api/games/answer" && method === "POST") {
         const body=await readJson(request);
@@ -2803,6 +2807,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const config=parseGameConfig((await env.DB.prepare("SELECT config_json FROM game_config WHERE game_key='main'").first())?.config_json);
         const stage=config.levels[progress.level_index]?.stages[progress.stage_index];
         if(!stage)return json({error:"Этап не настроен владельцем."},503,origin);
+        if(answer>=stage.options.length)return json({error:"Выберите один из предложенных вариантов."},400,origin);
         const eventKey="game-answer:"+telegramId+":"+key;
         const prior=await env.DB.prepare("SELECT details_json FROM game_events WHERE idempotency_key=?").bind(eventKey).first();
         if(prior)return json({ok:true,...JSON.parse(prior.details_json)},200,origin);
@@ -2813,7 +2818,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         const status=nextLevel?"completed":correct?"playing":"lost";
         let attemptSecret=null;try{attemptSecret=progress.secret_snapshot_json?JSON.parse(progress.secret_snapshot_json):config.active_secret||null;}catch{attemptSecret=config.active_secret||null;}
         const secretSnapshot=nextLevel?attemptSecret:null;
-        const responseData=correct?{correct:true,status,progress:{level_index:nextLevelIndex,stage_index:nextLevel?3:nextStage,loss_count:progress.loss_count,status},stage:nextLevel?null:config.levels[nextLevelIndex].stages[nextStage],secret:secretSnapshot}:{correct:false,status:"lost",loss_count:Number(progress.loss_count)+1,continue_cost:Number(progress.loss_count)+2};
+        const responseData=correct?{correct:true,status,progress:{level_index:nextLevelIndex,stage_index:nextLevel?3:nextStage,loss_count:progress.loss_count,status},stage:nextLevel?null:publicGameStage(config.levels[nextLevelIndex].stages[nextStage]),secret:secretSnapshot}:{correct:false,status:"lost",loss_count:Number(progress.loss_count)+1,continue_cost:Number(progress.loss_count)+2};
         const result=await env.DB.batch([
           env.DB.prepare("UPDATE game_progress SET level_index=?,stage_index=?,loss_count=loss_count+?,status=?,reward_json=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND game_key='main' AND status='playing' AND level_index=? AND stage_index=?")
             .bind(nextLevelIndex,nextStage,correct?0:1,status,secretSnapshot?JSON.stringify(secretSnapshot):null,telegramId,progress.level_index,progress.stage_index),
