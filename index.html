@@ -4273,7 +4273,7 @@ async function startGame(){
 }
 async function continueGame(){
  const button=document.getElementById('gameContinueButton');if(button)button.disabled=true;
- try{const d=await apiFetch('/api/games/continue',{method:'POST',body:'{}'});document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d,'game-stage-enter');}
+ try{const d=await apiFetch('/api/games/continue',{method:'POST',body:JSON.stringify({idempotency_key:'cont_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9)})});document.getElementById('gamesStatus').textContent='Списано '+d.coupons_spent+' GAME-купона. Осталось: '+d.game_coupons+'.';renderGameStage(d,'game-stage-enter');}
  catch(e){toast(e.message||'Не удалось продолжить.');if(button)button.disabled=false;}
 }
 async function submitGameAnswer(answerIndex){
