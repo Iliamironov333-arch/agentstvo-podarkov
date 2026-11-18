@@ -4268,7 +4268,7 @@ async function loadGamesView(){
  }catch(error){status.textContent=error.message||'Не удалось загрузить игру.';root.innerHTML='';}
 }
 async function startGame(){
- try{const d=await apiFetch('/api/games/start',{method:'POST',body:'{}'});renderGameStage(d,'game-stage-enter');document.getElementById('gamesStatus').textContent='Прохождение началось. Удачи!';}
+ try{const d=await apiFetch('/api/games/start',{method:'POST',body:'{}'});renderGameStage(d,'game-stage-enter');document.getElementById('gamesStatus').textContent=d.already_active?'Возвращаемся к Вашему прохождению.':'Прохождение началось. Удачи!';}
  catch(e){toast(e.message||'Не удалось начать игру.');}
 }
 async function continueGame(){
