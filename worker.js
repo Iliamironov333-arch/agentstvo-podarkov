@@ -1015,11 +1015,10 @@ function parseGameConfig(raw) {
     if(!value||!Array.isArray(value.levels)||value.levels.length!==4)return fallback;
     const levels=value.levels.map((level,index)=>({
       title:String(level.title||["Деревянный","Серебряный","Золотой","Рубиновый"][index]).slice(0,40),
-      stages:Array.isArray(level.stages)?level.stages.slice(0,4).map(stage=>({
-        prompt:String(stage.prompt||"").slice(0,700),
-        options:Array.isArray(stage.options)?stage.options.slice(0,6).map(x=>String(x).slice(0,120)):[],
-        correct_option:Number(stage.correct_option)
-      })):[]
+      stages:Array.from({length:4},(_,stageIndex)=>{
+        const stage=Array.isArray(level.stages)?level.stages[stageIndex]||{}:{};
+        return {prompt:String(stage.prompt||"").slice(0,700),options:Array.isArray(stage.options)?stage.options.slice(0,6).map(x=>String(x).slice(0,120)):["",""],correct_option:Number.isSafeInteger(Number(stage.correct_option))?Number(stage.correct_option):0};
+      })
     }));
     return {enabled:value.enabled===true,levels,active_secret:value.active_secret&&typeof value.active_secret==="object"?{title:String(value.active_secret.title||"Радужный SECRET пак").slice(0,100),image_url:String(value.active_secret.image_url||"").slice(0,1000)}:null};
   } catch { return fallback; }
