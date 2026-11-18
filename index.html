@@ -2705,9 +2705,9 @@ async function openAdminUser(telegramId,box) {
   if(data.migrations_pending){const migrationWarning=document.createElement('p');migrationWarning.className='notice';migrationWarning.textContent='Часть административных инструментов профиля временно недоступна: для журнала действий и блокировок нужны миграции 0006 и 0007. Просмотр профиля и CRM остаётся доступен.';box.append(migrationWarning);}
   const bonusPanel=document.createElement('div');bonusPanel.className='admin-balance-controls';bonusPanel.style.marginTop='12px';
   const bonusHeading=document.createElement('h4');bonusHeading.textContent='🎁 Отправить бонусы';bonusPanel.append(bonusHeading);
-  const bonusDefinitions=[['priority_order_coupons','Купоны приоритетного заказа','adminBonusPriorityOrder'],['vip_days','VIP-дни','adminBonusVipDays'],['campaign_priority','Приоритетное начало акции','adminBonusCampaignPriority'],['extra_attempts','Дополнительные попытки','adminBonusExtraAttempts']];
+  const bonusDefinitions=[['priority_order_coupons','Купоны приоритетного заказа','adminBonusPriorityOrder'],['vip_days','VIP-дни','adminBonusVipDays'],['campaign_priority','Приоритетное начало акции','adminBonusCampaignPriority'],['extra_attempts','Дополнительные попытки','adminBonusExtraAttempts'],['game_coupons','GAME-купоны','adminBonusGameCoupons']];
   bonusDefinitions.forEach(([key,label,id])=>{const field=document.createElement('label');field.textContent=label;const input=document.createElement('input');input.type='number';input.min='0';input.max=key==='vip_days'?'3650':'10000';input.step='1';input.inputMode='numeric';input.placeholder='0';input.id=id;field.append(input);bonusPanel.append(field);});
-  const currentBonus=document.createElement('p');currentBonus.className='notice';const current=data.bonuses||{};currentBonus.textContent='Сейчас: купоны '+Number(current.priority_order_coupons||0)+' · VIP-дни '+Number(current.vip_days||0)+' · приоритет акции '+Number(current.campaign_priority||0)+' · попытки '+Number(current.extra_attempts||0);bonusPanel.append(currentBonus);
+  const currentBonus=document.createElement('p');currentBonus.className='notice';const current=data.bonuses||{};currentBonus.textContent='Сейчас: купоны '+Number(current.priority_order_coupons||0)+' · VIP-дни '+Number(current.vip_days||0)+' · приоритет акции '+Number(current.campaign_priority||0)+' · попытки '+Number(current.extra_attempts||0)+' · GAME-купоны '+Number(current.game_coupons||0);bonusPanel.append(currentBonus);
   const grantButton=document.createElement('button');grantButton.type='button';grantButton.className='primary';grantButton.id='adminGrantBonusesButton';grantButton.textContent='Отправить бонусы';grantButton.addEventListener('click',()=>adminGrantBonuses(telegramId));bonusPanel.append(grantButton);box.append(bonusPanel);
   const crmButton=document.createElement('button');crmButton.type='button';crmButton.className='secondary';crmButton.textContent='Открыть переписку';const crmDetail=document.createElement('div');crmDetail.className='admin-user-detail hidden';crmDetail.style.marginTop='10px';crmButton.addEventListener('click',()=>openAdminConversation(telegramId,'',crmDetail));box.append(crmButton,crmDetail);
   const historyDetails=document.createElement('details');historyDetails.className='admin-detail-line';historyDetails.style.marginTop='12px';
@@ -2797,7 +2797,7 @@ async function openAdminUser(telegramId,box) {
 async function adminGrantBonuses(telegramId) {
  const profileBox=document.querySelector('.admin-user-detail[data-telegram-id="'+String(telegramId)+'"]');
  if(!profileBox)return;
- const fields={priority_order_coupons:"adminBonusPriorityOrder",vip_days:"adminBonusVipDays",campaign_priority:"adminBonusCampaignPriority",extra_attempts:"adminBonusExtraAttempts"};
+ const fields={priority_order_coupons:"adminBonusPriorityOrder",vip_days:"adminBonusVipDays",campaign_priority:"adminBonusCampaignPriority",extra_attempts:"adminBonusExtraAttempts",game_coupons:"adminBonusGameCoupons"};
  const values={};
  for(const [key,id] of Object.entries(fields)){const value=Number(profileBox.querySelector("#"+id)?.value||0);if(!Number.isSafeInteger(value)||value<0){toast("Проверьте количество бонусов.");return;}values[key]=value;}
  if(!Object.values(values).some(value=>value>0)){toast("Укажите хотя бы один бонус.");return;}
@@ -4740,7 +4740,8 @@ const BONUS_INVENTORY_DEFINITIONS=[
  {type:"priority_order",key:"priority_order_coupons",title:"🎟️ Купон на приоритетный заказ",unit:"шт.",price:50,description:"Даёт преимущество при обработке заказа в Агентстве."},
  {type:"vip_days",key:"vip_days",title:"👑 Подарочная VIP-подписка",unit:"дней",price:10,description:"Каждая единица — один день VIP-подписки."},
  {type:"campaign_priority",key:"campaign_priority",title:"🏁 Приоритетное начало в акции",unit:"шт.",price:60,description:"Используется при участии в акции, которую владелец проводит в офисе."},
- {type:"extra_attempt",key:"extra_attempts",title:"🔄 Дополнительная попытка",unit:"шт.",price:50,description:"Дополнительная попытка в акции при проигрыше."}
+ {type:"extra_attempt",key:"extra_attempts",title:"🔄 Дополнительная попытка",unit:"шт.",price:50,description:"Дополнительная попытка в акции при проигрыше."},
+ {type:"game_coupon",key:"game_coupons",title:"🎮 GAME-купон",unit:"шт.",price:50,description:"Даёт право начать одно прохождение игрового раздела. Можно использовать для игры или обменять на 50 ⭐."}
 ];
 function renderBonusInventory(bonuses) {
  const root=document.getElementById("bonusInventory");if(!root)return;root.replaceChildren();
