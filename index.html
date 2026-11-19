@@ -1450,6 +1450,17 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+#giftMotionControlCenter .gift-motion-folder{border:1px solid var(--line);border-radius:14px;background:var(--panel2);overflow:hidden}
+#giftMotionControlCenter .gift-motion-folder>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;cursor:pointer;list-style:none;font-weight:800}
+#giftMotionControlCenter .gift-motion-folder>summary::-webkit-details-marker{display:none}
+#giftMotionControlCenter .gift-motion-folder>summary:after{content:"⌄";color:var(--muted);font-size:18px;margin-left:4px}
+#giftMotionControlCenter .gift-motion-folder[open]>summary:after{content:"⌃"}
+#giftMotionControlCenter .gift-motion-folder-count{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+#giftMotionControlCenter .gift-motion-library{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 12px 12px}
+#giftMotionControlCenter .gift-motion-effect{min-width:0;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);padding:10px 8px;text-align:left;font:inherit;font-size:12px;overflow-wrap:anywhere}
+#giftMotionControlCenter .gift-motion-effect:active{transform:scale(.98)}
+#giftMotionControlCenter .gift-motion-effect small{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+@media(min-width:600px){#giftMotionControlCenter .gift-motion-library{grid-template-columns:repeat(3,minmax(0,1fr))}}
 /* GIFT MOTION — 36 premium overlay effects */
 .gift-motion-overlay{position:fixed;inset:0;z-index:9999;overflow:hidden;pointer-events:none!important;contain:layout paint;isolation:isolate}
 .gift-motion-overlay .gm-particle{position:absolute;left:0;top:0;display:block;line-height:1;font-family:system-ui,-apple-system,sans-serif;font-weight:700;text-shadow:0 1px 9px #d99b3c55;will-change:transform,opacity;user-select:none}
@@ -1810,6 +1821,15 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
    <p id="adminErrorLogStatus" class="notice" aria-live="polite">Загружаем журнал…</p><div id="adminErrorLogList"></div>
 
 
+  </div>
+  <div class="panel" id="giftMotionControlCenter">
+   <div class="sectionhead"><h3>✨ GIFT MOTION · Центр эффектов</h3><span>36 эффектов</span></div>
+   <p class="muted">Библиотека праздничных анимаций. Откройте папку, чтобы выбрать эффект и проверить его в приложении. Настройки каталога не влияют на заказы, баланс или платежи.</p>
+   <details class="gift-motion-folder">
+    <summary><span>📁 Библиотека эффектов</span><span class="gift-motion-folder-count">36 · свёрнуто</span></summary>
+    <div class="gift-motion-library" id="giftMotionLibrary"></div>
+    <p id="giftMotionLibraryStatus" class="notice" aria-live="polite">Выберите эффект для предпросмотра.</p>
+   </details>
   </div>
   <div class="panel"><h3>🛡️ Защищённый доступ</h3><p class="muted">Telegram ID проверяется сервером при каждом административном запросе. Показатели поступают из базы D1; неоплаченные счета не включаются в выручку.</p></div>
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
@@ -5216,6 +5236,23 @@ function giftMotion(eventName,options={}){
   giftMotionOverlay.appendChild(particle);
  }
  window.setTimeout(()=>{if(giftMotionOverlay)giftMotionOverlay.replaceChildren();},duration+420);
+}
+function renderGiftMotionLibrary(){
+ const root=document.getElementById('giftMotionLibrary');if(!root||root.dataset.ready==='1')return;
+ root.dataset.ready='1';
+ GIFT_MOTION_EFFECTS.forEach((effect,index)=>{
+  const button=document.createElement('button');button.type='button';button.className='gift-motion-effect';
+  const name=effect[0].replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const title=document.createElement('span');title.textContent=effect[1]+'  '+name;
+  const meta=document.createElement('small');meta.textContent='Эффект '+(index+1)+' из 36 · предпросмотр';
+  button.append(title,meta);
+  button.addEventListener('click',()=>{
+   giftMotion('preview',{effectIndex:index,force:true});
+   const status=document.getElementById('giftMotionLibraryStatus');
+   if(status)status.textContent='Предпросмотр запущен: '+name+'.';
+  });
+  root.appendChild(button);
+ });
 }
 function previewGiftMotion(){const index=Math.floor(Math.random()*GIFT_MOTION_EFFECTS.length);giftMotion('preview',{effectIndex:index,force:true});const status=document.getElementById('giftMotionPreviewStatus');if(status)status.textContent='Предпросмотр: '+(index+1)+'/36 · '+GIFT_MOTION_EFFECTS[index][0];}
 
