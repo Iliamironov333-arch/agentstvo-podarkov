@@ -1492,7 +1492,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
   <button class="menu-card" onclick="showView('leaderboardView')"><strong>🏆 Таблица лидеров</strong><span>Репутация за текущий месяц</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
   
-  <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Панель владельца"><span>ПАНЕЛЬ ВЛАДЕЛЬЦА</span></button>
+  <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Панель владельца"><span>Панель владельца</span></button>
  </div>
 </section>
 <section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Репутация и ранги</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="row-actions"><button id="leaderboardTabButton" class="primary" type="button" onclick="showLeaderboardSection('leaders')">🏆 Таблица лидеров</button><button id="ranksTabButton" class="secondary" type="button" onclick="showLeaderboardSection('ranks')">🎖️ Посмотреть ранги</button></div><div id="publicLeaderboardSection"><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Учитываются баллы репутации, заработанные за текущий календарный месяц. Пустые места не дают наград.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div class="panel"><p id="leaderboardParticipationText" class="muted">Проверяем участие в рейтинге…</p><button id="leaderboardParticipationButton" class="secondary" type="button" onclick="toggleLeaderboardParticipation()" disabled>Загрузка…</button></div><div id="publicLeaderboardList" class="panel"></div></div><div id="publicRanksSection" class="hidden"><div class="hero"><small>Ваш ранг и другие участники</small><h2>Система рангов</h2><p>Посмотрите свой ранг, скидку и ранги остальных клиентов Агентства подарков.</p></div><div id="publicRanksStatus" class="notice" aria-live="polite">Загрузка рангов…</div><div id="publicMyRank" class="panel"></div><div id="publicRanksList" class="panel"></div></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
@@ -2225,7 +2225,7 @@ function resetUiMotionSettings(){
 }
 
 function showView(id) {
- if(id==='cartView')
+ if(id==='cartView'){}
  if(id==='adminPanelView' && adminSession?.admin_access !== true) {
   toast('Административная панель недоступна: нет активных разрешений.');
   return;
