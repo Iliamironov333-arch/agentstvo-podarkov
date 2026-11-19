@@ -520,14 +520,17 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 .work-detail-close{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text,#24180f);font:600 15px inherit;padding:8px 4px;cursor:pointer}
 .work-detail-close span:first-child{font-size:30px;line-height:20px;font-weight:400}
 .work-detail-kicker{font-size:10px;letter-spacing:1.5px;font-weight:800;color:var(--muted,#8b7762)}
-.work-detail-content{width:min(100%,760px);margin:0 auto;padding:18px 22px 30px;box-sizing:border-box}
-.work-detail-image{width:100%;min-height:0;aspect-ratio:auto;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:4px 0 24px;padding:12px;box-sizing:border-box}
-.work-detail-image img{display:block;width:auto;height:auto;max-width:100%;max-height:min(58vh,620px);object-fit:contain;object-position:center;border-radius:12px}
+.work-detail-content{width:min(100%,760px);margin:0 auto;padding:14px 20px calc(130px + env(safe-area-inset-bottom));box-sizing:border-box}
+.work-detail-image{width:100%;height:clamp(180px,28vh,300px);min-height:0;max-height:300px;aspect-ratio:auto;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:2px 0 18px;padding:10px;box-sizing:border-box}
+.work-detail-image img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;object-position:center;border-radius:12px}
 .work-detail-content h2{font-size:clamp(23px,4vw,30px);line-height:1.2;margin:0 0 10px}
-.work-detail-price{font-size:23px;font-weight:800;margin:10px 0 16px}
 .work-detail-description{font-size:15px;line-height:1.7;white-space:pre-wrap;margin:0 0 22px}
-.work-detail-content>.primary{width:100%;max-width:440px;min-height:50px;border-radius:15px}
-@media(min-width:700px){.work-detail-content{padding-top:28px}.work-detail-image img{max-height:62vh}}
+.work-detail-purchase{position:fixed;left:0;right:0;bottom:0;z-index:10001;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:var(--panel,#fff);border-top:1px solid var(--line,#ead9c4);box-shadow:0 -8px 28px #00000012}
+.work-detail-purchase-inner{width:min(100%,760px);margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.work-detail-purchase-price{flex:0 0 auto;font-size:22px;font-weight:800;line-height:1.2;color:var(--gold2,#a86c18);white-space:nowrap}
+.work-detail-purchase .primary{flex:1;min-width:0;max-width:460px;min-height:50px;border-radius:15px}
+@media(max-width:480px){.work-detail-purchase{padding-left:12px;padding-right:12px}.work-detail-purchase-inner{gap:10px}.work-detail-purchase-price{font-size:19px}.work-detail-purchase .primary{font-size:14px;padding:10px}}
+@media(min-width:700px){.work-detail-content{padding-top:18px}.work-detail-image{height:clamp(220px,32vh,340px);max-height:340px}}
 /* Фото в карточке каталога всегда остаётся внутри компактной области и не растягивает карточку. */
 .product .art{height:112px;min-height:112px;max-height:112px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .product .art img{display:block;width:100%;height:100%;min-height:0;max-height:100%;object-fit:cover;border-radius:0}@media(min-width:600px){.product .art{height:140px;min-height:140px;max-height:140%}}
@@ -2507,13 +2510,15 @@ function openProductDetail(product){
  }
  const content=modal.querySelector('.work-detail-content');content.replaceChildren();
  const image=document.createElement('div');image.className='work-detail-image';
- if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];image.append(img);}else image.textContent=product[3]||'🎁';
+ if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];img.loading='eager';img.decoding='async';image.append(img);}else image.textContent=product[3]||'🎁';
  const title=document.createElement('h2');title.textContent=product[1];
- const price=document.createElement('div');price.className='work-detail-price';price.textContent=money(product[2]);
  const description=document.createElement('p');description.className='work-detail-description';description.textContent=product[6]||'Описание этой работы скоро появится.';
- const add=document.createElement('button');add.type='button';add.className='primary';add.textContent='Добавить в корзину';add.disabled=product[2]==null;
- add.addEventListener('click',()=>{cart[product[0]]=Number(cart[product[0]]||0)+1;persistCart();drawProducts();drawCart();modal.classList.remove('open');toast('Работа добавлена в корзину.');});
- content.append(image,title,price,description,add);modal.classList.add('open');
+ content.append(image,title,description);
+ let purchase=modal.querySelector('.work-detail-purchase');if(!purchase){purchase=document.createElement('div');purchase.className='work-detail-purchase';purchase.innerHTML='<div class="work-detail-purchase-inner"><div class="work-detail-purchase-price"></div><button type="button" class="primary">Добавить в корзину</button></div>';modal.querySelector('.work-detail-panel').append(purchase);}
+ purchase.querySelector('.work-detail-purchase-price').textContent=money(product[2]);
+ const add=purchase.querySelector('button');add.disabled=product[2]==null;
+ add.onclick=()=>{cart[product[0]]=Number(cart[product[0]]||0)+1;persistCart();drawProducts();drawCart();modal.classList.remove('open');toast('Работа добавлена в корзину.');};
+ modal.classList.add('open');
 }
 function updateDeliveryMethodUI(){
  const vipReady=vipStatusVerified&&vipActive;
