@@ -473,6 +473,7 @@ async function createSupportAnswer(env, history, isVip, customerContext = {}, na
   const instructions = [
     await getGlobalAiToneInstruction(env),
     "Ты — официальный ИИ-помощник мини-приложения «Агентство подарков». Отвечай на русском языке, доброжелательно, ясно и кратко. Пиши простым текстом без Markdown-звёздочек; используй 1–2 уместных эмодзи.",
+    customerContext.admin_reply_style && ["friendly","official","neutral","business","free"].includes(customerContext.admin_reply_style) ? "Стиль ответа владельцу/администратору: "+({friendly:"тепло, естественно и дружелюбно",official:"официально и строго по существу",neutral:"спокойно и нейтрально",business:"делово, кратко и структурированно",free:"свободно, легко, с ненавязчивым юмором"}[customerContext.admin_reply_style])+". Это правило применяется только к администратору, не к покупателям." : "",
     "Помогай по вопросам каталога, авторских работ, индивидуальных заказов, оплаты Telegram Stars, заказов, баланса, поддержки и VIP.",
     "Если клиент обсуждает свою будущую работу или индивидуальный заказ, проведи консультацию максимум из 16 вопросов за весь диалог: задавай по одному вопросу, не повторяй уже известное, выясни задумку, получателя, повод, бюджет, размер, стиль, цвета, материалы/технику, детализацию и срок.",
     "Для индивидуального заказа уточняй бюджет только в рублях. Никогда не спрашивай, предпочитает ли клиент рубли или Telegram Stars, и не предлагай выбор валюты/способа оплаты в ходе консультации. Не путай бюджет в рублях с оплатой товаров каталога через Telegram Stars.",
@@ -3544,7 +3545,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
       if (path === "/api/vip/support" && method === "POST") {
         // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
         if(!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"Ответы ИИ администратору отключены. Включите их в админ-панели → ИИ-бот → Ответы ИИ администратору."},403,origin);
+          return json({error:"AI_DISABLED"},403,origin);
         }
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
@@ -3613,7 +3614,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const body = await readJson(request);
         const action = body.action === "create" ? "create" : "send";
         if(action!=="create"&&!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"Ответы ИИ администратору отключены. Владелец может включить их в админ-панели → ИИ-бот → Ответы ИИ администратору."},403,origin);
+          return json({error:"AI_DISABLED"},403,origin);
         }
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
@@ -3807,7 +3808,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const customer = await env.DB.prepare("SELECT balance_stars,first_name FROM users WHERE telegram_id=?").bind(telegramId).first();
         const productOrders = await env.DB.prepare("SELECT id,product_title AS title,total_stars,payment_status,fulfillment_status,created_at,priority_order FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 8").bind(telegramId).all();
         const customOrders = await env.DB.prepare("SELECT id,subject AS title,total_stars,status,created_at FROM custom_orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 5").bind(telegramId).all();
-        const customerContext={balance_points:Number(customer?.balance_stars||0),product_orders:productOrders.results||[],custom_orders:customOrders.results||[],vip:!!vip};
+        const customerContext={balance_points:Number(customer?.balance_stars||0),product_orders:productOrders.results||[],custom_orders:customOrders.results||[],vip:!!vip,admin_reply_style:(await isAdminAccount(env,telegramId))?String(body.reply_style||"friendly"):""};
         if (!env.AI) return json({ error: "ИИ-помощник временно недоступен: Workers AI не подключён." }, 503, origin);
         const rows = await env.DB.prepare("SELECT role,content FROM support_chat_messages WHERE telegram_id=? AND conversation_id=? ORDER BY id DESC LIMIT 34")
           .bind(telegramId, conversationId).all();
