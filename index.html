@@ -1825,7 +1825,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
   <div class="panel" id="giftMotionControlCenter">
    <div class="sectionhead"><h3>✨ GIFT MOTION · Центр эффектов</h3><span>36 эффектов</span></div>
    <p class="muted">Библиотека праздничных анимаций. Откройте папку, чтобы выбрать эффект и проверить его в приложении. Настройки каталога не влияют на заказы, баланс или платежи.</p>
-   <details class="gift-motion-folder">
+   <details class="gift-motion-folder" ontoggle="if(this.open)renderGiftMotionLibrary()">
     <summary><span>📁 Библиотека эффектов</span><span class="gift-motion-folder-count">36 · свёрнуто</span></summary>
     <div class="gift-motion-library" id="giftMotionLibrary"></div>
     <p id="giftMotionLibraryStatus" class="notice" aria-live="polite">Выберите эффект для предпросмотра.</p>
