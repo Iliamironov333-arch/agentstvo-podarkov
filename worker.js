@@ -3544,7 +3544,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
       if (path === "/api/vip/support" && method === "POST") {
         // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
         if(!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"Ответы ИИ администратору отключены. Включите их в админ-панели → Технический центр → Переключатели функций."},403,origin);
+          return json({error:"Ответы ИИ администратору отключены. Включите их в админ-панели → ИИ-бот → Ответы ИИ администратору."},403,origin);
         }
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
@@ -3613,7 +3613,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
         const body = await readJson(request);
         const action = body.action === "create" ? "create" : "send";
         if(action!=="create"&&!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"Ответы ИИ администратору отключены. Владелец может включить их в админ-панели → Технический центр → Переключатели функций."},403,origin);
+          return json({error:"Ответы ИИ администратору отключены. Владелец может включить их в админ-панели → ИИ-бот → Ответы ИИ администратору."},403,origin);
         }
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
