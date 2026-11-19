@@ -1234,25 +1234,41 @@ export default {
         return json({ok:true,month:monthKey,leaderboard},200,origin);
       }
 
-      // Administrative access is restricted to the single confirmed project owner.
-      // Staff records and moderator roles never grant access to the owner panel.
+      // Административный доступ определяется сервером по подписанному Telegram initData
+      // и активной записи сотрудника в D1. Назначение роли само по себе не обходит разрешения.
       if (path.startsWith("/api/admin/")) {
         const ownerId = "7822470060";
         const rootOwner = String(telegramId || "").trim() === ownerId;
-        if (!rootOwner) {
-          return json({ error: "Административный доступ предоставляется только основному владельцу." }, 403, origin);
-        }
-        const staff = null;
-        let permissions = rootOwner || staff?.role === "owner" ? defaultAdminPermissions() : {};
+        const staff = rootOwner ? null : await env.DB.prepare(
+          "SELECT telegram_id,role,permissions_json,status FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1"
+        ).bind(String(telegramId || "").trim()).first();
+
+        const permissions = rootOwner || staff?.role === "owner"
+          ? defaultAdminPermissions()
+          : Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, false]));
         if (!rootOwner && staff?.role === "moderator") {
-          try { permissions = { ...defaultAdminPermissions("moderator"), ...JSON.parse(staff.permissions_json || "{}") }; }
-          catch { permissions = {}; }
-          for (const key of Object.keys(permissions)) permissions[key] = permissions[key] === true;
+          try {
+            const saved = JSON.parse(staff.permissions_json || "{}");
+            for (const key of ADMIN_PERMISSION_KEYS) permissions[key] = saved[key] === true;
+          } catch {
+            for (const key of ADMIN_PERMISSION_KEYS) permissions[key] = false;
+          }
         }
+
+        const hasAdminAccess = rootOwner || staff?.role === "owner" ||
+          (staff?.role === "moderator" && ADMIN_PERMISSION_KEYS.some(key => permissions[key] === true));
         if (path === "/api/admin/session" && method === "GET") {
-          const hasAdminAccess = rootOwner || staff?.role === "owner" || ADMIN_PERMISSION_KEYS.some(key => permissions[key] === true);
-          return json({ ok: true, owner: rootOwner || staff?.role === "owner", root_owner: rootOwner,
-            admin_access: hasAdminAccess, role: rootOwner ? "owner" : staff.role, permissions }, 200, origin);
+          return json({
+            ok: true,
+            owner: rootOwner || staff?.role === "owner",
+            root_owner: rootOwner,
+            admin_access: hasAdminAccess,
+            role: rootOwner ? "owner" : (staff?.role || "client"),
+            permissions
+          }, 200, origin);
+        }
+        if (!hasAdminAccess) {
+          return json({ error: "Административный доступ не предоставлен. Проверьте должность и разрешения." }, 403, origin);
         }
         const requiredPermission = adminPermissionForPath(path, method);
         if (!rootOwner && path !== "/api/admin/session" && staff?.role === "moderator" && !ADMIN_PERMISSION_KEYS.some(key => permissions[key] === true)) {
@@ -1375,13 +1391,17 @@ export default {
           if (targetId === ownerId) return json({ error: "Основного владельца нельзя изменить через список сотрудников." }, 409, origin);
           const target = await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();
           if (!target) return json({ error: "Сначала пользователь должен открыть Mini App хотя бы один раз." }, 404, origin);
-          const existing = await env.DB.prepare("SELECT permissions_json FROM admin_staff WHERE telegram_id=?").bind(targetId).first();
-          // New moderators receive no permissions until the owner explicitly enables selected ones.
+          const existing = await env.DB.prepare("SELECT role,permissions_json FROM admin_staff WHERE telegram_id=?").bind(targetId).first();
+          // Do not carry elevated permissions across role changes. Existing moderator
+          // permissions are retained only when the same moderator is being re-saved.
           let savedPermissions = role === "moderator"
             ? Object.fromEntries(ADMIN_PERMISSION_KEYS.map(key => [key, false]))
             : defaultAdminPermissions();
-          if (existing?.permissions_json) {
-            try { savedPermissions = { ...savedPermissions, ...JSON.parse(existing.permissions_json) }; } catch {}
+          if (role === "moderator" && existing?.role === "moderator" && existing?.permissions_json) {
+            try {
+              const previous = JSON.parse(existing.permissions_json);
+              for (const key of ADMIN_PERMISSION_KEYS) savedPermissions[key] = previous[key] === true;
+            } catch {}
           }
           const permissionsJson = JSON.stringify(savedPermissions);
           await env.DB.prepare("INSERT INTO admin_staff (telegram_id,role,permissions_json,status,created_by,updated_by) VALUES (?,?,?,'active',?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
