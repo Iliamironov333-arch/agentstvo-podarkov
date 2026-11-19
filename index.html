@@ -521,8 +521,13 @@ body.dark-theme.season-summer .season-particles span:before{content:"🍃"}
 .work-detail-close span:first-child{font-size:30px;line-height:20px;font-weight:400}
 .work-detail-kicker{font-size:10px;letter-spacing:1.5px;font-weight:800;color:var(--muted,#8b7762)}
 .work-detail-content{width:min(100%,760px);margin:0 auto;padding:14px 20px calc(130px + env(safe-area-inset-bottom));box-sizing:border-box}
-.work-detail-image{width:100%;height:clamp(180px,28vh,300px);min-height:0;max-height:300px;aspect-ratio:auto;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:2px 0 18px;padding:0;box-sizing:border-box}
+.work-detail-image{width:100%;height:calc(clamp(180px,28vh,300px) + 57px);min-height:0;max-height:357px;aspect-ratio:auto;border-radius:18px;background:var(--surface,#f5eadc);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:76px;margin:2px 0 18px;padding:0;box-sizing:border-box;cursor:zoom-in}
 .work-detail-image img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:cover;object-position:center;border-radius:0}
+.work-image-viewer{position:fixed;inset:0;z-index:10010;background:#111;display:none;align-items:center;justify-content:center;padding:env(safe-area-inset-top) 12px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
+.work-image-viewer.open{display:flex}
+.work-image-viewer img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.work-image-viewer-back{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:2;border:0;border-radius:14px;padding:10px 16px;background:#ffffffed;color:#24180f;font:600 16px inherit;cursor:pointer}
+@media(min-width:700px){.work-detail-image{height:calc(clamp(220px,32vh,340px) + 57px);max-height:397px}}
 .work-detail-content h2{font-size:clamp(23px,4vw,30px);line-height:1.2;margin:0 0 10px}
 .work-detail-description{font-size:15px;line-height:1.7;white-space:pre-wrap;margin:0 0 22px}
 .work-detail-purchase{position:fixed;left:0;right:0;bottom:0;z-index:10001;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:var(--panel,#fff);border-top:1px solid var(--line,#ead9c4);box-shadow:0 -8px 28px #00000012}
@@ -2503,14 +2508,19 @@ function openProductDetail(product){
  let modal=document.getElementById('workDetailModal');
  if(!modal){
   modal=document.createElement('div');modal.id='workDetailModal';modal.className='work-detail-overlay';
-  modal.innerHTML='<div class="work-detail-panel" role="dialog" aria-modal="true" aria-label="Страница товара"><div class="work-detail-topbar"><button type="button" class="work-detail-close" aria-label="Вернуться в каталог"><span aria-hidden="true">‹</span><span>Назад</span></button><span class="work-detail-kicker">АГЕНТСТВО ПОДАРКОВ</span></div><div class="work-detail-content"></div></div>';
+  modal.innerHTML='<div class="work-detail-panel" role="dialog" aria-modal="true" aria-label="Страница товара"><div class="work-detail-topbar"><button type="button" class="work-detail-close" aria-label="Вернуться в каталог"><span aria-hidden="true">‹</span><span>Назад</span></button><span class="work-detail-kicker">АГЕНТСТВО ПОДАРКОВ</span></div><div class="work-detail-content"></div></div><div class="work-image-viewer" aria-label="Просмотр изображения"><button type="button" class="work-image-viewer-back">← Назад</button><img alt="Полный просмотр работы"></div>';
   modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
   modal.querySelector('.work-detail-close').addEventListener('click',()=>modal.classList.remove('open'));
+  const viewer=modal.querySelector('.work-image-viewer');const viewerImg=viewer.querySelector('img');
+  const closeViewer=()=>viewer.classList.remove('open');
+  viewer.querySelector('.work-image-viewer-back').addEventListener('click',closeViewer);
+  viewer.addEventListener('click',e=>{if(e.target===viewer)closeViewer()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&viewer.classList.contains('open'))closeViewer()});
   document.body.append(modal);
  }
  const content=modal.querySelector('.work-detail-content');content.replaceChildren();
  const image=document.createElement('div');image.className='work-detail-image';
- if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];img.loading='eager';img.decoding='async';image.append(img);}else image.textContent=product[3]||'🎁';
+ if(product[5]){const img=document.createElement('img');img.src=product[5];img.alt=product[1];img.loading='eager';img.decoding='async';image.append(img);image.setAttribute('role','button');image.setAttribute('tabindex','0');image.setAttribute('aria-label','Открыть изображение полностью');const openViewer=()=>{const viewer=modal.querySelector('.work-image-viewer');const viewerImg=viewer.querySelector('img');viewerImg.src=product[5];viewerImg.alt=product[1];viewer.classList.add('open')};image.addEventListener('click',openViewer);image.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openViewer()}});}else image.textContent=product[3]||'🎁';
  const title=document.createElement('h2');title.textContent=product[1];
  const description=document.createElement('p');description.className='work-detail-description';description.textContent=product[6]||'Описание этой работы скоро появится.';
  content.append(image,title,description);
