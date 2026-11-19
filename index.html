@@ -1540,7 +1540,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 </section>
 <section id="leaderboardView" class="hidden"><div class="sectionhead"><h2>🏆 Репутация и ранги</h2><button class="secondary" type="button" onclick="loadPublicLeaderboard()">↻ Обновить</button></div><div class="row-actions"><button id="leaderboardTabButton" class="primary" type="button" onclick="showLeaderboardSection('leaders')">🏆 Таблица лидеров</button><button id="ranksTabButton" class="secondary" type="button" onclick="showLeaderboardSection('ranks')">🎖️ Посмотреть ранги</button></div><div id="publicLeaderboardSection"><div class="hero"><small>Ежемесячный рейтинг</small><h2>Лучшие участники</h2><p>Учитываются баллы репутации, заработанные за текущий календарный месяц. Пустые места не дают наград.</p></div><div id="publicLeaderboardStatus" class="notice" aria-live="polite">Загрузка рейтинга…</div><div class="panel"><p id="leaderboardParticipationText" class="muted">Проверяем участие в рейтинге…</p><button id="leaderboardParticipationButton" class="secondary" type="button" onclick="toggleLeaderboardParticipation()" disabled>Загрузка…</button></div><div id="publicLeaderboardList" class="panel"></div></div><div id="publicRanksSection" class="hidden"><div class="hero"><small>Ваш ранг и другие участники</small><h2>Система рангов</h2><p>Посмотрите свой ранг, скидку и ранги остальных клиентов Агентства подарков.</p></div><div id="publicRanksStatus" class="notice" aria-live="polite">Загрузка рангов…</div><div id="publicMyRank" class="panel"></div><div id="publicRanksList" class="panel"></div></div><button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button></section>
 <section id="adminPanelView" class="hidden">
- <div class="sectionhead"><h2>🔐 Панель владельца</h2><span>Доступ подтверждён</span></div>
+ <div class="sectionhead"><h2>Панель модератора</h2><span>Доступ подтверждён</span></div>
  <div class="hero"><small>Центр управления</small><h2>Добро пожаловать, владелец</h2><p>Защищённая панель подключается поэтапно. Существующий магазин, заказы и платежи продолжают работать отдельно.</p></div>
  <div class="panel" id="adminStaffPanel" hidden>
   <h3>🛡️ Должности и права доступа</h3>
@@ -4182,11 +4182,11 @@ async function checkOwnerAccess() {
    const roleLabel=ownerRole?'владельца':'модератора';
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
-   if(title) title.textContent=ownerRole?'🔐 Панель владельца':'🛡️ Панель модератора';
+   if(title) title.textContent=ownerRole?'Панель владельца':'Панель модератора';
    const heroTitle=document.querySelector('#adminPanelView .hero h2');
    if(heroTitle) heroTitle.textContent='Добро пожаловать, '+roleLabel;
    const cardTitle=card.querySelector('strong');
-   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=ownerRole?'🔐 Панель владельца ':'🛡️ Панель модератора ';
+   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=ownerRole?'Панель владельца ':'Панель модератора ';
    if(description) description.textContent='Управление Агентством подарков · '+(ownerRole?'полный доступ':'доступ по выданным разрешениям');
    clearOwnerAccessDiagnostic();
    initAdminCategories();
