@@ -1404,7 +1404,7 @@ export default {
             } catch {}
           }
           const permissionsJson = JSON.stringify(savedPermissions);
-          await env.DB.prepare("INSERT INTO admin_staff (telegram_id,role,permissions_json,status,created_by,updated_by) VALUES (?,?,?,'active',?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
+          await env.DB.prepare("INSERT INTO admin_staff (telegram_id,role,permissions_json,status,created_by,updated_by) VALUES (?,?,?,'active',?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role,permissions_json=excluded.permissions_json,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP")
             .bind(targetId, role, permissionsJson, telegramId, telegramId).run();
           await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) VALUES (?,?,?,?)")
             .bind(telegramId,targetId,"staff_role_changed",JSON.stringify({ role })).run();
