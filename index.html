@@ -4177,7 +4177,7 @@ async function checkOwnerAccess() {
   setOwnerAccessDiagnostic('A00', 'Не найдена кнопка панели', 'В загруженной версии приложения отсутствует элемент ownerAdminCard.');
   return;
  }
- const description = card.querySelector('span:last-child');
+ const description = card.querySelector(':scope > span:last-child');
  const clientId = String(tg?.initDataUnsafe?.user?.id || '').trim();
  const clientIdState = !clientId ? 'Telegram не передал user.id' : clientId === '7822470060' ? 'совпадает' : 'не совпадает';
  // Never trust initDataUnsafe for authorization. It is diagnostic only.
