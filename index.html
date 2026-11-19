@@ -2058,7 +2058,7 @@ function initAdminCategories(){
  <div class="ai-feature-card" id="aiAdminAnswersCard">
   <div class="ai-feature-head">
    <div class="ai-feature-info"><strong>💬 Ответы ИИ администратору</strong><small>Разрешить ИИ отвечать владельцу и активным администраторам</small></div>
-   <button class="secondary" type="button" id="aiAdminAnswersToggle" disabled>Загрузка…</button>
+   <label class="ai-switch" aria-label="Ответы ИИ администратору"><input type="checkbox" id="aiAdminAnswersToggle" disabled><span></span></label>
   </div>
   <p class="muted" id="aiAdminAnswersStatus">По умолчанию выключено. Настройка применяется на сервере.</p>
  </div>
@@ -3021,34 +3021,35 @@ async function loadAdminTechnicalCenter(){
 let adminAiAnswersEnabled=false;
 let adminAiAnswersToggleBound=false;
 async function loadAdminAiAdminAnswersSetting(){
- const button=document.getElementById('aiAdminAnswersToggle');
+ const toggle=document.getElementById('aiAdminAnswersToggle');
  const status=document.getElementById('aiAdminAnswersStatus');
- if(!button||!status)return;
- button.disabled=true;button.textContent='Загрузка…';
+ if(!toggle||!status)return;
+ toggle.disabled=true;
  try{
   const data=await apiFetch('/api/admin/feature-flags');
   adminAiAnswersEnabled=data.flags?.assistant_admin_answers===true;
-  button.textContent=adminAiAnswersEnabled?'Включено':'Отключено';
-  button.className=adminAiAnswersEnabled?'primary':'secondary';
+  toggle.checked=adminAiAnswersEnabled;
   status.textContent=adminAiAnswersEnabled?'ИИ может отвечать владельцу и активным администраторам.':'Ответы ИИ администраторам отключены. Покупатели не затрагиваются.';
   if(!adminAiAnswersToggleBound){
-   button.addEventListener('click',async()=>{
-    const next=!adminAiAnswersEnabled;
-    button.disabled=true;
+   toggle.addEventListener('change',async()=>{
+    const next=toggle.checked;
+    toggle.disabled=true;
     try{
      await apiFetch('/api/admin/feature-flags',{method:'POST',body:JSON.stringify({key:'assistant_admin_answers',enabled:next})});
      adminAiAnswersEnabled=next;
-     button.textContent=next?'Включено':'Отключено';
-     button.className=next?'primary':'secondary';
      status.textContent=next?'ИИ может отвечать владельцу и активным администраторам.':'Ответы ИИ администраторам отключены. Покупатели не затрагиваются.';
      toast(next?'Ответы ИИ администраторам включены.':'Ответы ИИ администраторам отключены.');
-    }catch(e){toast(e.message||'Не удалось изменить настройку.');}
-    finally{button.disabled=false;}
+    }catch(e){
+     toggle.checked=!next;
+     status.textContent=e.message||'Не удалось изменить настройку.';
+     toast(e.message||'Не удалось изменить настройку.');
+    }finally{toggle.disabled=false;}
    });
    adminAiAnswersToggleBound=true;
   }
- }catch(e){status.textContent=e.message||'Не удалось загрузить настройку ответов ИИ.';button.textContent='Повторить';}
- finally{button.disabled=false;}
+ }catch(e){
+  status.textContent=e.message||'Не удалось загрузить настройку ответов ИИ.';
+ }finally{toggle.disabled=false;}
 }
 async function loadAdminFeatureFlags(){
  const root=document.getElementById('adminFeatureFlags');if(!root)return;root.replaceChildren();
