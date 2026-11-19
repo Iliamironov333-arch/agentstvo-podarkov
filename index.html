@@ -4336,15 +4336,15 @@ async function topUp(amount) {
  try {
   const data = await apiFetch('/api/balance/topup',{method:'POST',body:JSON.stringify({amount_stars:amount})});
   if (!data.invoice_url) throw new Error('Сервер не вернул счёт на оплату.');
-  openInvoice(data.invoice_url,status => { if(status==='paid'){ toast('Пополнение подтверждено!'); loadBalance(); loadMe(); } else if(status==='pending') toast('Платёж обрабатывается. Баланс обновится после подтверждения.'); else if(status==='failed') toast('Не удалось провести оплату.'); });
+  openInvoice(data.invoice_url,status => { if(status==='paid'){ giftMotion('topUpConfirmed'); toast('Пополнение подтверждено!'); loadBalance(); loadMe(); } else if(status==='pending') toast('Платёж обрабатывается. Баланс обновится после подтверждения.'); else if(status==='failed') toast('Не удалось провести оплату.'); });
  } catch(e) { toast(e.message || 'Не удалось создать счёт.'); }
 }
 
 async function subscribeVip(planType) {
  try{const d=await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})});
- if(d.paid){toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
+ if(d.paid){giftMotion('profileTier');toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
  if(!d.invoice_url)throw new Error('Сервер не вернул счёт VIP.');
- openInvoice(d.invoice_url,async s=>{if(s==='paid'){toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending'){toast('Платёж VIP обрабатывается.');}else{try{if(d.payload)await apiFetch('/api/vip/cancel',{method:'POST',body:JSON.stringify({payload:d.payload})});}catch(e){console.warn('Не удалось вернуть внутренний баланс VIP:',e);}toast('Оплата не завершена. Если часть суммы была списана с баланса, она возвращена.');loadMe();loadBalance();}});
+ openInvoice(d.invoice_url,async s=>{if(s==='paid'){giftMotion('profileTier');toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending'){toast('Платёж VIP обрабатывается.');}else{try{if(d.payload)await apiFetch('/api/vip/cancel',{method:'POST',body:JSON.stringify({payload:d.payload})});}catch(e){console.warn('Не удалось вернуть внутренний баланс VIP:',e);}toast('Оплата не завершена. Если часть суммы была списана с баланса, она возвращена.');loadMe();loadBalance();}});
  }catch(e){toast(e.message||'Не удалось оформить VIP.');}
 }
 
@@ -4695,7 +4695,7 @@ function customPrice(){const p={"style":{"classic":0,"watercolor":80,"perspectiv
 function openCustomWizard(){Object.keys(customAnswers).forEach(k=>delete customAnswers[k]);customStep=0;renderCustomStep();showView('customWizardView');}
 function renderCustomStep(){const s=customSteps[customStep],n=customStep+1;document.getElementById('customStepLabel').textContent='Шаг '+n+' из 8';document.getElementById('customProgress').style.width=(n/8*100)+'%';document.getElementById('customQuestion').innerHTML='<h3>'+s.title+'</h3>';document.getElementById('customStepHint').textContent=s.hint;const opts=document.getElementById('customOptions'),fields=document.getElementById('customTextFields');opts.innerHTML='';fields.innerHTML='';if(s.options)s.options.forEach(([v,label,extra])=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label+(extra?' +'+extra+' ⭐':'');const selected=s.multi?Array.isArray(customAnswers[s.key])&&customAnswers[s.key].includes(v):customAnswers[s.key]===v;b.style.outline=selected?'2px solid var(--gold)':'none';b.onclick=()=>{if(s.multi){const a=Array.isArray(customAnswers[s.key])?[...customAnswers[s.key]]:[];customAnswers[s.key]=a.includes(v)?a.filter(x=>x!==v):[...a,v];}else customAnswers[s.key]=v;renderCustomStep();};opts.appendChild(b);});if(s.text){const t=document.createElement('textarea');t.rows=3;t.maxLength=s.key==='subject'?300:700;t.placeholder=s.placeholder;t.value=customAnswers[s.key]||'';t.style.cssText='width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit';t.oninput=()=>{customAnswers[s.key]=t.value;document.getElementById('customPrice').textContent=customPrice()+' ⭐';};fields.appendChild(t);}document.getElementById('customBack').disabled=customStep===0;document.getElementById('customNext').textContent=customStep===7?'Отправить заказ':'Далее →';document.getElementById('customPrice').textContent=customPrice()+' ⭐';}
 function customPrev(){if(customStep>0){customStep--;renderCustomStep();}}
-async function customNext(){const s=customSteps[customStep],v=customAnswers[s.key];if(s.key==='subject'&&(!v||v.trim().length<3)){toast('Пожалуйста, укажите, что необходимо изобразить.');return;}if(s.options&&(!v||(Array.isArray(v)&&!v.length))){toast('Пожалуйста, выберите вариант, чтобы продолжить.');return;}if(customStep<7){customStep++;renderCustomStep();return;}const b=document.getElementById('customNext');b.disabled=true;b.textContent='Отправляем…';try{const r=await apiFetch('/api/custom-orders',{method:'POST',body:JSON.stringify({answers:customAnswers})});toast('Заказ отправлен! Цена: '+r.total_stars+' ⭐');showView('ordersView');await loadMe();}catch(e){toast(e.message||'Не удалось отправить заказ.');}finally{b.disabled=false;b.textContent='Отправить заказ';}}
+async function customNext(){const s=customSteps[customStep],v=customAnswers[s.key];if(s.key==='subject'&&(!v||v.trim().length<3)){toast('Пожалуйста, укажите, что необходимо изобразить.');return;}if(s.options&&(!v||(Array.isArray(v)&&!v.length))){toast('Пожалуйста, выберите вариант, чтобы продолжить.');return;}if(customStep<7){customStep++;renderCustomStep();return;}const b=document.getElementById('customNext');b.disabled=true;b.textContent='Отправляем…';try{const r=await apiFetch('/api/custom-orders',{method:'POST',body:JSON.stringify({answers:customAnswers})});giftMotion('orderConfirmed');toast('Заказ отправлен! Цена: '+r.total_stars+' ⭐');showView('ordersView');await loadMe();}catch(e){toast(e.message||'Не удалось отправить заказ.');}finally{b.disabled=false;b.textContent='Отправить заказ';}}
 
 async function applyPromoCode(){
  const input=document.getElementById('promoCodeInput'),status=document.getElementById('promoStatus'),button=document.getElementById('applyPromoButton');
@@ -4718,6 +4718,7 @@ async function checkout() {
  if(deliveryMethod==='courier'&&address.length<8)return toast('Укажите полный адрес доставки в Екатеринбурге.');
  const btn=document.getElementById('checkoutBtn'),statusBox=document.getElementById('deliveryCalcStatus');
  btn.disabled=true;btn.textContent=deliveryMethod==='pickup'?'Оформляем самовывоз…':'Рассчитываем доставку…';
+  giftMotion('checkoutStarted');
  if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Подтверждаем бесплатный самовывоз из пункта выдачи…':'Проверяем адрес и автомобильный маршрут…';
  try{
   const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
@@ -4751,7 +4752,7 @@ async function checkout() {
   if(statusBox)statusBox.textContent=(deliveryMethod==='pickup'?'Самовывоз: Новаторов, 8 · доставка бесплатно. ':'Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. ')+'Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
-    quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
+    giftMotion('orderPaid');quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
     quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверьте «Мои заказы».');loadMe();
    }else{
@@ -4768,7 +4769,7 @@ async function checkout() {
  }
 }
 
-async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
+async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){giftMotion('orderPaid');toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){giftMotion('orderPaid');toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
 async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 let activeOrderChatId='',activeOrderChatType='product';
 function setUnifiedChatContext(isOrder){
@@ -4859,6 +4860,14 @@ function renderBonusInventory(bonuses) {
  if(!BONUS_INVENTORY_DEFINITIONS.some(def=>Number(bonuses?.[def.key]||0)>0)){const note=document.createElement("p");note.className="muted";note.textContent="Пока нет доступных бонусов. Когда владелец отправит их, они появятся здесь.";root.prepend(note);}
 }
 
+const observedOrderMotionStates = new Map();
+function observeOrderMotionStatus(order){
+ const id=String(order.order_id??order.id??'');if(!id)return;
+ const next=String(order.fulfillment_status||order.admin_status||'').toLowerCase();if(!next)return;
+ const previous=observedOrderMotionStates.get(id);observedOrderMotionStates.set(id,next);
+ if(previous&&previous!==next){giftMotion(next==='ready'?'orderReady':'orderStatusChanged');}
+}
+
 async function loadMe() {
  if(!initData)return;
  try{
@@ -4882,6 +4891,7 @@ async function loadMe() {
  try{
   const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[];
+  orders.forEach(observeOrderMotionStatus);
   const pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');
   if(root){
