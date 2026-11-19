@@ -2536,8 +2536,8 @@ function renderGiftBuilderChat(){
 async function askGiftBuilderAi(){
  const input=document.getElementById('giftBuilderChatInput'),button=document.getElementById('giftBuilderAsk'),message=input?.value.trim()||'';if(!message)return;
  button.disabled=true;
- try{await saveGiftBuilderDraft();giftBuilderChatMessages.push({role:'user',content:message});renderGiftBuilderChat();const d=await apiFetch('/api/gift-builder/consult',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,message})});giftBuilderChatMessages.push({role:'assistant',content:d.reply});if(d.bundle){giftBuilderSelection={};(d.bundle.items||[]).forEach(item=>{giftBuilderSelection[String(item.id)]=Number(item.qty)||1;});giftBuilderLayoutOrder=Array.isArray(d.bundle.layout)?d.bundle.layout.slice():Object.keys(giftBuilderSelection);const set=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value??'';};set('giftBuilderPostcardText',d.bundle.postcard_text);set('giftBuilderTone',d.bundle.postcard_tone);set('giftBuilderDetail',d.bundle.postcard_detail);set('giftBuilderPostcardWishes',d.bundle.postcard_wishes);set('giftBuilderBox',d.bundle.box_request);set('giftBuilderFiller',d.bundle.filler_level);set('giftBuilderStickerQty',String(d.bundle.sticker_qty||0));const seasonal=document.getElementById('giftBuilderSeasonal');if(seasonal)seasonal.checked=(d.bundle.seasonal_extras||[]).includes('secret_seasonal');const priority=document.getElementById('giftBuilderPriority');if(priority)priority.checked=!!d.bundle.priority_order;renderGiftBuilder();}input.value='';renderGiftBuilderChat();}
- catch(e){toast(e.message||'Не удалось отправить сообщение ИИ.');}
+ try{await saveGiftBuilderDraft();giftBuilderChatMessages.push({role:'user',content:message});renderGiftBuilderChat();const d=await apiFetch('/api/gift-builder/consult',{method:'POST',body:JSON.stringify({draft_id:giftBuilderDraftId,message})});giftMotion(d.bundle?'aiProductFound':'aiRecognition');giftBuilderChatMessages.push({role:'assistant',content:d.reply});if(d.bundle){giftBuilderSelection={};(d.bundle.items||[]).forEach(item=>{giftBuilderSelection[String(item.id)]=Number(item.qty)||1;});giftBuilderLayoutOrder=Array.isArray(d.bundle.layout)?d.bundle.layout.slice():Object.keys(giftBuilderSelection);const set=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value??'';};set('giftBuilderPostcardText',d.bundle.postcard_text);set('giftBuilderTone',d.bundle.postcard_tone);set('giftBuilderDetail',d.bundle.postcard_detail);set('giftBuilderPostcardWishes',d.bundle.postcard_wishes);set('giftBuilderBox',d.bundle.box_request);set('giftBuilderFiller',d.bundle.filler_level);set('giftBuilderStickerQty',String(d.bundle.sticker_qty||0));const seasonal=document.getElementById('giftBuilderSeasonal');if(seasonal)seasonal.checked=(d.bundle.seasonal_extras||[]).includes('secret_seasonal');const priority=document.getElementById('giftBuilderPriority');if(priority)priority.checked=!!d.bundle.priority_order;renderGiftBuilder();}input.value='';renderGiftBuilderChat();}
+ catch(e){giftMotion('aiRecognitionError');toast(e.message||'Не удалось отправить сообщение ИИ.');}
  finally{button.disabled=false;}
 }
 async function addGiftBuilderToCart(){
@@ -4568,8 +4568,9 @@ async function sendSupport() {
   const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message,conversation_id:activeSupportConversationId})});
   input.value = '';
   await loadSupportHistory(activeSupportConversationId,data.actions||[]);
+  if(!data.handoff){giftMotion((data.actions||[]).some(action=>action?.view==='product')?'aiProductFound':'aiRecognition');}
   result.textContent = data.handoff ? 'Сообщение передано владельцу.' : 'Ответ ИИ помощника готов.';
- } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
+ } catch(e) { giftMotion('aiRecognitionError');result.textContent = e.message || 'Не удалось получить ответ.'; }
  finally { button.disabled = false; }
 }
 
@@ -4670,12 +4671,12 @@ async function sendCraftMessage(){
   const d=await apiFetch('/api/craft/create',{method:'POST',body:JSON.stringify({messages:craftMessages,conversation_id:craftDraftId})});
   if(Array.isArray(d.conversation))craftMessages=d.conversation;else craftMessages.push({role:d.handoff?'system':'assistant',content:d.reply||'Помощник не вернул сообщение.'});
   craftDraftId=d.draft_id||craftDraftId;craftAiEnabled=d.ai_enabled!==false;try{localStorage.setItem('agentstvo-craft-draft-id',craftDraftId);}catch{}if(craftDraftId)startCraftPolling();
-  if(d.ready){craftConversationReady=true;status.textContent='Вы согласились с предложением. Запрос передан владельцу для проверки. Счёт не отправлен — сначала владелец проверит описание и цену.';input.placeholder='Напишите сообщение по этому заказу…';startCraftPolling();}
+  if(d.ready){giftMotion('aiOrderCreated');craftConversationReady=true;status.textContent='Вы согласились с предложением. Запрос передан владельцу для проверки. Счёт не отправлен — сначала владелец проверит описание и цену.';input.placeholder='Напишите сообщение по этому заказу…';startCraftPolling();}
   else if(d.handoff){status.textContent='Сообщение сохранено. Автоответы ИИ выключены — владелец сможет ответить вручную. 💬';}
-  else if(d.offer_pending){status.textContent='Подбор готов! Предварительная оценка: '+Number(d.estimated_stars||0)+' ⭐. Если Вы хотите передать именно этот вариант владельцу на проверку, подтвердите согласие своими словами. Если хотите изменить идею — расскажите что поправить.';}
+  else if(d.offer_pending){giftMotion('aiRecognition');status.textContent='Подбор готов! Предварительная оценка: '+Number(d.estimated_stars||0)+' ⭐. Если Вы хотите передать именно этот вариант владельцу на проверку, подтвердите согласие своими словами. Если хотите изменить идею — расскажите что поправить.';}
   else{craftQuestionCount=Math.min(100,craftQuestionCount+1);status.textContent='Продолжаем подбор. Ответьте на следующий вопрос.';}
   renderCraftChat();
- }catch(e){status.textContent=e.message||'Не удалось продолжить диалог. Попробуйте ещё раз.';input.value=message;}
+ }catch(e){giftMotion('aiRecognitionError');status.textContent=e.message||'Не удалось продолжить диалог. Попробуйте ещё раз.';input.value=message;}
  finally{button.disabled=false;button.textContent=craftConversationReady?'Отправить сообщение':'Отправить ответ';}
 }
 
@@ -4826,7 +4827,7 @@ async function sendOrderChatMessage(){
  const input=document.getElementById('supportMessage'),button=document.getElementById('supportSendBtn'),status=document.getElementById('supportResult'),message=input?.value.trim()||'';
  if(!activeOrderChatId||!message)return;
  button.disabled=true;button.textContent='Отправляем…';
- try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-помощника получен.';}
+ try{const d=await apiFetch('/api/order-chat',{method:'POST',body:JSON.stringify({order_id:activeOrderChatId,message})});giftMotion(d.change_request_id?'aiOrderCreated':'aiRecognition');input.value='';await refreshOrderChat();if(status)status.textContent=d.change_request_id?'Предложение изменения передано владельцу.':'Ответ ИИ-помощника получен.';}
  catch(e){if(status)status.textContent=e.message||'Не удалось отправить сообщение.';}
  finally{button.disabled=false;button.textContent='Отправить';}
 }
