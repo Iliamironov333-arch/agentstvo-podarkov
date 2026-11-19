@@ -2058,7 +2058,7 @@ function initAdminCategories(){
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
   else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
   else if(id==='adminUiMotionPanel'||id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
-  else if(id==='adminSupportPanel')key='aiorders';
+  else if(id==='adminSupportPanel'||id==='adminPromosPanel')key='aiorders';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
@@ -4125,12 +4125,12 @@ function applyAdminPermissionVisibility(){
  const categoryPermissions={
   store:['catalog_view','catalog_manage'],photos:['catalog_view','catalog_manage'],
   cheats:['system_manage'],marketing:['campaigns_manage','announcements_manage','promos_manage'],
-  operations:['users_view','users_balance','users_ban','users_unban','orders_view','orders_manage','support_view','support_reply'],
-  reputation:['analytics_view'],ai:['ai_bot_manage','ai_bot_logs','ai_watch_end'],
-  aiorders:['ai_orders_view','ai_orders_manage'],reports:['reports_view'],server:['system_manage','backup_manage']
+  operations:['users_view','users_balance','users_ban','users_unban','orders_view','orders_manage'],
+  reputation:[],ai:['ai_bot_manage','ai_bot_logs','ai_watch_end'],
+  aiorders:['ai_orders_view','ai_orders_manage','support_view','support_reply'],reports:['reports_view'],server:['system_manage','backup_manage']
  };
  Object.entries(categoryPermissions).forEach(([category,keys])=>{
-  const allowed=keys.some(adminHasPermission);
+  const allowed=category==='reputation'?adminSession?.root_owner===true:keys.some(adminHasPermission);
   document.querySelectorAll('.admin-category-nav [data-category="'+category+'"],.admin-category-section[data-category="'+category+'"]').forEach(node=>node.hidden=!allowed);
  });
  const metrics=document.getElementById('adminMetrics');
