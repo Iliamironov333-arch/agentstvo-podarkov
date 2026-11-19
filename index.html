@@ -41,6 +41,19 @@ main{padding:12px 15px}
 .price small{font-size:10px;color:var(--muted);font-weight:500}
 .add{width:100%;border:0;border-radius:10px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#27190b;font-weight:800;padding:10px;margin-top:10px}
 .add.added{background:#315640;color:#c7ffe0}
+.qty-control{display:grid;grid-template-columns:42px minmax(30px,1fr) 42px;align-items:center;gap:7px;margin-top:10px}
+.qty-control button{height:38px;border:1px solid #8a642f;border-radius:10px;background:linear-gradient(145deg,#49351f,#302316);color:var(--gold2);font-size:21px;font-weight:800;touch-action:manipulation}
+.qty-control button.qty-plus{background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#27190b;border:0}
+.qty-control output{text-align:center;font-size:15px;font-weight:800;color:var(--gold2);font-variant-numeric:tabular-nums}
+.catalog-cart-bar{position:fixed;left:0;right:0;bottom:calc(67px + env(safe-area-inset-bottom));z-index:6;padding:9px 13px;background:#211910f5;border-top:1px solid #8a642f;backdrop-filter:blur(16px);box-shadow:0 -8px 24px #0004}
+.catalog-cart-bar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:760px;margin:0 auto}
+.catalog-cart-total{min-width:0;display:flex;flex-direction:column;gap:2px}
+.catalog-cart-total small{font-size:11px;color:var(--muted)}
+.catalog-cart-total strong{font-size:17px;color:var(--gold2);white-space:nowrap}
+.catalog-cart-go{flex:0 0 auto;border:0;border-radius:12px;padding:12px 16px;background:linear-gradient(100deg,#ffdc8b,#e6a53d);color:#27190b;font-weight:850;font-size:13px;white-space:nowrap}
+body.catalog-has-cart-bar{padding-bottom:160px}
+@media(min-width:700px){.catalog-cart-bar{padding-left:22px;padding-right:22px}.catalog-cart-go{min-width:210px}}
+
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:15px;margin:12px 0}
 .panel h3{margin:0 0 8px;font-size:16px}
 .muted{color:var(--muted);font-size:13px;line-height:1.45}
@@ -1890,6 +1903,12 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span>Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="openBot('about')">Подробнее и правила в боте</button><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
 </section>
 </main>
+<div class="catalog-cart-bar hidden" id="catalogCartBar" aria-live="polite">
+ <div class="catalog-cart-bar-inner">
+  <div class="catalog-cart-total"><small id="catalogCartCount">Корзина пуста</small><strong id="catalogCartTotal">0 ⭐</strong></div>
+  <button type="button" class="catalog-cart-go" onclick="showView('cartView')">Перейти в корзину →</button>
+ </div>
+</div>
 <div class="bottom">
  <button class="active" data-view="menuView"><strong>⌂</strong>Меню</button>
  <button data-view="cartView"><strong>🛒</strong>Корзина <span id="cartBadge"></span></button>
@@ -2223,6 +2242,9 @@ function showView(id) {
  }
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
+ const catalogCartBar=document.getElementById('catalogCartBar');if(catalogCartBar)catalogCartBar.classList.toggle('hidden',id!=='catalogView');
+ document.body.classList.toggle('catalog-has-cart-bar',id==='catalogView');
+ updateCatalogCartBar();
  if (['ordersView','profileView','balanceView','cartView'].includes(id)) {
   if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
   loadMe();
@@ -2357,6 +2379,15 @@ function toast(s) {
 
 function persistCart() {
  localStorage.setItem('gift-cart',JSON.stringify(cart));
+ updateCatalogCartBar();
+}
+function updateCatalogCartBar(){
+ const bar=document.getElementById('catalogCartBar');if(!bar)return;
+ const count=Object.values(cart||{}).reduce((sum,value)=>sum+Math.max(0,Number(value)||0),0);
+ const total=(products||[]).reduce((sum,p)=>sum+Math.max(0,Number(p[2])||0)*Math.max(0,Number(cart[p[0]])||0),0);
+ const countLabel=document.getElementById('catalogCartCount'),totalLabel=document.getElementById('catalogCartTotal');
+ if(countLabel)countLabel.textContent=count?count+' '+(count===1?'товар':'товаров')+' в корзине':'Корзина пуста';
+ if(totalLabel)totalLabel.textContent=money(total);
 }
 
 function drawProducts() {
@@ -2386,23 +2417,14 @@ function drawProducts() {
    el.style.animationDuration=Math.round(uiMotionSettings.cardDuration*speed)+'ms';
    el.style.animationDelay=(uiMotionSettings.cardStagger?Math.round(index*uiMotionSettings.cardInterval*speed):0)+'ms';
   }
-  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><div class="qty-control" aria-label="Количество товара"><button type="button" class="qty-minus" aria-label="Уменьшить количество" ${qty<=0?'disabled':''}>−</button><output aria-live="polite">${qty}</output><button type="button" class="qty-plus" aria-label="Добавить ещё" ${p[2]==null||qty>=10?'disabled':''}>＋</button></div></div>`;
   el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
   el.style.cursor='pointer';
 
   const buyButton=document.createElement('button');buyButton.type='button';buyButton.className='secondary buy-now';buyButton.textContent='⚡ Купить сразу';buyButton.dataset.productId=String(p[0]);buyButton.disabled=p[2]==null;buyButton.style.cssText='width:100%;margin-top:8px';buyButton.onclick=()=>buyProductNow(p[0]);el.querySelector('.productbody').appendChild(buyButton);
 
-   el.querySelector('.add').onclick = () => {
-   if (qty) {
-    cart[p[0]] = Math.max(0,qty-1);
-    if (!cart[p[0]]) delete cart[p[0]];
-   } else {
-    cart[p[0]] = 1;
-   }
-   persistCart();
-   drawProducts();
-   drawCart();
-  };
+   el.querySelector('.qty-minus').onclick = event => {event.stopPropagation();changeQty(p[0],-1);};
+  el.querySelector('.qty-plus').onclick = event => {event.stopPropagation();changeQty(p[0],1);};
 
   root.appendChild(el);
  });
@@ -2583,6 +2605,7 @@ function drawCart() {
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
  document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
+ updateCatalogCartBar();
  const notice = document.getElementById('deliveryNotice');
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
