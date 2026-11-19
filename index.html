@@ -2056,9 +2056,12 @@ function initAdminCategories(){
  original.forEach(node=>{
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
-  else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
+  else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel'||id==='adminPromosPanel')key='marketing';
   else if(id==='adminUiMotionPanel'||id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
-  else if(id==='adminSupportPanel')key='aiorders';
+  else if(id==='adminSupportPanel'||id==='adminAiOrdersPanel')key='aiorders';
+   else if(id==='adminAiBotPanel')key='ai';
+   else if(id==='adminAiReportsPanel')key='reports';
+   else if(id==='adminAnalyticsPanel')key='reputation';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
@@ -2258,8 +2261,8 @@ function resetUiMotionSettings(){
 
 function showView(id) {
  if(id==='cartView')giftMotion('cartOpen');
- if(id==='adminPanelView' && adminSession?.root_owner !== true) {
-  toast('Панель владельца закрыта: серверная проверка доступа не пройдена.');
+ if(id==='adminPanelView' && adminSession?.admin_access !== true) {
+  toast('Административная панель недоступна: нет активных разрешений.');
   return;
  }
  allViews.forEach(v => document.getElementById(v)?.classList.toggle('hidden',v !== id));
@@ -4122,6 +4125,17 @@ function applyAdminPermissionVisibility(){
  const aiSettingsBlock=document.getElementById('aiBotSettingsBlock');if(aiSettingsBlock)aiSettingsBlock.hidden=!adminHasPermission('ai_bot_manage');
  showPanel('#adminAiOrdersPanel',adminHasPermission('ai_orders_view')||adminHasPermission('ai_orders_manage'));
  showPanel('#adminAiReportsPanel',adminHasPermission('reports_view'));
+ const categoryPermissions={
+  store:['catalog_view','catalog_manage'],photos:['catalog_view','catalog_manage'],
+  cheats:['system_manage'],marketing:['campaigns_manage','announcements_manage','promos_manage'],
+  operations:['users_view','users_balance','users_ban','users_unban','orders_view','orders_manage'],
+  reputation:['analytics_view'],ai:['ai_bot_manage','ai_bot_logs','ai_watch_end'],
+  aiorders:['ai_orders_view','ai_orders_manage','support_view','support_reply'],reports:['reports_view'],server:['system_manage','backup_manage']
+ };
+ Object.entries(categoryPermissions).forEach(([category,keys])=>{
+  const allowed=keys.some(adminHasPermission);
+  document.querySelectorAll('.admin-category-nav [data-category="'+category+'"],.admin-category-section[data-category="'+category+'"]').forEach(node=>node.hidden=!allowed);
+ });
  const metrics=document.getElementById('adminMetrics');
  if(metrics)metrics.hidden=!adminHasPermission('dashboard_view');
  for(const id of ['adminUpdatedAt','adminDashboardStatus']){const node=document.getElementById(id);if(node)node.hidden=!adminHasPermission('dashboard_view');}
@@ -4158,33 +4172,33 @@ async function checkOwnerAccess() {
   setOwnerAccessDiagnostic('A02', 'Нет подписанных initData', 'Telegram не передал данные авторизации. Откройте мини-приложение непосредственно из бота, а не по обычной браузерной ссылке.', clientIdState);
   return;
  }
- if (description) description.textContent = 'Проверяем владельца на сервере…';
+ if (description) description.textContent = 'Проверяем административные права на сервере…';
  try {
   const result = await apiFetch('/api/admin/session');
   adminSession = result || null;
-  if (result?.root_owner === true && result?.admin_access === true && result?.role === 'owner') {
+  if (result?.admin_access === true && ['owner','moderator'].includes(result?.role)) {
+   const isRootOwner=result.root_owner===true;
+   const ownerRole=isRootOwner||result.role==='owner';
+   const roleLabel=ownerRole?'владельца':'модератора';
    card.classList.remove('hidden');
    const title=document.querySelector('#adminPanelView .sectionhead h2');
-   if(title) title.textContent='🔐 Панель владельца';
+   if(title) title.textContent=ownerRole?'🔐 Панель владельца':'🛡️ Панель модератора';
    const heroTitle=document.querySelector('#adminPanelView .hero h2');
-   if(heroTitle) heroTitle.textContent='Добро пожаловать, владелец';
+   if(heroTitle) heroTitle.textContent='Добро пожаловать, '+roleLabel;
    const cardTitle=card.querySelector('strong');
-   if(cardTitle?.firstChild) cardTitle.firstChild.textContent='🔐 Панель владельца ';
-   if(description) description.textContent='Управление Агентством подарков';
+   if(cardTitle?.firstChild) cardTitle.firstChild.textContent=ownerRole?'🔐 Панель владельца ':'🛡️ Панель модератора ';
+   if(description) description.textContent='Управление Агентством подарков · '+(ownerRole?'полный доступ':'доступ по выданным разрешениям');
    clearOwnerAccessDiagnostic();
+   initAdminCategories();
    applyAdminPermissionVisibility();
-   loadAdminStaff();
-   console.info('[ADMIN ACCESS DIAGNOSTIC] A00: owner session confirmed by Worker.');
+   if(isRootOwner)loadAdminStaff();
+   console.info('[ADMIN ACCESS DIAGNOSTIC] Administrative session confirmed by Worker:',result.role);
    return;
   }
-  adminSession = null;
-  if (result?.root_owner !== true) {
-   setOwnerAccessDiagnostic('A04', 'Сервер не распознал основной аккаунт владельца', 'Worker ответил, но root_owner не равен true. Проверьте Telegram ID, BOT_TOKEN и соответствие аккаунта боту.', clientIdState);
-  } else if (result?.admin_access !== true) {
-   setOwnerAccessDiagnostic('A05', 'Сервер запретил административный доступ', 'root_owner подтверждён, но admin_access не равен true. Проверьте формирование сессии /api/admin/session.', clientIdState);
-  } else {
-   setOwnerAccessDiagnostic('A06', 'Неожиданный формат ответа сервера', 'Ожидались root_owner=true, admin_access=true и role=owner. Получен другой набор полей.', clientIdState);
-  }
+  adminSession = result || null;
+  card.classList.add('hidden');
+  clearOwnerAccessDiagnostic();
+  if (result?.admin_access !== true) return;
  } catch(e) {
   adminSession = null;
   const status = Number(e?.status || 0);
