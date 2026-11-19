@@ -4129,11 +4129,11 @@ function applyAdminPermissionVisibility(){
   store:['catalog_view','catalog_manage'],photos:['catalog_view','catalog_manage'],
   cheats:['system_manage'],marketing:['campaigns_manage','announcements_manage','promos_manage'],
   operations:['users_view','users_balance','users_ban','users_unban','orders_view','orders_manage'],
-  reputation:[],ai:['ai_bot_manage','ai_bot_logs','ai_watch_end'],
+  reputation:['analytics_view'],ai:['ai_bot_manage','ai_bot_logs','ai_watch_end'],
   aiorders:['ai_orders_view','ai_orders_manage','support_view','support_reply'],reports:['reports_view'],server:['system_manage','backup_manage']
  };
  Object.entries(categoryPermissions).forEach(([category,keys])=>{
-  const allowed=category==='reputation'?adminSession?.root_owner===true:keys.some(adminHasPermission);
+  const allowed=keys.some(adminHasPermission);
   document.querySelectorAll('.admin-category-nav [data-category="'+category+'"],.admin-category-section[data-category="'+category+'"]').forEach(node=>node.hidden=!allowed);
  });
  const metrics=document.getElementById('adminMetrics');
