@@ -2225,7 +2225,6 @@ function resetUiMotionSettings(){
 }
 
 function showView(id) {
- if(id==='cartView'){}
  if(id==='adminPanelView' && adminSession?.admin_access !== true) {
   toast('Административная панель недоступна: нет активных разрешений.');
   return;
@@ -4861,8 +4860,7 @@ const observedOrderMotionStates = new Map();
 function observeOrderMotionStatus(order){
  const id=String(order.order_id??order.id??'');if(!id)return;
  const next=String(order.fulfillment_status||order.admin_status||'').toLowerCase();if(!next)return;
- const previous=observedOrderMotionStates.get(id);observedOrderMotionStates.set(id,next);
- if(previous&&previous!==next){}
+ observedOrderMotionStates.set(id,next);
 }
 
 async function loadMe() {
