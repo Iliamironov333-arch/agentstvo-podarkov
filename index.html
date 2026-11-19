@@ -2056,9 +2056,9 @@ function initAdminCategories(){
  original.forEach(node=>{
   const id=node.id||'',txt=(node.textContent||'').trim();let key='operations';
   if(id==='adminCatalogPanel'||txt.startsWith('🛍️ Магазин'))key='store';
-  else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel')key='marketing';
+  else if(id==='adminAnnouncementsPanel'||id==='adminMailingPanel'||id==='adminPromosPanel')key='marketing';
   else if(id==='adminUiMotionPanel'||id==='adminSystemControlsPanel'||id==='adminSeasonThemesPanel'||txt.startsWith('🎛️ Чит-панель')||txt.startsWith('🎨 Сезонное оформление'))key='cheats';
-  else if(id==='adminSupportPanel'||id==='adminPromosPanel')key='aiorders';
+  else if(id==='adminSupportPanel')key='aiorders';
   else if(id==='adminBackupPanel'||id==='adminTechnicalCenterPanel'||id==='adminServerDiagnosticsPanel')key='server';
   else if(txt.includes('Защищённый доступ'))key='server';
   sections[key].appendChild(node);
