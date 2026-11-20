@@ -3889,7 +3889,7 @@ async function loadAdminProducts() {
  status.textContent='Загружаем каталог из D1…';root.replaceChildren();
  try{
   const data=await apiFetch('/api/admin/products');
-  const products=Array.isArray(data.products)?data.products:[[];
+  const products=Array.isArray(data.products)?data.products:[];
   adminProductsCache=products;
   const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
   (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
