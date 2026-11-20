@@ -2378,22 +2378,19 @@ function drawProducts() {
  root.innerHTML = '';
  const autumnIds = new Set(['3','15','22','23','29','33','36','41','54','72','75']);
  const now = Date.now();
- const priorityTitles = [
-  'египетская кошка','кошка египетская','ночная прогулка','ночь на ковре самолете','дом севастьянова ночью',
-  'ночью над днепром','морские корабли','человек в вагоне','доисторическое искусство',
-  'человек в ракурсе','улица в перспективе','осенняя тыква','таинственный лес',
-  'мальчик в деревне','город у моря','редкая птица','тропический дракон',
-  'александр сергеевич пушкин','здание в перспективе'
- ];
- const normalizeTitle = value => String(value||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9]+/g,' ').trim();
+ const productCreatedTime = value => {
+  if(!value)return NaN;
+  const raw=String(value).trim().replace(' ','T');
+  const parsed=Date.parse(raw);
+  if(Number.isFinite(parsed))return parsed;
+  return Date.parse(raw+'Z');
+ };
+ // Каталог всегда начинается с самых недавно добавленных работ.
+ // Названия и ручные приоритеты не должны перебивать дату создания.
  const shown = [...products].sort((a,b)=>{
-  const titleA=normalizeTitle(a[1]),titleB=normalizeTitle(b[1]);
-  const rankA=priorityTitles.findIndex(title=>titleA.includes(title));
-  const rankB=priorityTitles.findIndex(title=>titleB.includes(title));
-  if(rankA!==rankB)return (rankA<0?999:rankA)-(rankB<0?999:rankB);
-  if(rankA>=0&&rankB>=0)return Number(b[0])-Number(a[0]);
-  const da=Date.parse(String(a[8]||'').replace(' ','T')+'Z'),db=Date.parse(String(b[8]||'').replace(' ','T')+'Z');
+  const da=productCreatedTime(a[8]),db=productCreatedTime(b[8]);
   if(Number.isFinite(da)&&Number.isFinite(db)&&da!==db)return db-da;
+  if(Number.isFinite(db)!==Number.isFinite(da))return Number.isFinite(db)?1:-1;
   return Number(b[0])-Number(a[0]);
  }).filter(p => {
   if(activeFilter==='all') return true;
