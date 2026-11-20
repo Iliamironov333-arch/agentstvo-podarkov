@@ -2379,7 +2379,7 @@ function drawProducts() {
  const autumnIds = new Set(['3','15','22','23','29','33','36','41','54','72','75']);
  const now = Date.now();
  const priorityTitles = [
-  'кошка египетская','ночная прогулка','ночь на ковре самолете','дом севастьянова ночью',
+  'египетская кошка','кошка египетская','ночная прогулка','ночь на ковре самолете','дом севастьянова ночью',
   'ночью над днепром','морские корабли','человек в вагоне','доисторическое искусство',
   'человек в ракурсе','улица в перспективе','осенняя тыква','таинственный лес',
   'мальчик в деревне','город у моря','редкая птица','тропический дракон',
@@ -2417,7 +2417,7 @@ function drawProducts() {
    el.style.animationDuration=Math.round(uiMotionSettings.cardDuration*speed)+'ms';
    el.style.animationDelay=(uiMotionSettings.cardStagger?Math.round(index*uiMotionSettings.cardInterval*speed):0)+'ms';
   }
-  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'<small>скидка уже учтена</small>':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
   el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
   el.style.cursor='pointer';
 
