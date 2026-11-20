@@ -1452,8 +1452,9 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 
-/* Keep mini-app header below Telegram/iOS status bar and controls */
-@media(max-width:600px){header{padding-top:calc(70px + env(safe-area-inset-top))}}
+/* Full-screen iOS/Telegram: keep the header inside the safe area without a fixed oversized offset */
+@media(max-width:600px){header{padding-top:max(18px,env(safe-area-inset-top));padding-left:max(17px,env(safe-area-inset-left));padding-right:max(17px,env(safe-area-inset-right))}}
+@supports(height:100dvh){body{min-height:100dvh}}
 </style>
 </head>
 <body>
