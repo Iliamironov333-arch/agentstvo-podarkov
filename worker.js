@@ -1591,7 +1591,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           return json({ok:true},200,origin);
         }
 if (path === "/api/admin/products" && method === "GET") {
-          const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY CAST(id AS INTEGER),created_at DESC").all();
+          await ensureProductDisplayOrder(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
         }
