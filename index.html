@@ -2389,12 +2389,7 @@ function drawProducts() {
  };
  // Каталог всегда начинается с самых недавно добавленных работ.
  // Названия и ручные приоритеты не должны перебивать дату создания.
- const shown = [...products].sort((a,b)=>{
-  const da=productCreatedTime(a[8]),db=productCreatedTime(b[8]);
-  if(Number.isFinite(da)&&Number.isFinite(db)&&da!==db)return db-da;
-  if(Number.isFinite(db)!==Number.isFinite(da))return Number.isFinite(db)?1:-1;
-  return Number(b[0])-Number(a[0]);
- }).filter(p => {
+ const shown = [...products].filter(p => {
   if(activeFilter==='all') return true;
   if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
   if(activeFilter==='new') {
