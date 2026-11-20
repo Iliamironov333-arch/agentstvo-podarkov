@@ -2096,7 +2096,7 @@ function initAdminCategories(){
  <p class="muted">Предупреждения учитываются в течение заданного срока. После его окончания они больше не влияют на порог. История хранится отдельно для просмотра владельцем. Мут блокирует текстовые сообщения, а ограничение блокирует отправку всех типов сообщений до окончания срока. Администраторы группы не наказываются автоматически.</p>
 </div>
  <div class="ai-feature-card" id="aiManualWarningCard"><h4>➕ Выдать предупреждение вручную</h4><p class="muted">Введите Telegram ID участника и конкретную причину. Действуют те же правила накопления предупреждений.</p><div class="ai-two-fields"><label>Telegram ID участника<input id="aiWarnTelegramId" inputmode="numeric" placeholder="Например, 123456789"></label><label>Причина предупреждения<input id="aiWarnReason" maxlength="500" placeholder="Например, оскорбление участника"></label></div><button class="secondary" type="button" onclick="sendAiManualWarning()">Выдать предупреждение</button><div id="aiWarnStatus" class="notice"></div></div>
- <div class="ai-feature-card" id="aiGroupInvoiceCard"><h4>⭐ Счёт на оплату в группу</h4><p class="muted">Создайте счёт в Telegram Stars. В группе появится сообщение с кнопкой «Оплатить». Плательщиком сможет стать любой участник группы.</p><label>Название счёта<input id="aiInvoiceTitle" maxlength="32" value="Оплата Агентству подарков"></label><label>Описание<input id="aiInvoiceDescription" maxlength="255" value="Оплата в Агентстве подарков"></label><label>Сумма в Stars<input id="aiInvoiceAmount" type="number" min="1" max="100000" step="1" placeholder="Введите количество Stars"></label><button class="secondary" type="button" onclick="sendAiGroupInvoice()">Отправить счёт в группу</button><div id="aiInvoiceStatus" class="notice"></div></div>
+ <div class="ai-feature-card" id="aiGroupInvoiceCard"><h4>⭐ Счёт на оплату в группу</h4><p class="muted">Создайте счёт в Telegram Stars. В группе появится сообщение с кнопкой «Оплатить». Плательщиком сможет стать любой участник группы.</p><label>Название счёта<input id="aiInvoiceTitle" maxlength="32" value="Оплата Агентству подарков"></label><label>Описание<input id="aiInvoiceDescription" maxlength="255" value="Оплата в Агентстве подарков"></label><label>Сумма в Stars<input id="aiInvoiceAmount" type="number" min="1" max="100000" step="1" placeholder="Введите количество Stars"></label><button class="secondary" type="button" onclick="sendAiGroupInvoice()">Отправить счёт в группу</button><div id="aiInvoiceStatus" class="notice"></div></div><div class="ai-feature-card" id="aiGroupAdCard"><h4>🎁 Рекламное сообщение в группу</h4><p class="muted">Отправьте участникам приглашение в каталог. Кнопка откроет бота, а бот предложит запустить мини-приложение с каталогом.</p><label>Текст сообщения<textarea id="aiGroupAdText" rows="3" maxlength="1000">🎁 Хотите выбрать подарок или посмотреть наши работы?\n\nПерейдите по кнопке ниже, чтобы попасть в наш каталог Агентства подарков!</textarea></label><button class="secondary" type="button" onclick="sendAiGroupAd()">Отправить рекламное сообщение</button><div id="aiGroupAdStatus" class="notice"></div></div>
  <div class="sectionhead"><h4>Скрытое наблюдение</h4><button class="secondary" type="button" onclick="loadAiBotAdmin()">↻ Обновить</button></div><div id="aiWatchlist" class="notice">Загрузка списка…</div>
  <div class="sectionhead"><h4>Жалобы</h4></div><div id="aiComplaintsList" class="notice">Загрузка жалоб…</div>
  <div class="sectionhead"><h4>Предупреждения</h4></div><div id="aiWarningsList" class="notice">Загрузка предупреждений…</div>
@@ -5068,6 +5068,20 @@ async function sendAiManualWarning(){
  const status=document.getElementById('aiWarnStatus');if(!telegram_id||!reason)return toast('Укажите Telegram ID и причину.');
  if(!confirm('Выдать участнику предупреждение? При накоплении предупреждений может примениться ограничение по правилам системы.'))return;
  try{await apiFetch('/api/admin/ai-warning',{method:'POST',body:JSON.stringify({telegram_id,reason})});if(status)status.textContent='Предупреждение выдано. Владелец получил уведомление.';toast('Предупреждение выдано.');document.getElementById('aiWarnReason').value='';await loadAiBotAdmin();}catch(e){if(status)status.textContent=e.message||'Не удалось выдать предупреждение.';toast(e.message||'Не удалось выдать предупреждение.');}
+}
+async function sendAiGroupAd(){
+ const text=document.getElementById('aiGroupAdText')?.value.trim()||'';
+ const status=document.getElementById('aiGroupAdStatus');
+ if(text.length<5)return toast('Добавьте текст рекламного сообщения.');
+ if(!confirm('Отправить рекламное сообщение с кнопкой перехода в бот в группу?'))return;
+ try{
+  await apiFetch('/api/admin/ai-group-ad',{method:'POST',body:JSON.stringify({text})});
+  if(status)status.textContent='Рекламное сообщение отправлено в группу.';
+  toast('Рекламное сообщение отправлено!');
+ }catch(e){
+  if(status)status.textContent=e.message||'Не удалось отправить рекламное сообщение.';
+  toast(e.message||'Не удалось отправить рекламное сообщение.');
+ }
 }
 async function sendAiGroupInvoice(){
  const amount_stars=Number(document.getElementById('aiInvoiceAmount')?.value||0);
