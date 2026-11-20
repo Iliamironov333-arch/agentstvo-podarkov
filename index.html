@@ -3888,30 +3888,59 @@ async function loadAdminProducts() {
   adminProductsCache=products;
   const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
   (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
-  status.textContent='Товаров в каталоге: '+products.length+' · Перетаскивайте за ⠿ слева';
+  status.textContent='Товаров в каталоге: '+products.length+' · Перемещайте кнопками ↑ ↓ или перетаскиванием';
   if(!products.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет товаров.';root.append(empty);return;}
   let saving=false,savePending=false;
+  const refreshMoveButtons=()=>{
+   const rows=Array.from(root.querySelectorAll('[data-admin-product-id]'));
+   rows.forEach((item,index)=>{
+    const up=item.querySelector('[data-move-up]'),down=item.querySelector('[data-move-down]');
+    if(up)up.disabled=index===0;
+    if(down)down.disabled=index===rows.length-1;
+   });
+  };
   const saveOrder=async()=>{
    if(saving){savePending=true;return;}
    saving=true;
-   do{
-    savePending=false;
-    const ids=Array.from(root.querySelectorAll('[data-admin-product-id]')).map(el=>el.dataset.adminProductId);
-    status.textContent='Сохраняем порядок…';
-    try{await apiFetch('/api/admin/product-order',{method:'POST',body:JSON.stringify({ids})});status.textContent='Порядок сохранён ✓';}
-    catch(error){status.textContent=error.message||'Не удалось сохранить порядок';await loadAdminProducts();return;}
-   }while(savePending);
-   saving=false;
+   try{
+    do{
+     savePending=false;
+     const ids=Array.from(root.querySelectorAll('[data-admin-product-id]')).map(el=>el.dataset.adminProductId);
+     status.textContent='Сохраняем порядок…';
+     await apiFetch('/api/admin/product-order',{method:'POST',body:JSON.stringify({ids})});
+     refreshMoveButtons();
+     status.textContent='Порядок сохранён ✓ Обновляем магазин…';
+     // Обновляем тот же серверный каталог, из которого строится витрина покупателя.
+     await loadProducts();
+     status.textContent='Порядок сохранён ✓ Магазин обновлён';
+    }while(savePending);
+   }catch(error){
+    status.textContent=(error.message||'Не удалось сохранить порядок')+' · Обновите список и повторите.';
+    console.error('Не удалось сохранить порядок товаров:',error);
+   }finally{saving=false;}
+  };
+  const moveRow=(row,direction)=>{
+   const sibling=direction<0?row.previousElementSibling:row.nextElementSibling;
+   if(!sibling||!sibling.matches('[data-admin-product-id]'))return;
+   if(direction<0)root.insertBefore(row,sibling);else root.insertBefore(sibling,row);
+   refreshMoveButtons();
+   saveOrder();
   };
   products.forEach(product=>{
-   const row=document.createElement('div');row.className='admin-user-row';row.dataset.adminProductId=String(product.id);row.style.display='flex';row.style.alignItems='center';row.style.gap='10px';
-   const grip=document.createElement('div');grip.className='admin-product-drag-handle';grip.title='Зажмите и перетащите';grip.setAttribute('aria-label','Перетащить товар');grip.style.cssText='display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(3,5px);gap:3px;padding:10px 8px;flex:0 0 26px;align-content:center;justify-content:center;color:var(--muted);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;';
+   const row=document.createElement('div');row.className='admin-user-row';row.dataset.adminProductId=String(product.id);row.style.display='flex';row.style.alignItems='center';row.style.gap='8px';
+   const grip=document.createElement('div');grip.className='admin-product-drag-handle';grip.title='Зажмите и перетащите';grip.setAttribute('aria-label','Перетащить товар');grip.style.cssText='display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(3,5px);gap:3px;padding:10px 7px;flex:0 0 24px;align-content:center;justify-content:center;color:var(--muted);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;';
    for(let i=0;i<6;i++){const dot=document.createElement('span');dot.style.cssText='width:5px;height:5px;border-radius:50%;background:currentColor;';grip.append(dot);}
    row.append(grip);
+   const moveControls=document.createElement('div');moveControls.style.cssText='display:flex;flex-direction:column;gap:3px;flex:0 0 34px;';
+   const moveUp=document.createElement('button');moveUp.type='button';moveUp.textContent='↑';moveUp.title='Переместить выше';moveUp.setAttribute('aria-label','Переместить '+(product.title||'товар')+' выше');moveUp.dataset.moveUp='1';moveUp.className='secondary';moveUp.style.cssText='width:34px;min-width:34px;padding:3px 0;line-height:1.2;';
+   const moveDown=document.createElement('button');moveDown.type='button';moveDown.textContent='↓';moveDown.title='Переместить ниже';moveDown.setAttribute('aria-label','Переместить '+(product.title||'товар')+' ниже');moveDown.dataset.moveDown='1';moveDown.className='secondary';moveDown.style.cssText='width:34px;min-width:34px;padding:3px 0;line-height:1.2;';
+   moveUp.addEventListener('click',()=>moveRow(row,-1));moveDown.addEventListener('click',()=>moveRow(row,1));
+   moveControls.append(moveUp,moveDown);row.append(moveControls);
    let pointerActive=false,pointerMoved=false;
    grip.addEventListener('pointerdown',event=>{
     if(event.button!==undefined&&event.button!==0)return;
-    pointerActive=true;pointerMoved=false;grip.setPointerCapture?.(event.pointerId);
+    pointerActive=true;pointerMoved=false;
+    try{grip.setPointerCapture(event.pointerId);}catch{}
     row.style.opacity='.72';grip.style.color='var(--gold)';status.textContent='Перемещайте товар…';event.preventDefault();
    });
    grip.addEventListener('pointermove',event=>{
@@ -3919,19 +3948,26 @@ async function loadAdminProducts() {
     const y=event.clientY;
     if(y<90)window.scrollBy(0,-14);else if(y>window.innerHeight-130)window.scrollBy(0,14);
     const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-admin-product-id]');
-    if(target&&target!==row&&root.contains(target)){const rect=target.getBoundingClientRect();const after=y>rect.top+rect.height/2;root.insertBefore(row,after?target.nextSibling:target);pointerMoved=true;}
+    if(target&&target!==row&&root.contains(target)){
+     const rect=target.getBoundingClientRect();const after=y>rect.top+rect.height/2;
+     if(after&&target.nextElementSibling!==row)root.insertBefore(row,target.nextSibling);
+     else if(!after&&row.nextElementSibling!==target)root.insertBefore(row,target);
+     pointerMoved=true;refreshMoveButtons();
+    }
    });
    const finishPointer=()=>{if(!pointerActive)return;pointerActive=false;row.style.opacity='';grip.style.color='';if(pointerMoved)saveOrder();else status.textContent='Порядок товаров';};
-   grip.addEventListener('pointerup',finishPointer);grip.addEventListener('pointercancel',finishPointer);
-   const info=document.createElement('div');info.className='admin-user-info';info.style.flex='1;min-width:0';
+   grip.addEventListener('pointerup',finishPointer);grip.addEventListener('pointercancel',finishPointer);grip.addEventListener('lostpointercapture',finishPointer);
+   const info=document.createElement('div');info.className='admin-user-info';info.style.cssText='flex:1;min-width:0;text-align:right;';
    const title=document.createElement('strong');title.textContent=product.title||'Без названия';
    const meta=document.createElement('small');meta.textContent=(product.category||'Без категории')+' · '+Number(product.price_stars||0)+' ⭐ · '+(Number(product.is_active)===1?'Опубликован':'Черновик');
    info.append(title,meta);
-   const actions=document.createElement('div');actions.className='admin-product-row-actions';
+   const actions=document.createElement('div');actions.className='admin-product-row-actions';actions.style.cssText='display:flex;flex-direction:column;gap:5px;flex:0 0 auto;align-items:stretch;';
    const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>editAdminProduct(product));
    const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.addEventListener('click',()=>deleteAdminProduct(product));
-   actions.append(edit,remove);actions.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;flex:0 0 auto;align-items:center;';edit.style.cssText='width:auto;min-width:0;padding:9px 12px;flex:0 0 auto;';remove.style.cssText='width:auto;min-width:0;padding:9px 12px;flex:0 0 auto;';info.style.cssText='flex:1;min-width:0;text-align:right;';row.append(actions,info);root.append(row);
+   actions.append(edit,remove);edit.style.cssText='width:auto;min-width:0;padding:7px 9px;flex:0 0 auto;';remove.style.cssText='width:auto;min-width:0;padding:7px 9px;flex:0 0 auto;';
+   row.append(info,actions);root.append(row);
   });
+  refreshMoveButtons();
  }catch(error){status.textContent=error.message||'Не удалось загрузить каталог.';}
 }
 
