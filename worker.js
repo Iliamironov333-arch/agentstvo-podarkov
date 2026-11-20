@@ -287,8 +287,9 @@ async function processPendingOrderPostcards(env, limit = 10) {
   return { attempted: (rows.results || []).length, delivered };
 }
 
+async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TABLE products ADD COLUMN display_order INTEGER").run();}catch{} await env.DB.prepare("UPDATE products SET display_order=(SELECT COUNT(*) FROM products p2 WHERE (p2.created_at>products.created_at OR (p2.created_at=products.created_at AND CAST(p2.id AS INTEGER)>CAST(products.id AS INTEGER)))) WHERE display_order IS NULL").run();}
 async function getProducts(env) {
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER) DESC")
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
@@ -1579,7 +1580,17 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"promo_code_saved",JSON.stringify({code,discount_percent:percent,max_uses:maxUses,is_active:active,product_ids:productIds,category_ids:categoryIds})).run();
           return json({ok:true,code},200,origin);
         }
-        if (path === "/api/admin/products" && method === "GET") {
+                if (path === "/api/admin/product-order" && method === "POST") {
+          await ensureProductDisplayOrder(env);
+          const body=await readJson(request);const ids=Array.isArray(body.ids)?body.ids.map(String):[];
+          if(!ids.length||ids.length>500)return json({error:"Некорректный список товаров."},400,origin);
+          const all=await env.DB.prepare("SELECT id FROM products ORDER BY display_order ASC,created_at DESC").all();
+          const existing=(all.results||[]).map(row=>String(row.id));
+          if(ids.length!==existing.length||new Set(ids).size!==ids.length||ids.some(id=>!existing.includes(id)))return json({error:"Список товаров изменился. Обновите каталог и повторите."},409,origin);
+          await env.DB.batch(ids.map((id,index)=>env.DB.prepare("UPDATE products SET display_order=? WHERE id=?").bind(index,id)));
+          return json({ok:true},200,origin);
+        }
+if (path === "/api/admin/products" && method === "GET") {
           const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY CAST(id AS INTEGER),created_at DESC").all();
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
