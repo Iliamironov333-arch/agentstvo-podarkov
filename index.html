@@ -3889,11 +3889,11 @@ async function loadAdminProducts() {
  status.textContent='Загружаем каталог из D1…';root.replaceChildren();
  try{
   const data=await apiFetch('/api/admin/products');
-  const products=Array.isArray(data.products)?data.products:[];
+  const products=Array.isArray(data.products)?data.products:[[];
   adminProductsCache=products;
   const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
   (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
-  status.textContent='Товаров в каталоге: '+products.length+' · Перетаскивайте строки для изменения порядка';
+  status.textContent='Товаров в каталоге: '+products.length+' · Перетаскивайте для сортировки';
   if(!products.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет товаров.';root.append(empty);return;}
   let saving=false;
   const saveOrder=async()=>{
@@ -3910,6 +3910,22 @@ async function loadAdminProducts() {
    row.addEventListener('dragend',()=>row.classList.remove('admin-product-dragging'));
    row.addEventListener('dragover',event=>{event.preventDefault();event.dataTransfer.dropEffect='move';});
    row.addEventListener('drop',event=>{event.preventDefault();const draggedId=event.dataTransfer.getData('text/plain');const dragged=Array.from(root.querySelectorAll('[data-admin-product-id]')).find(el=>el.dataset.adminProductId===draggedId);if(!dragged||dragged===row)return;const rect=row.getBoundingClientRect();const after=event.clientY>rect.top+rect.height/2;root.insertBefore(dragged,after?row.nextSibling:row);saveOrder();});
+   let holdTimer=null,touchDragging=false,touchMoved=false;
+   row.addEventListener('touchstart',event=>{
+    if(event.target.closest('button'))return;
+    const touch=event.touches[0];if(!touch)return;
+    touchMoved=false;touchDragging=false;
+    holdTimer=setTimeout(()=>{touchDragging=true;row.style.outline='2px solid var(--gold)';row.style.opacity='.75';status.textContent='Перемещайте строку пальцем…';},280);
+   },{passive:true});
+   row.addEventListener('touchmove',event=>{
+    if(!touchDragging)return;
+    event.preventDefault();touchMoved=true;
+    const touch=event.touches[0];if(!touch)return;
+    const target=document.elementFromPoint(touch.clientX,touch.clientY)?.closest('[data-admin-product-id]');
+    if(target&&target!==row&&root.contains(target)){const rect=target.getBoundingClientRect();const after=touch.clientY>rect.top+rect.height/2;root.insertBefore(row,after?target.nextSibling:target);}
+   },{passive:false});
+   const finishTouch=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}if(touchDragging){row.style.outline='';row.style.opacity='';touchDragging=false;if(touchMoved)saveOrder();else status.textContent='Порядок товаров';}};
+   row.addEventListener('touchend',finishTouch,{passive:true});row.addEventListener('touchcancel',finishTouch,{passive:true});
    const info=document.createElement('div');info.className='admin-user-info';
    const title=document.createElement('strong');title.textContent=product.title||'Без названия';
    const meta=document.createElement('small');meta.textContent=(product.category||'Без категории')+' · '+Number(product.price_stars||0)+' ⭐ · '+(Number(product.is_active)===1?'Опубликован':'Черновик');
