@@ -288,7 +288,7 @@ async function processPendingOrderPostcards(env, limit = 10) {
 }
 
 async function getProducts(env) {
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER)")
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
