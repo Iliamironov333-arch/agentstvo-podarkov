@@ -1245,8 +1245,8 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     const settings=await aiSettings(env);
     if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
     try {
-      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:messageText,reply_markup:{inline_keyboard:[[{text:"🎁 Перейти в каталог",url:"https://t.me/Agentstvo_podarkov_bot"}]]}});
-      await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,type:"group_ad_sent",details:{text:messageText,button_url:"https://t.me/Agentstvo_podarkov_bot"}});
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:messageText,reply_markup:{inline_keyboard:[[{text:"🎁 Перейти в каталог",url:"https://t.me/Agentstvo_podarkov_original_bot"}]]}});
+      await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,type:"group_ad_sent",details:{text:messageText,button_url:"https://t.me/Agentstvo_podarkov_original_bot"}});
       await aiNotifyOwner(env,"🎁 Рекламное сообщение отправлено в группу с кнопкой перехода в бот Агентства подарков.");
       return aiJson({ok:true});
     } catch(error) {
