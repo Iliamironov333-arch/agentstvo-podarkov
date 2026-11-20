@@ -289,6 +289,9 @@ async function processPendingOrderPostcards(env, limit = 10) {
 
 async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TABLE products ADD COLUMN display_order INTEGER").run();}catch{} await env.DB.prepare("UPDATE products SET display_order=(SELECT COUNT(*) FROM products p2 WHERE (p2.created_at>products.created_at OR (p2.created_at=products.created_at AND CAST(p2.id AS INTEGER)>CAST(products.id AS INTEGER)))) WHERE display_order IS NULL").run();}
 async function getProducts(env) {
+  // Гарантируем наличие и заполнение display_order и для обычной витрины,
+  // а не только после открытия админ-панели.
+  await ensureProductDisplayOrder(env);
   const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
