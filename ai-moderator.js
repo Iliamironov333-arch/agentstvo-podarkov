@@ -857,6 +857,32 @@ async function aiInspectImage(env,message,settings={}){
   const parsed=JSON.parse(match[0]);
   return {decision:["ok","review","violation"].includes(parsed.decision)?parsed.decision:"review",reason:String(parsed.reason||"Неоднозначное вложение").slice(0,250),confidence:Math.max(0,Math.min(1,Number(parsed.confidence)||0))};
 }
+async function aiDescribeGroupImage(env,message){
+  const photo=Array.isArray(message.photo)&&message.photo.length?message.photo[message.photo.length-1]:null;
+  const doc=message.document&&/^image\/(jpeg|png|webp)$/i.test(message.document.mime_type||"")?message.document:null;
+  const media=photo||doc;
+  if(!media?.file_id)return null;
+  const file=await aiTelegram(env,"getFile",{file_id:media.file_id});
+  if(!file?.file_path||Number(file.file_size||0)>5*1024*1024)return null;
+  const response=await fetch("https://api.telegram.org/file/bot"+env.BOT_TOKEN+"/"+file.file_path);
+  if(!response.ok)return null;
+  const buffer=await response.arrayBuffer();
+  if(buffer.byteLength>5*1024*1024)return null;
+  const ext=String(file.file_path).split(".").pop().toLowerCase();
+  if(!["png","jpg","jpeg","webp"].includes(ext))return null;
+  const mime=ext==="png"?"image/png":ext==="webp"?"image/webp":"image/jpeg";
+  const dataUrl="data:"+mime+";base64,"+aiBase64(buffer);
+  const responseAI=await workersAiFetch(env,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:AGENCY_VISION_MODEL,instructions:"Вы — визуальный помощник каталога handmade-мастерской. Кратко опишите изображённую работу: что изображено, заметные детали, технику и материал только если он действительно очевиден. Не угадывайте материал по внешнему виду. Если материал определить нельзя, прямо укажите это. Не придумывайте сведения о товаре. Верните только JSON {description: string}.",input:[{role:"user",content:[{type:"input_text",text:"Опишите изображение для контекста разговора. Подпись: "+aiText(message).slice(0,500)},{type:"input_image",image_url:dataUrl,detail:"high"}]}],max_output_tokens:220})});
+  if(!responseAI.ok)throw new Error("Image context AI HTTP "+responseAI.status);
+  const data=await responseAI.json().catch(()=>({}));
+  let output=typeof data.output_text==="string"?data.output_text:"";
+  if(!output&&Array.isArray(data.output))output=data.output.flatMap(x=>Array.isArray(x.content)?x.content:[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\n");
+  const match=output.match(/\{[\s\S]*\}/);
+  if(!match)return output.trim().slice(0,1000)||null;
+  const parsed=JSON.parse(match[0]);
+  return String(parsed.description||"").trim().slice(0,1000)||null;
+}
 async function aiAwardGroupMessageReputation(env,chatId,message,user){
   const messageId=Number(message?.message_id)||0;
   if(messageId<1||!user?.id||user.is_bot)return false;
@@ -961,6 +987,18 @@ async function aiHandleTelegramUpdateInner(update, env) {
       }
     }
   }
+  if(message.photo||message.document&&/^image\//i.test(message.document.mime_type||"")){
+    try{
+      const description=await aiDescribeGroupImage(env,message);
+      if(description){
+        const imageContext="[Изображение работы участника. Визуальное описание: "+description+"]. Не делайте вывод о материале, если описание прямо не подтверждает его.";
+        await env.DB.prepare("INSERT INTO ai_group_messages(chat_id,message_id,telegram_id,role,content) VALUES(?,?,?,'user',?)")
+          .bind(chatId,Number(message.message_id)||null,String(user.id),imageContext).run();
+      }
+    }catch(error){
+      await aiLog(env,{chat_id:chatId,actor:user.id,type:"image_context_failed",severity:"warning",details:{message_id:message.message_id,error:String(error).slice(0,250)}});
+    }
+  }
   if(text) {
     let violation=moderationActive ? aiClassifyLocal(message,settings) : null;
     const hasLink=/(https?:\/\/|t\.me\/|www\.)/i.test(text);
@@ -1033,7 +1071,8 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const orderIntentAlreadyExpressed=orderHistory.some(item=>item.role==="user"&&/(хочу|нужн|надо|заказать|закаж|сделать|сделайте|создать|изготовить|нарисовать|нарисуйте|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
     const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
     const adminAccount=isOwner || !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(String(user.id)).first());
-    const relevant=aiAgencyIntent(text) || (settings.companion_mode && aiIsCompliment(text)) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!adminAccount && text.includes("?"));
+    const recentImage=await env.DB.prepare("SELECT id FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND content LIKE '[Изображение работы%' ORDER BY id DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
     if(settings.ai_answers && relevant && (await aiAdminAnswersAllowed(env,user.id)) && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
