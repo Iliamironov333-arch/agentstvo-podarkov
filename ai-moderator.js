@@ -84,6 +84,17 @@ async function aiLog(env, event) {
         String(event.severity || "info"), JSON.stringify(event.details || {}).slice(0,5000)).run();
   } catch (error) { console.error("AI moderator log failed", String(error).slice(0,250)); }
 }
+async function aiAdminAnswersAllowed(env, telegramId) {
+  const id=String(telegramId||"").trim();
+  if(!id)return true;
+  let isAdmin=!!env.ADMIN_TELEGRAM_ID && id===String(env.ADMIN_TELEGRAM_ID).trim();
+  if(!isAdmin){
+    try{const staff=await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(id).first();isAdmin=!!staff;}catch{}
+  }
+  if(!isAdmin)return true;
+  const flag=await env.DB.prepare("SELECT value FROM app_settings WHERE key='assistant_admin_answers'").first();
+  return flag?.value==="1";
+}
 async function aiSettings(env) {
   const row = await env.DB.prepare("SELECT enabled,complaints_enabled,settings_json,group_chat_id FROM ai_moderator_settings WHERE id=1").first();
   const pause=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key='moderation_disabled_until'").first();
@@ -1021,10 +1032,11 @@ async function aiHandleTelegramUpdateInner(update, env) {
     }
     const orderIntentAlreadyExpressed=orderHistory.some(item=>item.role==="user"&&/(хочу|нужн|надо|заказать|закаж|сделать|сделайте|создать|изготовить|нарисовать|нарисуйте|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
     const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
-    const relevant=aiAgencyIntent(text) || (settings.companion_mode && aiIsCompliment(text)) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text));
+    const adminAccount=isOwner || !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(String(user.id)).first());
+    const relevant=aiAgencyIntent(text) || (settings.companion_mode && aiIsCompliment(text)) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!adminAccount && text.includes("?"));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
-    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
+    if(settings.ai_answers && relevant && (await aiAdminAnswersAllowed(env,user.id)) && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
       try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id,message.reply_to_message?.message_id||null); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.",message.message_id);
