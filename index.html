@@ -7,6 +7,7 @@
 <meta name="description" content="Авторские подарки, поделки и рисунки от Агентства подарков">
 <title>Агентство подарков</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>(()=>{const sync=()=>{try{const w=window.Telegram&&Telegram.WebApp;document.body.classList.toggle("telegram-fullscreen",!!(w&&typeof w.isFullscreen==="function"&&w.isFullscreen()))}catch(e){}};document.addEventListener("DOMContentLoaded",sync);window.addEventListener("load",sync);try{Telegram.WebApp.onEvent("fullscreenChanged",sync);Telegram.WebApp.onEvent("viewportChanged",sync)}catch(e){}})();</script>
 <style>
 :root{--bg:#17130f;--panel:#241d16;--panel2:#30261c;--gold:#f3bd57;--gold2:#ffe3a0;--text:#fff7e8;--muted:#c4b49b;--line:#4b3a27;--green:#6dd6a3;--red:#ff8b7b}
 *{box-sizing:border-box}
@@ -1450,7 +1451,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-</style>
+/* Отступ для полноэкранного режима Telegram: элементы управления не перекрывают шапку */\n@media(max-width:600px){body.telegram-fullscreen header{padding-top:calc(86px + env(safe-area-inset-top))}body.telegram-fullscreen .bottom{padding-bottom:calc(14px + env(safe-area-inset-bottom))}}\n</style>
 </head>
 <body>
 <header>
