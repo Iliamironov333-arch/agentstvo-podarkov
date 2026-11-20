@@ -1238,6 +1238,21 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
     await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,target,type:"manual_warning",severity:"warning",details:{reason}});
     return aiJson({ok:true});
   }
+  if(path==="/api/admin/ai-group-ad" && method==="POST") {
+    if(!ownerOnly())return aiJson({error:"Отправлять рекламные сообщения в группу может только владелец."},403);
+    const body=await aiReadJson(request),messageText=String(body.text||"").trim().slice(0,1000);
+    if(messageText.length<5)return aiJson({error:"Добавьте текст рекламного сообщения."},400);
+    const settings=await aiSettings(env);
+    if(!settings.group_chat_id)return aiJson({error:"Бот ещё не определил группу. Напишите любое сообщение в группе."},409);
+    try {
+      await aiTelegram(env,"sendMessage",{chat_id:settings.group_chat_id,text:messageText,reply_markup:{inline_keyboard:[[{text:"🎁 Перейти в каталог",url:"https://t.me/Agentstvo_podarkov_bot"}]]}});
+      await aiLog(env,{chat_id:settings.group_chat_id,actor:telegramId,type:"group_ad_sent",details:{text:messageText,button_url:"https://t.me/Agentstvo_podarkov_bot"}});
+      await aiNotifyOwner(env,"🎁 Рекламное сообщение отправлено в группу с кнопкой перехода в бот Агентства подарков.");
+      return aiJson({ok:true});
+    } catch(error) {
+      return aiJson({error:"Не удалось отправить рекламное сообщение: "+String(error.message||error).slice(0,250)},502);
+    }
+  }
   if(path==="/api/admin/ai-group-invoice" && method==="POST") {
     if(!ownerOnly())return aiJson({error:"Создавать групповые счета может только владелец."},403);
     const body=await aiReadJson(request),amount=Number(body.amount_stars),title=String(body.title||"Счёт Агентства подарков").trim().slice(0,32),description=String(body.description||"Оплата в Агентстве подарков").trim().slice(0,255);
