@@ -1451,7 +1451,10 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-\n/* Telegram full-size: reserve space under Telegram overlay controls */\n@media(max-width:600px){body.telegram-fullsize header{padding-top:calc(112px + env(safe-area-inset-top))}}\n</style>
+
+/* Keep mini-app header below Telegram/iOS status bar and controls */
+@media(max-width:600px){header{padding-top:calc(70px + env(safe-area-inset-top))}}
+</style>
 </head>
 <body>
 <header>
@@ -5273,5 +5276,5 @@ async function loadAiReports(){
 
 
 </script>
-\n<script>(()=>{const update=()=>{const w=window.Telegram?.WebApp;document.body.classList.toggle("telegram-fullsize",!!(w&&w.isFullscreen===true))};update();try{Telegram.WebApp.onEvent("fullscreenChanged",update);Telegram.WebApp.onEvent("viewportChanged",update)}catch(e){}window.addEventListener("pageshow",update)})();</script>\n</body>
+\n</body>
 </html>
