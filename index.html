@@ -3913,17 +3913,21 @@ async function loadAdminProducts() {
    const grip=document.createElement('div');grip.className='admin-product-drag-handle';grip.title='Зажмите и перетащите';grip.setAttribute('aria-label','Перетащить товар');grip.style.cssText='display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(3,5px);gap:3px;padding:10px 8px;flex:0 0 26px;align-content:center;justify-content:center;color:var(--muted);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;';
    for(let i=0;i<6;i++){const dot=document.createElement('span');dot.style.cssText='width:5px;height:5px;border-radius:50%;background:currentColor;';grip.append(dot);}
    row.append(grip);
-   row.addEventListener('dragover',event=>{if(row.dataset.dragging==='1')return;event.preventDefault();});
-   let touchTimer=null,touchActive=false,touchMoved=false,touchStartY=0;
-   grip.draggable=true;
-   grip.addEventListener('dragstart',event=>{row.dataset.dragging='1';row.classList.add('admin-product-dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',String(product.id));});
-   grip.addEventListener('dragend',()=>{delete row.dataset.dragging;row.classList.remove('admin-product-dragging');});
-   row.addEventListener('dragover',event=>{event.preventDefault();event.dataTransfer.dropEffect='move';});
-   row.addEventListener('drop',event=>{event.preventDefault();const draggedId=event.dataTransfer.getData('text/plain');const dragged=Array.from(root.querySelectorAll('[data-admin-product-id]')).find(el=>el.dataset.adminProductId===draggedId);if(!dragged||dragged===row)return;const rect=row.getBoundingClientRect();const after=event.clientY>rect.top+rect.height/2;root.insertBefore(dragged,after?row.nextSibling:row);saveOrder();});
-   grip.addEventListener('touchstart',event=>{const t=event.touches[0];if(!t)return;touchStartY=t.clientY;touchMoved=false;touchActive=false;touchTimer=setTimeout(()=>{touchActive=true;grip.style.color='var(--gold)';row.style.opacity='.75';status.textContent='Перемещайте товар…';},250);},{passive:true});
-   grip.addEventListener('touchmove',event=>{const t=event.touches[0];if(!t)return;if(!touchActive){if(Math.abs(t.clientY-touchStartY)>10&&touchTimer){clearTimeout(touchTimer);touchTimer=null;}return;}event.preventDefault();touchMoved=true;const target=document.elementFromPoint(t.clientX,t.clientY)?.closest('[data-admin-product-id]');if(target&&target!==row&&root.contains(target)){const rect=target.getBoundingClientRect();const after=t.clientY>rect.top+rect.height/2;root.insertBefore(row,after?target.nextSibling:target);}}, {passive:false});
-   const finishTouch=()=>{if(touchTimer){clearTimeout(touchTimer);touchTimer=null;}if(touchActive){grip.style.color='';row.style.opacity='';touchActive=false;if(touchMoved)saveOrder();else status.textContent='Порядок товаров';}};
-   grip.addEventListener('touchend',finishTouch,{passive:true});grip.addEventListener('touchcancel',finishTouch,{passive:true});
+   let pointerActive=false,pointerMoved=false;
+   grip.addEventListener('pointerdown',event=>{
+    if(event.button!==undefined&&event.button!==0)return;
+    pointerActive=true;pointerMoved=false;grip.setPointerCapture?.(event.pointerId);
+    row.style.opacity='.72';grip.style.color='var(--gold)';status.textContent='Перемещайте товар…';event.preventDefault();
+   });
+   grip.addEventListener('pointermove',event=>{
+    if(!pointerActive)return;
+    const y=event.clientY;
+    if(y<90)window.scrollBy(0,-14);else if(y>window.innerHeight-130)window.scrollBy(0,14);
+    const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-admin-product-id]');
+    if(target&&target!==row&&root.contains(target)){const rect=target.getBoundingClientRect();const after=y>rect.top+rect.height/2;root.insertBefore(row,after?target.nextSibling:target);pointerMoved=true;}
+   });
+   const finishPointer=()=>{if(!pointerActive)return;pointerActive=false;row.style.opacity='';grip.style.color='';if(pointerMoved)saveOrder();else status.textContent='Порядок товаров';};
+   grip.addEventListener('pointerup',finishPointer);grip.addEventListener('pointercancel',finishPointer);
    const info=document.createElement('div');info.className='admin-user-info';info.style.flex='1;min-width:0';
    const title=document.createElement('strong');title.textContent=product.title||'Без названия';
    const meta=document.createElement('small');meta.textContent=(product.category||'Без категории')+' · '+Number(product.price_stars||0)+' ⭐ · '+(Number(product.is_active)===1?'Опубликован':'Черновик');
