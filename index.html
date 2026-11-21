@@ -5108,8 +5108,10 @@ async function runSemanticCatalogSearch(query,requestId){
   drawProducts();
  }catch(error){
   if(requestId!==semanticSearchRequest)return;
+  console.warn('Ошибка семантического поиска:',error);
   semanticSearchProductIds=null;
-  if(hint)hint.textContent='ИИ-поиск временно недоступен — показываем обычные совпадения по названию и описанию.';
+  const status=error?.status?'HTTP '+error.status:'сетевая ошибка';
+  if(hint)hint.textContent='ИИ-поиск временно недоступен ('+status+') — показываем обычные совпадения по названию и описанию.';
   drawProducts();
  }
 }
