@@ -1846,15 +1846,23 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div class="panel"><div class="sectionhead"><h3>🎁 Мои бонусы</h3><span>обмен на Stars</span></div><p class="muted">Бонусы выдаются владельцем Агентства. При продаже бонусов активный VIP получает дополнительно +20% Stars к сумме обмена.</p><div id="bonusInventory"><p class="muted">Загружаем бонусы…</p></div></div>
 </section>
 <section id="vipView" class="hidden">
- <div class="hero"><small>Личный кабинет подписки</small><h2>👑 Управление VIP</h2><p>Ваш статус, преимущества и настройки подписки.</p></div>
- <div class="panel"><h3>Ваш VIP-статус</h3><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p><div id="vipManageSummary" class="muted">Проверяем подписку…</div><button class="primary" style="width:100%;margin-top:12px" onclick="openVipPlans()">✨ Выбрать тариф / оформить VIP</button></div>
- <div class="panel"><h3>👑 Преимущества VIP</h3><div class="muted" style="display:grid;gap:10px">
-  <div>💰 <strong>Кэшбэк 5%</strong><br>Возвращается на внутренний баланс после подтверждения оплаты заказа.</div>
-  <div>⭐ <strong>+20% при продаже бонусов</strong><br>Дополнительные Stars начисляются при обмене бонусов на баланс, пока VIP активен.</div>
-  <div>⚡ <strong>Приоритетная доставка</strong><br>При оформлении заказа доступна VIP-опция приоритетной доставки.</div>
-  <div>✨ <strong>Ранний доступ</strong><br>Отмеченные новые работы доступны VIP сразу, остальным покупателям — через 72 часа после публикации.</div>
+ <div class="hero"><small>Личный кабинет VIP</small><h2>👑 Управление подпиской</h2><p>Все параметры VIP, продление и преимущества — в одном месте.</p></div>
+ <div class="panel"><h3>📌 Моя подписка</h3><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p><div id="vipManageSummary" class="muted">Проверяем подписку…</div><button class="secondary" style="width:100%;margin-top:12px" onclick="loadVip()">↻ Обновить данные</button></div>
+ <div class="panel"><h3>🔄 Продление и тариф</h3><p class="muted">Продление выполняется вручную. Автоматического списания Stars нет. Вы можете заранее открыть тарифы, а покупка активируется после подтверждения оплаты.</p><button class="primary" style="width:100%" onclick="openVipPlans()">Выбрать тариф / продлить VIP</button></div>
+ <div class="panel"><h3>✨ Управление преимуществами</h3><div class="muted" style="display:grid;gap:10px">
+  <div>💰 <strong>Кэшбэк 5%</strong><br>Возврат на внутренний баланс после подтверждения оплаты заказа.</div>
+  <div>⭐ <strong>+20% при продаже бонусов</strong><br>Дополнительные Stars при обмене бонусов, пока VIP активен.</div>
+  <div>⚡ <strong>Приоритетная доставка</strong><br>VIP-опция доступна при оформлении заказа.</div>
+  <div>✨ <strong>Ранний доступ</strong><br>Доступ к отмеченным работам сразу; остальным — через 72 часа.</div>
+  <div>🤖 <strong>VIP-помощник</strong><br>Режим помощника определяется активным статусом VIP автоматически.</div>
  </div></div>
- <div class="panel"><h3>⚙️ Настройки подписки</h3><p class="muted">Автоматического продления и списания Stars нет. Вы сами выбираете тариф и оплачиваете его. Срок и статус всегда видны здесь; новый тариф можно оформить после окончания действующего.</p><button class="secondary" style="width:100%" onclick="loadVip()">↻ Обновить статус</button></div>
+ <div class="panel"><h3>⚙️ Настройки и быстрые действия</h3><div style="display:grid;gap:9px">
+  <button class="secondary" style="width:100%" onclick="showView('profileView')">👤 Настройки профиля</button>
+  <button class="secondary" style="width:100%" onclick="showView('supportView')">🤖 Открыть VIP-помощника</button>
+  <button class="secondary" style="width:100%" onclick="showView('ordersView')">📦 Мои заказы</button>
+  <button class="secondary" style="width:100%" onclick="showView('balanceView')">⭐ Баланс и платежи</button>
+ </div><p class="muted" style="margin-top:12px">Постоянный VIP не требует продления. Для тарифа на 30 дней продление — только по вашему решению.</p></div>
+ <div class="panel"><h3>🛡️ Управление доступом</h3><p class="muted">VIP действует после подтверждения платежа сервером. При проблемах со статусом обновите данные выше или обратитесь в поддержку.</p><button class="secondary" style="width:100%" onclick="openOwnerChat()">✉️ Связаться с владельцем</button></div>
 </section>
 <section id="vipPlansView" class="hidden">
  <div class="sectionhead"><h2>✨ Выбор тарифа VIP</h2><button class="secondary" onclick="showView('vipView')">← Назад</button></div>
