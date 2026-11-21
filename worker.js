@@ -2955,7 +2955,7 @@ if (path === "/api/admin/products" && method === "GET") {
       }
 
       if (path === "/api/me" && method === "GET") {
-        const me = await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?")
+        const me = await env.DB.prepare("SELECT telegram_id,username,first_name,display_name,balance_stars,created_at FROM users WHERE telegram_id=?")
           .bind(telegramId).first();
         const orders = await env.DB.prepare("SELECT id AS order_id,created_at,total_stars AS amount,'XTR' AS currency,payment_status AS status FROM orders WHERE telegram_id=? ORDER BY created_at DESC LIMIT 20")
           .bind(telegramId).all();
@@ -2970,7 +2970,7 @@ if (path === "/api/admin/products" && method === "GET") {
         const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           reputation_points: Number(reputation?.total || 0),
-          first_name: me?.first_name || user.first_name || "", username: me?.username || user.username || "",
+          first_name: me?.first_name || user.first_name || "", display_name: me?.display_name || "", username: me?.username || user.username || "",
           orders: orders.results || [], vip: vip || null, bonuses, rank_code: customerRank.code, rank_label: customerRank.label, rank_discount_percent: customerRank.discount }, 200, origin);
       }
 
@@ -3474,6 +3474,16 @@ if (path === "/api/admin/products" && method === "GET") {
 
       if (path === "/api/case/open" && method === "POST") {
         return json({ error: "Открытие случайных кейсов временно отключено." }, 403, origin);
+      }
+
+      if (path === "/api/profile/name" && method === "POST") {
+        const activeVip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        if (!activeVip) return json({error:"Изменение имени профиля доступно активным VIP-покупателям."},403,origin);
+        const body=await readJson(request);
+        const displayName=String(body.display_name||"").normalize("NFC").replace(/\\s+/g," ").trim();
+        if(displayName.length<2||displayName.length>32||! /^[\\p{L}\\p{N} _.-]+$/u.test(displayName)) return json({error:"Имя должно содержать 2–32 символа: буквы, цифры, пробел, точку, дефис или подчёркивание."},400,origin);
+        await env.DB.prepare("UPDATE users SET display_name=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(displayName,telegramId).run();
+        return json({ok:true,display_name:displayName},200,origin);
       }
 
       if (path === "/api/vip" && method === "GET") {
