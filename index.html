@@ -2262,7 +2262,7 @@ function showView(id) {
  if (id === 'supportView') { if(activeOrderChatId)refreshOrderChat(); else if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
  
  if (id === 'balanceView') loadBalance();
- if (id === 'vipView') loadVip();
+ if (id === 'vipView' || id === 'vipPlansView') loadVip();
  if (id === 'leaderboardView') loadPublicLeaderboard();
  if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
@@ -4502,7 +4502,7 @@ async function subscribeVip(planType) {
 }
 
 function openVipPlans(){showView('vipPlansView');loadVip();}
-async function loadVip(){const el=document.getElementById('vipStatus');if(!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v,true);if(el)el.textContent=v?`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'на 30 дней'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`:'Активной подписки нет. Выберите тариф, когда будете готовы.';const summary=document.getElementById('vipManageSummary');if(summary)summary.textContent=v?(v.plan_type==='lifetime'?'У вас постоянный VIP-доступ.':'Подписка действует до '+formatDate(v.expires_at)+'. Автопродление выключено.'):'Сейчас у вас нет активной VIP-подписки.';const buy=document.querySelector('#vipView button[onclick="openVipPlans()"]');if(buy)buy.textContent=v?'Тарифы после окончания текущей подписки':'✨ Выбрать тариф / оформить VIP';}catch(e){if(el)el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(vipActive,false);}}
+async function loadVip(){const el=document.getElementById('vipStatus');if(!initData)return;try{const d=await apiFetch('/api/vip'),v=d.vip;setVipUi(!!v,true);if(el)el.textContent=v?`VIP активен: ${v.plan_type==='lifetime'?'навсегда':'на 30 дней'}${v.expires_at?' · до '+formatDate(v.expires_at):''}.`:'Активной подписки нет. Выберите тариф, когда будете готовы.';const summary=document.getElementById('vipManageSummary');if(summary)summary.textContent=v?(v.plan_type==='lifetime'?'У вас постоянный VIP-доступ.':'Подписка действует до '+formatDate(v.expires_at)+'. Автопродление выключено.'):'Сейчас у вас нет активной VIP-подписки.';const buy=document.querySelector('#vipView button[onclick="openVipPlans()"]');if(buy)buy.textContent=v?'Тарифы после окончания текущей подписки':'✨ Выбрать тариф / оформить VIP';document.querySelectorAll('#vipPlansView button[onclick^="subscribeVip"]').forEach(button=>{if(!button.dataset.defaultLabel)button.dataset.defaultLabel=button.textContent;button.disabled=!!v;button.textContent=v?'Доступно после окончания VIP':button.dataset.defaultLabel;});}catch(e){if(el)el.textContent='Не удалось загрузить статус VIP: '+e.message;setVipUi(vipActive,false);}}
 
 let supportConversations = [];
 let activeSupportConversationId = null;
