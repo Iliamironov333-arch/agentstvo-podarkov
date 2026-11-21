@@ -4247,7 +4247,7 @@ async function saveAdminPack(){
  finally{if(button)button.disabled=false;}
 }
 let surprisePacks=[];
-async async function loadSurprisePacks(){
+async function loadSurprisePacks(){
  const root=document.getElementById('surprisePacksList');if(!root||!initData)return;
  try{const data=await apiFetch('/api/packs');surprisePacks=Array.isArray(data.packs)?data.packs:[];renderSurprisePacks();}
  catch(error){console.warn('Не удалось загрузить паки:',error);root.textContent='Не удалось загрузить паки. Попробуйте обновить каталог.';}
@@ -4286,7 +4286,7 @@ function showPackReveal(result){
  panel.append(envelope,heading,prize,close);overlay.append(panel);document.body.append(overlay);
  requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
-async async function purchaseSurprisePack(packId,button){
+async function purchaseSurprisePack(packId,button){
  if(button)button.disabled=true;
  try{
   const result=await apiFetch('/api/packs/purchase',{method:'POST',body:JSON.stringify({pack_id:String(packId)})});
