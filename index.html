@@ -2406,7 +2406,7 @@ function drawProducts() {
  const shown = [...products].filter(p => {
   const matchesQuery=!query || (Array.isArray(semanticSearchProductIds) ? semanticSearchProductIds.includes(String(p[0])) : [p[1],p[6],p[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query)));
   if(!matchesQuery)return false;
-  if(p[9] && !vipActive){const published=productCreatedTime(p[8]);if(!Number.isFinite(published)||now-published<72*60*60*1000)return false;}
+  // Ранний доступ фильтруется сервером по подтверждённым правам Telegram-пользователя.
   if(activeFilter==='all') return true;
   if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
   if(activeFilter==='new') {
