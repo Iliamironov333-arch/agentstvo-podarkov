@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS system_error_log (id INTEGER PRIMARY KEY AUTOINCREMEN
 
 CREATE TABLE IF NOT EXISTS user_blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL, block_type TEXT NOT NULL CHECK(block_type IN ('purchases','full')), reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','lifted')), blocked_by TEXT NOT NULL, blocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, unblocked_by TEXT, unblocked_at TEXT);
 
-CREATE TABLE IF NOT EXISTS users (     telegram_id TEXT PRIMARY KEY,     username TEXT,     first_name TEXT,     balance_stars INTEGER NOT NULL DEFAULT 0,     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP );
+CREATE TABLE IF NOT EXISTS users (     telegram_id TEXT PRIMARY KEY,     username TEXT,     first_name TEXT,     display_name TEXT,     balance_stars INTEGER NOT NULL DEFAULT 0,     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP );
 
 CREATE TABLE IF NOT EXISTS vip_subscriptions (     id INTEGER PRIMARY KEY AUTOINCREMENT,     telegram_id TEXT NOT NULL,     plan_type TEXT NOT NULL         CHECK (plan_type IN ('subscription','lifetime')),     status TEXT NOT NULL DEFAULT 'active'         CHECK (status IN ('active','expired','cancelled')),     starts_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     expires_at TEXT,     order_id TEXT,     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id),     FOREIGN KEY (order_id) REFERENCES orders(id) );
 
