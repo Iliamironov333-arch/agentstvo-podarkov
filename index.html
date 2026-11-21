@@ -1625,6 +1625,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
     <datalist id="adminProductCategories"></datalist>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
     <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
+    <label><input id="adminProductEarlyAccess" type="checkbox"> Ранний доступ для владельца, модераторов и VIP (3 дня)</label><small class="muted">Обычным покупателям товар откроется автоматически через 72 часа после публикации.</small>
     <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
    </div>
   </div>
@@ -4181,6 +4182,7 @@ function editAdminProduct(product){
  document.getElementById('adminProductCategory').value=product.category||'';
  document.getElementById('adminProductPrice').value=String(product.price_stars??0);
  document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
+ document.getElementById('adminProductEarlyAccess').checked=Number(product.early_access_enabled)===1;
  editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function closeAdminProductEditor(){document.getElementById('adminProductEditor')?.classList.add('hidden');}
@@ -4208,7 +4210,8 @@ async function saveAdminProduct(){
   image_url:document.getElementById('adminProductImageUrl').value.trim(),
   category:document.getElementById('adminProductCategory').value.trim(),
   price_stars:Number(document.getElementById('adminProductPrice').value),
-  is_active:document.getElementById('adminProductActive').value==='1'
+  is_active:document.getElementById('adminProductActive').value==='1',
+  early_access_enabled:document.getElementById('adminProductEarlyAccess').checked
  };
  try{
   const saved=await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
