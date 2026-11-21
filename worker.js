@@ -1627,6 +1627,33 @@ if (path === "/api/admin/products" && method === "GET") {
           if (!cloudResponse.ok || !cloudData.deleted || cloudData.deleted[publicId]!=="deleted") return json({error:"Cloudinary не подтвердил удаление: "+String(cloudData.error?.message||"файл не удалён").slice(0,200)},502,origin);
           return json({ok:true,public_id:publicId},200,origin);
         }
+        if (path === "/api/admin/announcement-image-upload" && method === "POST") {
+          const form=await request.formData();
+          const id=typeof form.get("announcement_id")==="string"?String(form.get("announcement_id")).trim().slice(0,100):"";
+          const file=form.get("image");
+          if(!/^\\d{1,12}$/.test(id)||!file||typeof file.arrayBuffer!=="function")return json({error:"Выберите объявление и фотографию."},400,origin);
+          if(!["image/jpeg","image/png","image/webp"].includes(file.type))return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
+          if(file.size<1||file.size>900*1024)return json({error:"Размер изображения после сжатия не должен превышать 900 КБ."},413,origin);
+          if(!env.CLOUDINARY_API_KEY||!env.CLOUDINARY_API_SECRET)return json({error:"Cloudinary ещё не подключён: проверьте секреты Worker."},503,origin);
+          const announcement=await env.DB.prepare("SELECT id FROM announcements WHERE id=?").bind(Number(id)).first();
+          if(!announcement)return json({error:"Сначала сохраните объявление."},404,origin);
+          const cloudName="dzdxfmsn",timestamp=Math.floor(Date.now()/1000),publicId="announcement-"+id;
+          const signatureParams={folder:"agentstvo-podarkov",overwrite:"true",public_id:publicId,timestamp:String(timestamp)};
+          const signatureText=Object.keys(signatureParams).sort().map(key=>key+"="+signatureParams[key]).join("&")+env.CLOUDINARY_API_SECRET;
+          const signatureBytes=await crypto.subtle.digest("SHA-1",new TextEncoder().encode(signatureText));
+          const signature=Array.from(new Uint8Array(signatureBytes)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+          const uploadForm=new FormData();
+          uploadForm.append("file",new Blob([await file.arrayBuffer()],{type:file.type}),file.name||"announcement-image.webp");
+          uploadForm.append("api_key",env.CLOUDINARY_API_KEY);uploadForm.append("timestamp",String(timestamp));
+          uploadForm.append("public_id",publicId);uploadForm.append("folder","agentstvo-podarkov");
+          uploadForm.append("overwrite","true");uploadForm.append("signature",signature);
+          const cloudResponse=await fetch("https://api.cloudinary.com/v1_1/"+cloudName+"/image/upload",{method:"POST",body:uploadForm});
+          const cloudResult=await cloudResponse.json().catch(()=>({}));
+          if(!cloudResponse.ok||!cloudResult.secure_url)return json({error:"Ошибка Cloudinary: "+String(cloudResult.error?.message||"не удалось загрузить фотографию").slice(0,200)},502,origin);
+          const imageUrl=String(cloudResult.secure_url).replace("/image/upload/","/image/upload/f_auto,q_auto/");
+          await env.DB.prepare("UPDATE announcements SET image_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(imageUrl,Number(id)).run();
+          return json({ok:true,image_url:imageUrl,size_bytes:Number(cloudResult.bytes||file.size),storage:"cloudinary"},200,origin);
+        }
         if (path === "/api/admin/product-image-upload" && method === "POST") {
           const form = await request.formData();
           const id = typeof form.get("product_id") === "string" ? String(form.get("product_id")).trim().slice(0,100) : "";
@@ -2645,11 +2672,12 @@ if (path === "/api/admin/products" && method === "GET") {
           if (!title || title.length < 2 || !content) return json({ error: "Заполните заголовок и текст объявления." }, 400, origin);
           if (!audienceType || (audienceType === "selected" && !audienceIds.length)) return json({ error: "Для выбранной аудитории укажите хотя бы один Telegram ID." }, 400, origin);
           if (slideType === "poll" && pollOptions.length < 2) return json({ error: "Для опроса добавьте минимум два варианта ответа." }, 400, origin);
-          if (linkUrl) { try { const parsed=new URL(linkUrl); if (!["https:","http:"].includes(parsed.protocol)) throw new Error("protocol"); } catch { return json({ error: "Ссылка должна быть корректным HTTP(S)-адресом." }, 400, origin); } }
+          if (linkUrl && !/^app:(menuView|catalogView|supportView|balanceView|profileView|ordersView|vipView|dealsView|aboutView|leaderboardView)$/.test(linkUrl)) return json({ error: "Выберите один из доступных разделов приложения." }, 400, origin);
           if (imageUrl) { try { const parsed=new URL(imageUrl); if (parsed.protocol !== "https:") throw new Error("protocol"); } catch { return json({ error: "Изображение должно быть HTTPS-ссылкой." }, 400, origin); } }
           if (startsAt && Number.isNaN(Date.parse(startsAt))) return json({ error: "Некорректная дата начала." }, 400, origin);
           if (endsAt && Number.isNaN(Date.parse(endsAt))) return json({ error: "Некорректная дата окончания." }, 400, origin);
           if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return json({ error: "Дата окончания должна быть позже даты начала." }, 400, origin);
+          let savedId=id;
           if (id > 0) {
             const existing = await env.DB.prepare("SELECT id FROM announcements WHERE id=?").bind(id).first();
             if (!existing) return json({ error: "Объявление не найдено." }, 404, origin);
@@ -2658,12 +2686,14 @@ if (path === "/api/admin/products" && method === "GET") {
           } else {
             await env.DB.prepare("INSERT INTO announcements (title,body,link_url,starts_at,ends_at,audience_type,audience_ids,status,created_by,emoji,background,image_url,button_text,placement,sort_order,slide_type,poll_options_json,auto_advance_enabled,auto_advance_seconds,manual_swipe_enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
               .bind(title,content,linkUrl || null,startsAt,endsAt,audienceType,JSON.stringify(audienceIds),status,telegramId,emoji,background,imageUrl||null,buttonText||null,placement,sortOrder,slideType,JSON.stringify(pollOptions),autoAdvance,autoSeconds,manualSwipe).run();
+            const created=await env.DB.prepare("SELECT last_insert_rowid() AS id").first();
+            savedId=Number(created?.id||0);
           }
           if (await tableExists(env,"admin_action_log")) {
             await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)")
               .bind(telegramId,"announcement_saved",JSON.stringify({id:id || null,status,audience_type:audienceType})).run();
           }
-          return json({ ok: true }, 200, origin);
+          return json({ ok: true, id:savedId }, 200, origin);
         }
         if (path === "/api/admin/announcement-status" && method === "POST") {
           const body = await readJson(request);
