@@ -1776,6 +1776,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 </section>
 <section id="catalogView" class="hidden">
  <label class="catalog-search-wrap" for="catalogSearch"><span>⌕</span><input id="catalogSearch" type="search" autocomplete="off" placeholder="Поиск по товарам и работам…"></label>
+ <p id="catalogSearchHint" class="notice" aria-live="polite" style="margin:5px 2px 10px;min-height:18px">Можно искать по названию, описанию или просто описать настроение подарка 🍂</p>
  <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
  <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выберите товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
  <div class="grid" id="products"></div>
@@ -1982,6 +1983,9 @@ let vipActive = false;
 let vipStatusVerified = false;
 let activeFilter = 'all';
 let catalogSearchQuery = '';
+let semanticSearchProductIds=null;
+let semanticSearchTimer=null;
+let semanticSearchRequest=0;
 let quickBuyMode=false;
 let giftBuilderSelection={};
 let giftBuilderLayoutOrder=[];
@@ -2395,7 +2399,7 @@ function drawProducts() {
  // Названия и ручные приоритеты не должны перебивать дату создания.
  const query=catalogSearchQuery.trim().toLocaleLowerCase('ru-RU');
  const shown = [...products].filter(p => {
-  const matchesQuery=!query || [p[1],p[6],p[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query));
+  const matchesQuery=!query || (Array.isArray(semanticSearchProductIds) ? semanticSearchProductIds.includes(String(p[0])) : [p[1],p[6],p[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query)));
   if(!matchesQuery)return false;
   if(activeFilter==='all') return true;
   if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
@@ -2406,6 +2410,7 @@ function drawProducts() {
   }
   return p[4]===activeFilter;
  });
+ if(Array.isArray(semanticSearchProductIds)){const rank=new Map(semanticSearchProductIds.map((id,index)=>[String(id),index]));shown.sort((a,b)=>(rank.get(String(a[0]))??9999)-(rank.get(String(b[0]))??9999));}
  document.getElementById('count').textContent = `${shown.length} работ`;
 
  shown.forEach((p,index) => {
@@ -5088,7 +5093,34 @@ async function openCase() {
 }
 
 updateDeliveryMethodUI();
-document.getElementById('catalogSearch')?.addEventListener('input',event=>{catalogSearchQuery=event.target.value||'';drawProducts();});
+async function runSemanticCatalogSearch(query,requestId){
+ const hint=document.getElementById('catalogSearchHint');
+ if(!query.trim()){semanticSearchProductIds=null;if(hint)hint.textContent='Можно искать по названию, описанию или просто описать настроение подарка 🍂';drawProducts();return;}
+ if(query.trim().length<3){semanticSearchProductIds=null;if(hint)hint.textContent='Продолжайте вводить запрос…';drawProducts();return;}
+ if(hint)hint.textContent='🤖 ИИ подбирает работы по смыслу запроса…';
+ try{
+  const data=await apiFetch('/api/catalog-semantic-search',{method:'POST',body:JSON.stringify({query:query.trim()})});
+  if(requestId!==semanticSearchRequest||query!==(document.getElementById('catalogSearch')?.value||''))return;
+  const ids=Array.isArray(data.product_ids)?data.product_ids.map(String):[];
+  semanticSearchProductIds=ids;
+  if(hint)hint.textContent=ids.length?'✨ ИИ подобрал '+ids.length+' '+(ids.length===1?'подходящую работу':'подходящих работ')+' по смыслу запроса.':'По смыслу запроса подходящих работ не нашлось. Попробуйте описать иначе.';
+  drawProducts();
+ }catch(error){
+  if(requestId!==semanticSearchRequest)return;
+  semanticSearchProductIds=null;
+  if(hint)hint.textContent='ИИ-поиск временно недоступен — показываем обычные совпадения по названию и описанию.';
+  drawProducts();
+ }
+}
+document.getElementById('catalogSearch')?.addEventListener('input',event=>{
+ catalogSearchQuery=event.target.value||'';
+ semanticSearchProductIds=null;
+ const requestId=++semanticSearchRequest;
+ clearTimeout(semanticSearchTimer);
+ if(!catalogSearchQuery.trim()||catalogSearchQuery.trim().length<3){runSemanticCatalogSearch(catalogSearchQuery,requestId);return;}
+ drawProducts();
+ semanticSearchTimer=setTimeout(()=>runSemanticCatalogSearch(catalogSearchQuery,requestId),550);
+});
 document.querySelectorAll('#filters button[data-filter]').forEach(b => b.onclick = () => {
  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active',x === b));
  activeFilter = b.dataset.filter;
