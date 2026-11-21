@@ -1656,9 +1656,11 @@ if (path === "/api/admin/packs" && method === "GET") {
           if(!Number.isSafeInteger(price)||price<1||price>1000000)return json({error:"Цена должна быть целым числом от 1 до 1 000 000 баллов."},400,origin);
           if(!["product","points"].includes(rewardType))return json({error:"Выберите фиксированную награду."},400,origin);
           if(rewardType==="product"){
-            const product=await env.DB.prepare("SELECT id FROM products WHERE id=? AND is_active=1").bind(productId).first();
+            const product=await env.DB.prepare("SELECT id,price_stars FROM products WHERE id=? AND is_active=1").bind(productId).first();
             if(!product)return json({error:"Выберите опубликованную поделку из каталога."},400,origin);
+            if(!Number.isSafeInteger(Number(product.price_stars))||Number(product.price_stars)<=price)return json({error:"Стоимость награды должна быть выше цены пака."},400,origin);
           }else if(!Number.isSafeInteger(rewardPoints)||rewardPoints<1||rewardPoints>1000000)return json({error:"Награда баллами должна быть от 1 до 1 000 000."},400,origin);
+           else if(rewardPoints<=price)return json({error:"Награда должна быть больше цены пака."},400,origin);
           const packTitle=title||({common:"Обычный пак",rare:"Редкий пак",epic:"Эпический пак",legendary:"Легендарный пак",secret:"Секретный пак"}[type]);
           try{
             if(id){
@@ -2954,7 +2956,7 @@ if (path === "/api/admin/packs" && method === "GET") {
 
       if (path === "/api/packs" && method === "GET") {
         await ensureSurprisePacksSchema(env);
-        const rows = await env.DB.prepare("SELECT p.id,p.pack_type,p.title,p.price_points,p.reward_type,p.reward_product_id,p.reward_points,pr.title AS reward_product_title,pr.image_url AS reward_image_url FROM surprise_packs p LEFT JOIN products pr ON pr.id=p.reward_product_id WHERE p.status='active' AND p.is_active=1 ORDER BY CASE p.pack_type WHEN 'secret' THEN 1 WHEN 'legendary' THEN 2 WHEN 'epic' THEN 3 WHEN 'rare' THEN 4 ELSE 5 END").all();
+        const rows = await env.DB.prepare("SELECT id,pack_type,title,price_points FROM surprise_packs WHERE status='active' AND is_active=1 ORDER BY CASE pack_type WHEN 'secret' THEN 1 WHEN 'legendary' THEN 2 WHEN 'epic' THEN 3 WHEN 'rare' THEN 4 ELSE 5 END").all();
         return json({packs:rows.results||[]},200,origin);
       }
       if (path === "/api/packs/purchase" && method === "POST") {
@@ -2968,11 +2970,12 @@ if (path === "/api/admin/packs" && method === "GET") {
         if(!Number.isSafeInteger(price)||price<1)return json({error:"У пака некорректная цена."},409,origin);
         let rewardProduct=null;
         if(pack.reward_type==="product"){
-          rewardProduct=await env.DB.prepare("SELECT id,title,image_url,early_access_enabled,published_at FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
+          rewardProduct=await env.DB.prepare("SELECT id,title,image_url,price_stars,early_access_enabled,published_at FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
           if(!rewardProduct)return json({error:"Награда больше недоступна. Обратитесь в поддержку."},409,origin);
+          if(!Number.isSafeInteger(Number(rewardProduct.price_stars))||Number(rewardProduct.price_stars)<=price)return json({error:"Пак временно недоступен: стоимость награды должна быть выше его цены."},409,origin);
           if(!filterEarlyAccessProducts([rewardProduct],await hasEarlyAccessPrivileges(env,telegramId)).length)return json({error:"Эта награда пока доступна только владельцу, модераторам и VIP-покупателям."},403,origin);
-        } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<1) {
-          return json({error:"У пака некорректно настроена награда."},409,origin);
+        } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<=price) {
+          return json({error:"У пака некорректно настроена награда: она должна быть дороже цены."},409,origin);
         }
         const orderId=rewardProduct?makeId():null;
         const purchaseKey="pack-purchase:"+packId+":"+telegramId;
