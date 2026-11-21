@@ -1455,7 +1455,51 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-.surprise-pack-card{border:1px solid rgba(207,157,64,.38);box-shadow:0 10px 28px rgba(100,70,20,.08)}.surprise-pack-art{background:radial-gradient(circle at 50% 35%,#fff2c9,#d9a64d 62%,#8b5b20);min-height:150px}.surprise-pack-art span{font-size:76px;filter:drop-shadow(0 8px 8px rgba(60,35,5,.22))}.pack-reveal-overlay{position:fixed;inset:0;z-index:10050;background:rgba(20,15,8,.78);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .25s ease}.pack-reveal-overlay.shown{opacity:1}.pack-reveal-panel{width:min(420px,100%);border-radius:26px;padding:24px;text-align:center;background:var(--panel,#fff);color:var(--text,#241d13);box-shadow:0 25px 80px rgba(0,0,0,.3);transform:translateY(20px) scale(.94);animation:packPanelIn .55s cubic-bezier(.2,.8,.2,1) forwards}.pack-reveal-envelope{font-size:92px;display:inline-block;position:relative;animation:packTear .95s ease-in-out both}.pack-reveal-envelope:after{content:'✦';position:absolute;left:50%;top:48%;font-size:28px;color:#fff4c5;opacity:0;animation:packSpark .7s .45s both}.pack-reveal-prize{margin:18px 0;padding:18px;border-radius:18px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}.pack-reveal-prize img{display:block;max-width:100%;max-height:210px;object-fit:contain;border-radius:14px;margin:0 auto 12px}.pack-reveal-prize p{font-size:13px;opacity:.75;margin:8px 0 0}@keyframes packTear{0%,100%{transform:rotate(0) scale(1);opacity:1}12%{transform:rotate(-10deg) scale(1.05)}24%{transform:rotate(11deg) scale(1.1)}36%{transform:rotate(-9deg) scale(1.12)}48%{transform:rotate(8deg) scale(1.16)}62%{transform:rotate(-5deg) scale(1.22)}78%{transform:rotate(18deg) scale(1.45);opacity:.8}100%{transform:rotate(28deg) scale(1.8);opacity:0}}@keyframes packSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.3)}}@keyframes packPanelIn{to{transform:translateY(0) scale(1)}}@keyframes packPrizeIn{from{opacity:0;transform:translateY(18px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}</style>
+.surprise-pack-card{border:1px solid rgba(207,157,64,.38);box-shadow:0 10px 28px rgba(100,70,20,.08)}.surprise-pack-art{background:radial-gradient(circle at 50% 35%,#fff2c9,#d9a64d 62%,#8b5b20);min-height:150px}.surprise-pack-art span{font-size:76px;filter:drop-shadow(0 8px 8px rgba(60,35,5,.22))}.pack-reveal-overlay{position:fixed;inset:0;z-index:10050;background:rgba(20,15,8,.78);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .25s ease}.pack-reveal-overlay.shown{opacity:1}.pack-reveal-panel{width:min(420px,100%);border-radius:26px;padding:24px;text-align:center;background:var(--panel,#fff);color:var(--text,#241d13);box-shadow:0 25px 80px rgba(0,0,0,.3);transform:translateY(20px) scale(.94);animation:packPanelIn .55s cubic-bezier(.2,.8,.2,1) forwards}.pack-reveal-envelope{font-size:92px;display:inline-block;position:relative;animation:packTear .95s ease-in-out both}.pack-reveal-envelope:after{content:'✦';position:absolute;left:50%;top:48%;font-size:28px;color:#fff4c5;opacity:0;animation:packSpark .7s .45s both}.pack-reveal-prize{margin:18px 0;padding:18px;border-radius:18px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}.pack-reveal-prize img{display:block;max-width:100%;max-height:210px;object-fit:contain;border-radius:14px;margin:0 auto 12px}.pack-reveal-prize p{font-size:13px;opacity:.75;margin:8px 0 0}@keyframes packTear{0%,100%{transform:rotate(0) scale(1);opacity:1}12%{transform:rotate(-10deg) scale(1.05)}24%{transform:rotate(11deg) scale(1.1)}36%{transform:rotate(-9deg) scale(1.12)}48%{transform:rotate(8deg) scale(1.16)}62%{transform:rotate(-5deg) scale(1.22)}78%{transform:rotate(18deg) scale(1.45);opacity:.8}100%{transform:rotate(28deg) scale(1.8);opacity:0}}@keyframes packSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.3)}}@keyframes packPanelIn{to{transform:translateY(0) scale(1)}}@keyframes packPrizeIn{from{opacity:0;transform:translateY(18px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
+/* Зимняя палитра: убираем оставшиеся осенние золотисто-коричневые акценты. */
+body.winter-season .primary,
+body.winter-season .add:not(.added){
+ background:linear-gradient(115deg,#e4f5ff,#a9dcf7 58%,#83c6ed)!important;
+ color:#174d72!important;border:1px solid #91c9e8!important;
+ box-shadow:0 3px 12px rgba(49,126,174,.12);
+}
+body.winter-season .add.added{
+ background:linear-gradient(115deg,#e5f8ef,#bfe9d4)!important;
+ color:#24684b!important;border:1px solid #a8d9c0!important;
+}
+body.winter-season .secondary{
+ background:#e5f3ff!important;color:#286b98!important;border-color:#bfdeef!important;
+}
+body.winter-season .owner-admin-pill{
+ border-color:#9bcce8!important;
+ background:linear-gradient(135deg,#e4f5ff,#9ed4f1)!important;
+ color:#174d72!important;
+ box-shadow:0 3px 12px rgba(49,126,174,.16)!important;
+}
+body.winter-season .menu-card:first-child{
+ background:linear-gradient(120deg,#d8efff,#eff9ff)!important;
+ border-color:#b7d9ef!important;
+}
+body.winter-season .admin-metric{
+ background:linear-gradient(145deg,#e8f5ff,#d5eafa)!important;
+ border-color:#b7d9ef!important;
+}
+body.winter-season .admin-metric strong{color:#246c9c!important}
+body.winter-season .surprise-pack-card{border-color:#b7d9ef!important;box-shadow:0 10px 28px rgba(49,126,174,.08)!important}
+body.winter-season .surprise-pack-art{background:radial-gradient(circle at 50% 35%,#f5fcff,#ccecff 62%,#80bde1)!important}
+body.winter-season .pack-reveal-prize{background:rgba(85,168,220,.14)!important}
+body.winter-season .pack-reveal-envelope:after{color:#fff!important}
+body.winter-season .season-theme-card.active{border-color:#55a8dc!important;box-shadow:0 0 0 2px rgba(85,168,220,.24),0 5px 18px rgba(0,0,0,.12)!important}
+body.winter-season .product .add:focus-visible,
+body.winter-season .primary:focus-visible,
+body.winter-season .secondary:focus-visible,
+body.winter-season .owner-admin-pill:focus-visible{
+ outline:3px solid #55a8dc!important;outline-offset:2px;
+}
+.pack-reveal-overlay{overflow-y:auto;overscroll-behavior:contain;padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
+.pack-reveal-panel{max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
+.pack-reveal-close{position:sticky;bottom:0;width:100%;margin-top:16px;z-index:1}
+</style>
 </head>
 <body>
 <header>
@@ -2467,20 +2511,38 @@ function drawProducts() {
 
   const buyButton=document.createElement('button');buyButton.type='button';buyButton.className='secondary buy-now';buyButton.textContent='⚡ Купить сразу';buyButton.dataset.productId=String(p[0]);buyButton.disabled=p[2]==null;buyButton.style.cssText='width:100%;margin-top:8px';buyButton.onclick=()=>buyProductNow(p[0]);el.querySelector('.productbody').appendChild(buyButton);
 
-   el.querySelector('.add').onclick = () => {
-   if (qty) {
-    cart[p[0]] = Math.max(0,qty-1);
-    if (!cart[p[0]]) delete cart[p[0]];
-   } else {
-    cart[p[0]] = 1;
-   }
-   persistCart();
-   drawProducts();
-   drawCart();
-   
-  };
-
+   const addButton=el.querySelector('.add');
+  addButton.type='button';
+  addButton.dataset.addProductId=String(p[0]);
   root.appendChild(el);
+ });
+}
+
+function addProductToCart(productId){
+ const id=String(productId);
+ const product=products.find(item=>String(item[0])===id);
+ if(!product||product[2]==null)return false;
+ const current=Math.max(0,Math.floor(Number(cart[id])||0));
+ if(current>=10){toast('Максимум 10 штук одного товара.');return false;}
+ cart[id]=current+1;
+ activePromo=null;
+ persistCart();
+ drawProducts();
+ drawCart();
+ return true;
+}
+
+const productsCartRoot=document.getElementById('products');
+if(productsCartRoot&&productsCartRoot.dataset.cartAddHandler!=='1'){
+ productsCartRoot.dataset.cartAddHandler='1';
+ productsCartRoot.addEventListener('click',event=>{
+  const button=event.target?.closest?.('button[data-add-product-id]');
+  if(!button||!productsCartRoot.contains(button))return;
+  event.preventDefault();
+  event.stopPropagation();
+  if(button.dataset.addBusy==='1')return;
+  button.dataset.addBusy='1';
+  addProductToCart(button.dataset.addProductId);
  });
 }
 
@@ -2606,7 +2668,7 @@ function openProductDetail(product){
  actions.innerHTML='<button type="button" class="work-detail-add">🛒 Добавить в корзину</button><button type="button" class="work-detail-buy">Купить сейчас →</button>';
  const add=actions.querySelector('.work-detail-add'),buy=actions.querySelector('.work-detail-buy');
  add.disabled=buy.disabled=product[2]==null;
- const addItem=()=>{cart[product[0]]=Number(cart[product[0]]||0)+1;persistCart();drawProducts();drawCart();};
+ const addItem=()=>addProductToCart(product[0]);
  add.onclick=()=>{addItem();toast('Работа добавлена в корзину.');};
  buy.onclick=()=>{addItem();modal.classList.remove('open');showView('cartView');};
  content.append(price,actions,description);
@@ -4268,11 +4330,18 @@ function renderSurprisePacks(){
   body.append(rarity,title,reward,price,button);card.append(art,body);root.append(card);
  });
 }
+function closePackReveal(overlay){
+ const target=overlay||document.querySelector('.pack-reveal-overlay');
+ if(target)target.remove();
+}
 function showPackReveal(result){
+ document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
  const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
+ overlay.setAttribute('role','presentation');
  const panel=document.createElement('div');panel.className='pack-reveal-panel';
+ panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','packRevealHeading');
  const envelope=document.createElement('div');envelope.className='pack-reveal-envelope';envelope.textContent='🎁';
- const heading=document.createElement('h2');heading.textContent='Твой пак открыт!';
+ const heading=document.createElement('h2');heading.id='packRevealHeading';heading.textContent='Покупка успешна!';
  const prize=document.createElement('div');prize.className='pack-reveal-prize';
  if(result.reward.type==='product'){
   if(result.reward.image_url){const img=document.createElement('img');img.src=result.reward.image_url;img.alt=result.reward.title;prize.append(img);}
@@ -4282,8 +4351,14 @@ function showPackReveal(result){
   const name=document.createElement('b');name.textContent='+'+result.reward.points+' баллов';prize.append(name);
   const note=document.createElement('p');note.textContent='Баллы начислены на твой баланс.';prize.append(note);
  }
- const close=document.createElement('button');close.className='primary';close.type='button';close.textContent='Отлично!';close.onclick=()=>overlay.remove();
- panel.append(envelope,heading,prize,close);overlay.append(panel);document.body.append(overlay);
+ const close=document.createElement('button');close.className='primary pack-reveal-close';close.type='button';close.textContent='Закрыть';close.setAttribute('aria-label','Закрыть сообщение об успешной покупке');close.addEventListener('click',()=>closePackReveal(overlay));
+ panel.append(envelope,heading,prize,close);overlay.append(panel);
+ overlay.addEventListener('click',event=>{if(event.target===overlay)closePackReveal(overlay);});
+ document.body.append(overlay);
+ if(!window._packRevealEscapeBound){
+  window._packRevealEscapeBound=true;
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')closePackReveal();});
+ }
  requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
 async function purchaseSurprisePack(packId,button){
