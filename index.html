@@ -1455,7 +1455,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-</style>
+.surprise-pack-card{border:1px solid rgba(207,157,64,.38);box-shadow:0 10px 28px rgba(100,70,20,.08)}.surprise-pack-art{background:radial-gradient(circle at 50% 35%,#fff2c9,#d9a64d 62%,#8b5b20);min-height:150px}.surprise-pack-art span{font-size:76px;filter:drop-shadow(0 8px 8px rgba(60,35,5,.22))}.pack-reveal-overlay{position:fixed;inset:0;z-index:10050;background:rgba(20,15,8,.78);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .25s ease}.pack-reveal-overlay.shown{opacity:1}.pack-reveal-panel{width:min(420px,100%);border-radius:26px;padding:24px;text-align:center;background:var(--panel,#fff);color:var(--text,#241d13);box-shadow:0 25px 80px rgba(0,0,0,.3);transform:translateY(20px) scale(.94);animation:packPanelIn .55s cubic-bezier(.2,.8,.2,1) forwards}.pack-reveal-envelope{font-size:92px;display:inline-block;animation:packShake .8s ease-in-out both}.pack-reveal-prize{margin:18px 0;padding:18px;border-radius:18px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}.pack-reveal-prize img{display:block;max-width:100%;max-height:210px;object-fit:contain;border-radius:14px;margin:0 auto 12px}.pack-reveal-prize p{font-size:13px;opacity:.75;margin:8px 0 0}@keyframes packShake{0%,100%{transform:rotate(0) scale(1)}15%{transform:rotate(-12deg) scale(1.06)}30%{transform:rotate(12deg) scale(1.1)}45%{transform:rotate(-9deg)}60%{transform:rotate(8deg) scale(1.08)}75%{transform:rotate(-4deg)}90%{transform:rotate(2deg) scale(1.12)}}@keyframes packPanelIn{to{transform:translateY(0) scale(1)}}@keyframes packPrizeIn{from{opacity:0;transform:translateY(18px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}</style>
 </head>
 <body>
 <header>
@@ -1600,7 +1600,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
    <p id="adminPromosStatus" class="notice" aria-live="polite">Список промокодов загружается…</p><div id="adminPromosList"></div>
   </div>
   <div class="sectionhead"><h3>🛍️ Магазин</h3><span>Товары и каталог</span></div><div class="panel" id="adminCatalogPanel">
-   <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div>
+   <div class="sectionhead"><h3>🛍️ Каталог и работы</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" type="button" onclick="newAdminPack()">＋ Новый пак</button><button class="secondary" type="button" onclick="newAdminProduct()">＋ Добавить товар</button></div></div>
    <p class="muted">Управление названиями, описаниями, ценами, категориями и публикацией товаров.</p>
    <p id="adminProductsStatus" class="notice" aria-live="polite">Каталог загружается…</p>
    <div id="adminProductsList"></div>
@@ -1627,6 +1627,24 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
     <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
     <label><input id="adminProductEarlyAccess" type="checkbox"> Ранний доступ для владельца, модераторов и VIP (3 дня)</label><small class="muted">Обычным покупателям товар откроется автоматически через 72 часа после публикации.</small>
     <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
+   </div>
+   <div class="panel" id="adminPacksPanel">
+    <div class="sectionhead"><h3>🎁 Подарочные паки</h3><button class="secondary" type="button" onclick="loadAdminPacks()">↻ Обновить</button></div>
+    <p class="muted">Пять уровней редкости. В каждом паке заранее задана конкретная поделка или фиксированное количество баллов. Одновременно можно опубликовать только один пак каждой редкости.</p>
+    <p id="adminPacksStatus" class="notice" aria-live="polite">Паки загружаются…</p>
+    <div id="adminPacksList"></div>
+    <div class="admin-user-detail hidden" id="adminPackEditor">
+     <h4 id="adminPackEditorTitle">Новый пак</h4>
+     <input type="hidden" id="adminPackId">
+     <label>Редкость<select id="adminPackType"><option value="common">Обычный</option><option value="rare">Редкий</option><option value="epic">Эпический</option><option value="legendary">Легендарный</option><option value="secret">Секретный</option></select></label>
+     <label>Название (необязательно)<input id="adminPackTitle" maxlength="100" placeholder="Например: Секретный пак"></label>
+     <label>Цена в баллах<input id="adminPackPrice" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="Например: 600"></label>
+     <label>Фиксированная награда<select id="adminPackRewardType" onchange="toggleAdminPackRewardFields()"><option value="product">Конкретная поделка из каталога</option><option value="points">Баллы</option></select></label>
+     <label id="adminPackProductField">Поделка<select id="adminPackProduct"></select></label>
+     <label id="adminPackPointsField" class="hidden">Количество баллов<input id="adminPackRewardPoints" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="Количество баллов"></label>
+     <label><input id="adminPackActive" type="checkbox" checked> Опубликовать сразу</label>
+     <div class="admin-product-actions"><button class="primary" type="button" id="adminPackSaveBtn" onclick="saveAdminPack()">Сохранить пак</button><button class="secondary" type="button" onclick="closeAdminPackEditor()">Отмена</button></div>
+    </div>
    </div>
   </div>
   <div class="sectionhead"><h3>🎛️ Чит-панель</h3><span>🎛️ Настройки функций — включить / выключить</span></div>
@@ -1781,6 +1799,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
  <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выберите товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
  <div class="grid" id="products"></div>
+ <section id="surprisePacksSection" style="margin-top:26px"><div class="sectionhead"><h2>🎁 Подарочные паки</h2><span>Один пак каждого вида</span></div><p class="notice">Внутри каждого пака указана точная награда — сюрпризом будет только момент распаковки.</p><div id="surprisePacksList" class="grid"></div></section>
 </section>
 <section id="giftBuilderView" class="hidden">
  <div class="sectionhead"><h2>🎁 Создайте набор</h2><span id="giftBuilderStepLabel">Шаг 1 из 4</span></div>
@@ -1986,6 +2005,7 @@ async function loadProducts() {
   catalogLoaded = true;
   drawProducts();
   drawCart();
+  loadSurprisePacks();
  } catch (error) {
   catalogLoaded = false;
   console.error('Не удалось загрузить серверный каталог:', error);
@@ -2272,7 +2292,8 @@ function showView(id) {
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView' || id === 'vipPlansView') loadVip();
  if (id === 'leaderboardView') loadPublicLeaderboard();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'catalogView') loadSurprisePacks();
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
 }
 
@@ -4171,6 +4192,106 @@ function resetAdminProductImage(url=''){
  const field=document.getElementById('adminProductImageUrl');if(field)field.value=url||'';
  if(adminProductPreviewObjectUrl){URL.revokeObjectURL(adminProductPreviewObjectUrl);adminProductPreviewObjectUrl=null;}
  setAdminProductImagePreview(url,url?'Текущая фотография':'Фотография не выбрана');
+}
+const SURPRISE_PACK_TYPES={common:{label:"Обычный",emoji:"🎁"},rare:{label:"Редкий",emoji:"💎"},epic:{label:"Эпический",emoji:"🔮"},legendary:{label:"Легендарный",emoji:"👑"},secret:{label:"Секретный",emoji:"✨"}};
+let adminPacksCache=[];
+async function loadAdminPacks(){
+ const status=document.getElementById('adminPacksStatus'),root=document.getElementById('adminPacksList');if(!status||!root)return;
+ status.textContent='Загружаем паки…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/packs');adminPacksCache=Array.isArray(data.packs)?data.packs:[];
+  const select=document.getElementById('adminPackProduct');if(select){select.replaceChildren();(data.products||[]).forEach(p=>{const option=document.createElement('option');option.value=String(p.id);option.textContent=p.title+' · '+Number(p.price_stars||0)+' ⭐';select.append(option);});}
+  status.textContent='Паков: '+adminPacksCache.length+' · Активные паки отображаются в каталоге';
+  if(!adminPacksCache.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Паков пока нет. Создайте первый!';root.append(empty);return;}
+  adminPacksCache.forEach(pack=>{
+   const card=document.createElement('div');card.className='panel';card.style.marginBottom='10px';
+   const title=document.createElement('b');title.textContent=(SURPRISE_PACK_TYPES[pack.pack_type]?.emoji||'🎁')+' '+(pack.title||'Пак');
+   const detail=document.createElement('p');detail.className='muted';detail.textContent='Редкость: '+(SURPRISE_PACK_TYPES[pack.pack_type]?.label||pack.pack_type)+' · Цена: '+pack.price_points+' баллов · Награда: '+(pack.reward_type==='product'?(pack.reward_product_title||'Поделка'):pack.reward_points+' баллов')+' · Статус: '+(pack.status==='sold'?'Продан':pack.status==='active'?'Опубликован':'Черновик');
+   card.append(title,detail);
+   if(pack.status!=='sold'){const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.onclick=()=>editAdminPack(pack);card.append(edit);}
+   root.append(card);
+  });
+ }catch(error){status.textContent=error.message||'Не удалось загрузить паки.';}
+}
+function toggleAdminPackRewardFields(){
+ const points=document.getElementById('adminPackRewardType')?.value==='points';
+ document.getElementById('adminPackPointsField')?.classList.toggle('hidden',!points);
+ document.getElementById('adminPackProductField')?.classList.toggle('hidden',points);
+}
+function newAdminPack(){
+ const editor=document.getElementById('adminPackEditor');if(!editor)return;
+ document.getElementById('adminPackEditorTitle').textContent='Новый пак';
+ document.getElementById('adminPackId').value='';document.getElementById('adminPackType').value='common';
+ document.getElementById('adminPackTitle').value='';document.getElementById('adminPackPrice').value='';
+ document.getElementById('adminPackRewardType').value='product';document.getElementById('adminPackRewardPoints').value='';
+ document.getElementById('adminPackActive').checked=true;toggleAdminPackRewardFields();
+ editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function editAdminPack(pack){
+ if(pack.status==='sold')return;
+ const editor=document.getElementById('adminPackEditor');if(!editor)return;
+ document.getElementById('adminPackEditorTitle').textContent='Редактирование пака';
+ document.getElementById('adminPackId').value=String(pack.id);document.getElementById('adminPackType').value=pack.pack_type;
+ document.getElementById('adminPackTitle').value=pack.title||'';document.getElementById('adminPackPrice').value=String(pack.price_points||'');
+ document.getElementById('adminPackRewardType').value=pack.reward_type;document.getElementById('adminPackRewardPoints').value=String(pack.reward_points||'');
+ if(pack.reward_product_id)document.getElementById('adminPackProduct').value=String(pack.reward_product_id);
+ document.getElementById('adminPackActive').checked=pack.status==='active'&&Number(pack.is_active)===1;
+ toggleAdminPackRewardFields();editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeAdminPackEditor(){document.getElementById('adminPackEditor')?.classList.add('hidden');}
+async function saveAdminPack(){
+ const button=document.getElementById('adminPackSaveBtn');if(button)button.disabled=true;
+ const payload={id:document.getElementById('adminPackId').value.trim(),pack_type:document.getElementById('adminPackType').value,title:document.getElementById('adminPackTitle').value.trim(),price_points:Number(document.getElementById('adminPackPrice').value),reward_type:document.getElementById('adminPackRewardType').value,reward_product_id:document.getElementById('adminPackProduct').value,reward_points:Number(document.getElementById('adminPackRewardPoints').value),is_active:document.getElementById('adminPackActive').checked};
+ try{await apiFetch('/api/admin/pack-save',{method:'POST',body:JSON.stringify(payload)});toast(payload.is_active?'Пак опубликован':'Черновик пака сохранён');closeAdminPackEditor();await loadAdminPacks();await loadSurprisePacks();}
+ catch(error){toast(error.message||'Не удалось сохранить пак.');}
+ finally{if(button)button.disabled=false;}
+}
+let surprisePacks=[];
+async function loadSurprisePacks(){
+ const root=document.getElementById('surprisePacksList');if(!root||!initData)return;
+ try{const data=await apiFetch('/api/packs');surprisePacks=Array.isArray(data.packs)?data.packs:[];renderSurprisePacks();}
+ catch(error){console.warn('Не удалось загрузить паки:',error);root.textContent='Не удалось загрузить паки. Попробуйте обновить каталог.';}
+}
+function renderSurprisePacks(){
+ const root=document.getElementById('surprisePacksList');if(!root)return;root.replaceChildren();
+ if(!surprisePacks.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Сейчас новых паков нет. Загляните позже!';root.append(empty);return;}
+ surprisePacks.forEach(pack=>{
+  const type=SURPRISE_PACK_TYPES[pack.pack_type]||SURPRISE_PACK_TYPES.common;
+  const card=document.createElement('article');card.className='product surprise-pack-card';
+  const art=document.createElement('div');art.className='art surprise-pack-art';const icon=document.createElement('span');icon.textContent=type.emoji;art.append(icon);
+  const body=document.createElement('div');body.className='productbody';
+  const rarity=document.createElement('div');rarity.className='muted';rarity.textContent=type.label.toUpperCase();
+  const title=document.createElement('h3');title.textContent=pack.title||type.label+' пак';
+  const reward=document.createElement('p');reward.className='notice';reward.textContent='Награда: '+(pack.reward_type==='product'?(pack.reward_product_title||'Поделка из каталога'):Number(pack.reward_points)+' баллов');
+  const price=document.createElement('div');price.className='price';price.textContent=Number(pack.price_points)+' баллов';
+  const button=document.createElement('button');button.className='add';button.type='button';button.textContent='🎁 Купить и открыть';button.onclick=()=>purchaseSurprisePack(pack.id,button);
+  body.append(rarity,title,reward,price,button);card.append(art,body);root.append(card);
+ });
+}
+function showPackReveal(result){
+ const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
+ const panel=document.createElement('div');panel.className='pack-reveal-panel';
+ const envelope=document.createElement('div');envelope.className='pack-reveal-envelope';envelope.textContent='🎁';
+ const heading=document.createElement('h2');heading.textContent='Твой пак открыт!';
+ const prize=document.createElement('div');prize.className='pack-reveal-prize';
+ if(result.reward.type==='product'){
+  if(result.reward.image_url){const img=document.createElement('img');img.src=result.reward.image_url;img.alt=result.reward.title;prize.append(img);}
+  const name=document.createElement('b');name.textContent=result.reward.title;prize.append(name);
+  const note=document.createElement('p');note.textContent='Поделка добавлена в завершённые заказы.';prize.append(note);
+ }else{
+  const name=document.createElement('b');name.textContent='+'+result.reward.points+' баллов';prize.append(name);
+  const note=document.createElement('p');note.textContent='Баллы начислены на твой баланс.';prize.append(note);
+ }
+ const close=document.createElement('button');close.className='primary';close.type='button';close.textContent='Отлично!';close.onclick=()=>overlay.remove();
+ panel.append(envelope,heading,prize,close);overlay.append(panel);document.body.append(overlay);
+ requestAnimationFrame(()=>overlay.classList.add('shown'));
+}
+async function purchaseSurprisePack(packId,button){
+ if(button)button.disabled=true;
+ try{
+  const result=await apiFetch('/api/packs/purchase',{method:'POST',body:JSON.stringify({pack_id:String(packId)})});
+  await loadSurprisePacks();showPackReveal(result);toast('Пак успешно открыт!');
+ }catch(error){toast(error.message||'Не удалось открыть пак.');if(button)button.disabled=false;}
 }
 function newAdminProduct(){
  const editor=document.getElementById('adminProductEditor');if(!editor)return;
