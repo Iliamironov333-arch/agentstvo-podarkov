@@ -312,6 +312,10 @@ async function ensureProductEarlyAccessSchema(env) {
   try { await env.DB.prepare("ALTER TABLE products ADD COLUMN published_at TEXT").run(); } catch {}
   try { await env.DB.prepare("UPDATE products SET published_at=created_at WHERE is_active=1 AND published_at IS NULL").run(); } catch {}
 }
+async function ensureSurprisePacksSchema(env) {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS surprise_packs (id TEXT PRIMARY KEY, pack_type TEXT NOT NULL CHECK(pack_type IN ('common','rare','epic','legendary','secret')), title TEXT NOT NULL, price_points INTEGER NOT NULL CHECK(price_points>0), reward_type TEXT NOT NULL CHECK(reward_type IN ('product','points')), reward_product_id TEXT, reward_points INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','sold','archived')), is_active INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sold_at TEXT, sold_to TEXT, order_id TEXT)").run();
+  await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_packs_one_active_type ON surprise_packs(pack_type) WHERE status='active' AND is_active=1").run();
+}
 async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
@@ -1110,6 +1114,8 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/order-update" || path === "/api/admin/order-notify") return "orders_manage";
   if (path === "/api/admin/order-chat") return method === "GET" ? "orders_view" : "orders_manage";
   if (path === "/api/admin/products") return "catalog_view";
+  if (path === "/api/admin/packs") return method === "GET" ? "catalog_view" : "catalog_manage";
+  if (path === "/api/admin/pack-save") return "catalog_manage";
   if (path.startsWith("/api/admin/product-")) return "catalog_manage";
   if (path.startsWith("/api/admin/support/")) {
     if (["/api/admin/support/reply","/api/admin/support/ticket-reply","/api/admin/support/ticket-status","/api/admin/support/conversation-mode","/api/admin/support/notes","/api/admin/support/conversation-delete"].includes(path)) return "support_reply";
@@ -1625,7 +1631,51 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           await env.DB.batch(ids.map((id,index)=>env.DB.prepare("UPDATE products SET display_order=? WHERE id=?").bind(index,id)));
           return json({ok:true},200,origin);
         }
-if (path === "/api/admin/products" && method === "GET") {
+if (path === "/api/admin/packs" && method === "GET") {
+          await ensureSurprisePacksSchema(env);
+          const rows=await env.DB.prepare("SELECT p.*,pr.title AS reward_product_title FROM surprise_packs p LEFT JOIN products pr ON pr.id=p.reward_product_id ORDER BY p.created_at DESC").all();
+          const products=await env.DB.prepare("SELECT id,title,price_stars,image_url FROM products WHERE is_active=1 ORDER BY display_order ASC,created_at DESC").all();
+          return json({ok:true,packs:rows.results||[],products:products.results||[]},200,origin);
+        }
+        if (path === "/api/admin/pack-save" && method === "POST") {
+          await ensureSurprisePacksSchema(env);
+          const body=await readJson(request);
+          const id=typeof body.id==="string"?body.id.trim().slice(0,80):"";
+          const type=String(body.pack_type||"");
+          const types=["common","rare","epic","legendary","secret"];
+          const title=String(body.title||"").trim().slice(0,100);
+          const price=Number(body.price_points);
+          const rewardType=String(body.reward_type||"");
+          const productId=String(body.reward_product_id||"").trim().slice(0,100);
+          const rewardPoints=Number(body.reward_points||0);
+          const active=body.is_active===true;
+          if(!types.includes(type))return json({error:"Выберите корректную редкость пака."},400,origin);
+          if(!Number.isSafeInteger(price)||price<1||price>1000000)return json({error:"Цена должна быть целым числом от 1 до 1 000 000 баллов."},400,origin);
+          if(!["product","points"].includes(rewardType))return json({error:"Выберите фиксированную награду."},400,origin);
+          if(rewardType==="product"){
+            const product=await env.DB.prepare("SELECT id FROM products WHERE id=? AND is_active=1").bind(productId).first();
+            if(!product)return json({error:"Выберите опубликованную поделку из каталога."},400,origin);
+          }else if(!Number.isSafeInteger(rewardPoints)||rewardPoints<1||rewardPoints>1000000)return json({error:"Награда баллами должна быть от 1 до 1 000 000."},400,origin);
+          const packTitle=title||({common:"Обычный пак",rare:"Редкий пак",epic:"Эпический пак",legendary:"Легендарный пак",secret:"Секретный пак"}[type]);
+          try{
+            if(id){
+              const existing=await env.DB.prepare("SELECT id,status FROM surprise_packs WHERE id=?").bind(id).first();
+              if(!existing||existing.status==="sold")return json({error:"Этот пак уже продан или не найден. Создайте новый пак."},409,origin);
+              await env.DB.prepare("UPDATE surprise_packs SET pack_type=?,title=?,price_points=?,reward_type=?,reward_product_id=?,reward_points=?,status=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+                .bind(type,packTitle,price,rewardType,rewardType==="product"?productId:null,rewardType==="points"?rewardPoints:0,active?"active":"draft",active?1:0,id).run();
+            }else{
+              const newId=makeId();
+              await env.DB.prepare("INSERT INTO surprise_packs (id,pack_type,title,price_points,reward_type,reward_product_id,reward_points,status,is_active) VALUES (?,?,?,?,?,?,?,?,?)")
+                .bind(newId,type,packTitle,price,rewardType,rewardType==="product"?productId:null,rewardType==="points"?rewardPoints:0,active?"active":"draft",active?1:0).run();
+              return json({ok:true,id:newId,created:true},201,origin);
+            }
+          }catch(error){
+            if(/UNIQUE constraint failed/i.test(String(error)))return json({error:"Пак этой редкости уже опубликован. Сначала снимите его с продажи."},409,origin);
+            throw error;
+          }
+          return json({ok:true,id,created:false},200,origin);
+        }
+        if (path === "/api/admin/products" && method === "GET") {
           await ensureProductDisplayOrder(env); await ensureProductEarlyAccessSchema(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at,early_access_enabled,published_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
@@ -2896,6 +2946,53 @@ if (path === "/api/admin/products" && method === "GET") {
       if (activeBlock?.block_type === "purchases" && method === "POST" &&
           ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
         return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
+      }
+
+      if (path === "/api/packs" && method === "GET") {
+        await ensureSurprisePacksSchema(env);
+        const rows = await env.DB.prepare("SELECT p.id,p.pack_type,p.title,p.price_points,p.reward_type,p.reward_product_id,p.reward_points,pr.title AS reward_product_title,pr.image_url AS reward_image_url FROM surprise_packs p LEFT JOIN products pr ON pr.id=p.reward_product_id WHERE p.status='active' AND p.is_active=1 ORDER BY CASE p.pack_type WHEN 'secret' THEN 1 WHEN 'legendary' THEN 2 WHEN 'epic' THEN 3 WHEN 'rare' THEN 4 ELSE 5 END").all();
+        return json({packs:rows.results||[]},200,origin);
+      }
+      if (path === "/api/packs/purchase" && method === "POST") {
+        await ensureSurprisePacksSchema(env);
+        const body=await readJson(request);
+        const packId=typeof body.pack_id==="string"?body.pack_id.trim().slice(0,80):"";
+        if(!packId)return json({error:"Не выбран пак."},400,origin);
+        const pack=await env.DB.prepare("SELECT p.*,pr.title AS reward_product_title,pr.image_url AS reward_image_url FROM surprise_packs p LEFT JOIN products pr ON pr.id=p.reward_product_id WHERE p.id=? AND p.status='active' AND p.is_active=1").bind(packId).first();
+        if(!pack)return json({error:"Этот пак уже куплен или снят с продажи."},409,origin);
+        const price=Number(pack.price_points||0);
+        if(!Number.isSafeInteger(price)||price<1)return json({error:"У пака некорректная цена."},409,origin);
+        let rewardProduct=null;
+        if(pack.reward_type==="product"){
+          rewardProduct=await env.DB.prepare("SELECT id,title,image_url FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
+          if(!rewardProduct)return json({error:"Награда больше недоступна. Обратитесь в поддержку."},409,origin);
+        } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<1) {
+          return json({error:"У пака некорректно настроена награда."},409,origin);
+        }
+        const orderId=rewardProduct?makeId():null;
+        const purchaseKey="pack-purchase:"+packId+":"+telegramId;
+        const rewardKey="pack-reward:"+packId+":"+telegramId;
+        const statements=[
+          env.DB.prepare("UPDATE users SET balance_stars=balance_stars-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars>=? AND EXISTS (SELECT 1 FROM surprise_packs WHERE id=? AND status='active' AND is_active=1)").bind(price,telegramId,price,packId),
+          env.DB.prepare("UPDATE surprise_packs SET status='sold',is_active=0,sold_to=?,sold_at=CURRENT_TIMESTAMP,order_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='active' AND is_active=1 AND changes()=1").bind(telegramId,orderId,packId),
+          env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'pack_purchase',?,? WHERE changes()=1").bind(telegramId,-price,"Покупка пака «"+String(pack.title).slice(0,100)+"»",purchaseKey)
+        ];
+        if(rewardProduct){
+          statements.push(env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,delivered_at,discount_stars,priority_order) SELECT ?,?,?,?,?,0,0,0,'paid','delivered',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,0 WHERE EXISTS (SELECT 1 FROM balance_transactions WHERE idempotency_key=?)").bind(orderId,telegramId,rewardProduct.id,rewardProduct.title,1,purchaseKey));
+          statements.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status,delivered_at) SELECT ?,?,?,1,?,'sent',CURRENT_TIMESTAMP WHERE EXISTS (SELECT 1 FROM orders WHERE id=?)").bind(orderId,rewardProduct.id,rewardProduct.title,rewardProduct.image_url||null,orderId));
+          statements.push(env.DB.prepare("UPDATE surprise_packs SET order_id=? WHERE id=? AND sold_to=? AND status='sold'").bind(orderId,packId,telegramId));
+        } else {
+          const reward=Number(pack.reward_points);
+          statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND EXISTS (SELECT 1 FROM balance_transactions WHERE idempotency_key=?)").bind(reward,telegramId,purchaseKey));
+          statements.push(env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'pack_reward',?,? WHERE changes()=1").bind(telegramId,reward,"Награда из пака «"+String(pack.title).slice(0,100)+"»",rewardKey));
+        }
+        await env.DB.batch(statements);
+        const sold=await env.DB.prepare("SELECT status,sold_to FROM surprise_packs WHERE id=?").bind(packId).first();
+        if(sold?.status!=="sold"||String(sold.sold_to)!==String(telegramId)){
+          const current=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
+          return json({error:Number(current?.balance_stars||0)<price?"Недостаточно баллов для покупки.":"Пак уже успел купить другой покупатель."},409,origin);
+        }
+        return json({ok:true,pack:{id:packId,title:pack.title,pack_type:pack.pack_type,reward_type:pack.reward_type,price_points:price},reward:rewardProduct?{type:"product",product_id:rewardProduct.id,title:rewardProduct.title,image_url:rewardProduct.image_url||null,order_id:orderId}:{type:"points",points:Number(pack.reward_points)},order_id:orderId},200,origin);
       }
 
       if (path === "/api/products" && method === "GET") {
