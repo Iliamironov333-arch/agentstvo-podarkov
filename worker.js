@@ -302,7 +302,7 @@ function filterEarlyAccessProducts(products, privileged) {
   return (products||[]).filter(product=>{
     if(Number(product.early_access_enabled)!==1 || privileged)return true;
     const raw=String(product.published_at||"").trim();
-    const normalized=/[zZ]|[+-]\\d\\d:\\d\\d$/.test(raw) ? raw : raw.replace(" ","T")+"Z";
+    const normalized=/[zZ]|[+-]\d\d:\d\d$/.test(raw) ? raw : raw.replace(" ","T")+"Z";
     const published=Date.parse(normalized);
     return Number.isFinite(published) && now-published>=72*60*60*1000;
   });
