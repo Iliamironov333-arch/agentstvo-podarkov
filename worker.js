@@ -3480,8 +3480,8 @@ if (path === "/api/admin/products" && method === "GET") {
         const activeVip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
         if (!activeVip) return json({error:"Изменение имени профиля доступно активным VIP-покупателям."},403,origin);
         const body=await readJson(request);
-        const displayName=String(body.display_name||"").normalize("NFC").replace(/\\s+/g," ").trim();
-        if(displayName.length<2||displayName.length>32||! /^[\\p{L}\\p{N} _.-]+$/u.test(displayName)) return json({error:"Имя должно содержать 2–32 символа: буквы, цифры, пробел, точку, дефис или подчёркивание."},400,origin);
+        const displayName=String(body.display_name||"").normalize("NFC").replace(/\s+/g," ").trim();
+        if(displayName.length<2||displayName.length>32||! /^[\p{L}\p{N} _.-]+$/u.test(displayName)) return json({error:"Имя должно содержать 2–32 символа: буквы, цифры, пробел, точку, дефис или подчёркивание."},400,origin);
         await env.DB.prepare("UPDATE users SET display_name=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(displayName,telegramId).run();
         return json({ok:true,display_name:displayName},200,origin);
       }
@@ -3890,7 +3890,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
             // явный запрос покупателя останется в разделе «Незавершённые».
             let createdCraftDraft = false;
             if (!activeCraftDraft) {
-              const initialSubject = String(draftConversation.find(item => item.role === "user")?.content || message).replace(/\\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
+              const initialSubject = String(draftConversation.find(item => item.role === "user")?.content || message).replace(/\s+/g," ").trim().slice(0,120) || "Индивидуальная работа";
               draftDetails = { ...draftDetails, source: "miniapp_support_chat", support_conversation_id: conversationId,
                 ai_enabled: true, order_intent: true, summary: message.slice(0,2000), conversation: draftConversation.slice(-24) };
               await env.DB.prepare("INSERT INTO ai_order_drafts(id,chat_id,telegram_id,username,first_name,subject,details_json,estimated_stars,status) VALUES(?,?,?,?,?,?,?,?, 'collecting')")
