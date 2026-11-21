@@ -2897,6 +2897,7 @@ if (path === "/api/admin/packs" && method === "GET") {
 
       const featureGateMap={
         "/api/orders":"feature_product_orders",
+        "/api/packs/purchase":"feature_product_orders",
         "/api/custom-orders":"feature_custom_orders",
         "/api/balance/topup":"feature_points_topup",
         "/api/support/chat":"feature_support",
