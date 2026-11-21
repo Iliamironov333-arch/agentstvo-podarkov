@@ -292,7 +292,7 @@ async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
   await ensureProductDisplayOrder(env);
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at,early_access_enabled FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
@@ -1709,13 +1709,13 @@ if (path === "/api/admin/products" && method === "GET") {
           if (id) {
             const existing = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
             if (!existing) return json({ error: "Товар не найден." }, 404, origin);
-            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=? WHERE id=?")
-              .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
+            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=?,early_access_enabled=? WHERE id=?")
+              .bind(title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0, id).run();
             if (!imageUrl) await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run();
           } else {
             const newId = makeId();
-            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new) VALUES (?,?,?,?,?,?,?,1)")
-              .bind(newId, title, description || null, imageUrl || null, category, price, isActive).run();
+            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new,early_access_enabled) VALUES (?,?,?,?,?,?,?,1,?)")
+              .bind(newId, title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0).run();
             return json({ ok: true, id: newId, created: true }, 201, origin);
           }
           return json({ ok: true, id, created: false }, 200, origin);
