@@ -2896,7 +2896,8 @@ if (path === "/api/admin/products" && method === "GET") {
         const query = String(body.query || "").trim().slice(0, 140);
         if (query.length < 3) return json({ product_ids: [] }, 200, origin);
         if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
-        const catalog = (await getProducts(env)).slice(0, 60).map(item => ({
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        const catalog = filterEarlyAccessProducts(await getProducts(env),privileged).slice(0, 60).map(item => ({
           id: String(item.id), title: String(item.title || "").slice(0, 120),
           description: String(item.description || "").slice(0, 360),
           category: String(item.category || "").slice(0, 45)
