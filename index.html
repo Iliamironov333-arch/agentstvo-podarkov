@@ -5024,7 +5024,7 @@ function observeOrderMotionStatus(order){
 
 async function saveProfileDisplayName(){
  const input=document.getElementById('profileDisplayName'),button=document.getElementById('saveProfileDisplayName'),hint=document.getElementById('profileDisplayNameHint');
- const display_name=String(input?.value||'').trim().replace(/\\s+/g,' ');
+ const display_name=String(input?.value||'').trim().replace(/\s+/g,' ');
  if(display_name.length<2||display_name.length>32){toast('Имя должно содержать от 2 до 32 символов.');return;}
  if(button)button.disabled=true;
  try{const result=await apiFetch('/api/profile/name',{method:'POST',body:JSON.stringify({display_name})});const title=document.getElementById('profileName');if(title)title.textContent=result.display_name;toast('Имя профиля сохранено.');if(hint)hint.textContent='Имя профиля обновлено.';}
