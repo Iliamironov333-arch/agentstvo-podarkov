@@ -1971,7 +1971,7 @@ async function loadProducts() {
  try {
   const data = await apiFetch('/api/products');
   if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
-  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.created_at || null]);
+  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.created_at || null,Number(p.early_access_enabled)===1]);
   catalogLoaded = true;
   drawProducts();
   drawCart();
@@ -2406,6 +2406,7 @@ function drawProducts() {
  const shown = [...products].filter(p => {
   const matchesQuery=!query || (Array.isArray(semanticSearchProductIds) ? semanticSearchProductIds.includes(String(p[0])) : [p[1],p[6],p[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query)));
   if(!matchesQuery)return false;
+  if(p[9] && !vipActive){const published=productCreatedTime(p[8]);if(!Number.isFinite(published)||now-published<72*60*60*1000)return false;}
   if(activeFilter==='all') return true;
   if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
   if(activeFilter==='new') {
@@ -2428,7 +2429,7 @@ function drawProducts() {
    el.style.animationDuration=Math.round(uiMotionSettings.cardDuration*speed)+'ms';
    el.style.animationDelay=(uiMotionSettings.cardStagger?Math.round(index*uiMotionSettings.cardInterval*speed):0)+'ms';
   }
-  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody"><h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
+  el.innerHTML = `<div class="art">${p[5]?'<img src="'+p[5]+'" alt="'+escapeHtml(p[1])+'" loading="lazy">':'<span>'+p[3]+'</span>'}</div><div class="productbody">${p[9]?'<div class="muted" style="font-size:11px;margin-bottom:5px">✨ Ранний доступ</div>':''}<h3>${escapeHtml(p[1])}</h3><div class="price">${money(p[2])} ${p[2]!=null?'':''}</div><button class="add ${qty?'added':''}" ${p[2]==null?'disabled':''}>${p[2]==null?'Цена уточняется':qty?`В корзине: ${qty}  −`:'＋ В корзину'}</button></div>`;
   el.addEventListener('click',event=>{if(event.target.closest('button'))return;openProductDetail(p)});
   el.style.cursor='pointer';
 
