@@ -303,10 +303,16 @@ function filterEarlyAccessProducts(products, privileged) {
     return Number.isFinite(published) && now-published>=72*60*60*1000;
   });
 }
+async function ensureProductEarlyAccessSchema(env) {
+  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN early_access_enabled INTEGER NOT NULL DEFAULT 0").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN published_at TEXT").run(); } catch {}
+  try { await env.DB.prepare("UPDATE products SET published_at=created_at WHERE is_active=1 AND published_at IS NULL").run(); } catch {}
+}
 async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
   await ensureProductDisplayOrder(env);
+  await ensureProductEarlyAccessSchema(env);
   const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at,early_access_enabled,published_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
