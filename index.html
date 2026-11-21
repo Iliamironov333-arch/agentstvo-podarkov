@@ -2045,7 +2045,14 @@ async function loadProducts() {
  try {
   const data = await apiFetch('/api/products');
   if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
-  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null,Number(p.early_access_enabled)===1]);
+  products = data.products.map(p => [String(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null,Number(p.early_access_enabled)===1]);
+  // IDs in D1 are TEXT (often UUIDs). Never coerce them to Number: UUIDs become NaN and collide as one cart key.
+  const validProductIds=new Set(products.map(product=>String(product[0])));
+  const cleanCart={};
+  Object.entries(cart||{}).forEach(([id,qty])=>{const count=Math.floor(Number(qty)||0);if(validProductIds.has(String(id))&&count>0)cleanCart[String(id)]=Math.min(10,count);});
+  const cartWasRepaired=JSON.stringify(cleanCart)!==JSON.stringify(cart);
+  cart=cleanCart;
+  if(cartWasRepaired)persistCart();
   catalogLoaded = true;
   drawProducts();
   drawCart();
@@ -2696,17 +2703,34 @@ function updateDeliveryMethodUI(){
  if(total&&pickup){const sub=document.getElementById('subtotal');total.textContent=sub?.textContent||'0 ⭐';}
 }
 function drawCart() {
- const entries = products.filter(p => Number(cart[p[0]] || 0) > 0);
+ const entries = products.filter(p => Number(cart[String(p[0])] || 0) > 0);
  const root = document.getElementById('cartItems');
 
  if (!entries.length) {
-  root.innerHTML = '<p class="muted">Корзина пока пустая. Выберите подарок в каталоге 🎁</p>';
+  const empty=document.createElement('p');empty.className='muted';empty.textContent='Корзина пока пустая. Выберите подарок в каталоге 🎁';root.replaceChildren(empty);
  } else {
-  const bundleBanner=window.pendingGiftBundleId?'<div class="admin-detail-line" style="margin-bottom:10px;border:1px solid var(--gold2);border-radius:12px;padding:12px"><strong>🎁 Подарочный набор</strong><p class="muted" style="margin:5px 0 0">Состав, открытка и дополнительные пожелания будут сохранены как единый заказ набора.</p></div>':'';
-  root.innerHTML = bundleBanner + entries.map(p => `<div class="lineitem"><span>${p[3]} ${p[1]} × ${cart[p[0]]}<br><button class="secondary" onclick="changeQty(${p[0]},-1)">−</button> <button class="secondary" onclick="changeQty(${p[0]},1)">＋</button></span><b>${money(p[2]*cart[p[0]])}</b></div>`).join('');
+  root.replaceChildren();
+  if(window.pendingGiftBundleId){
+   const banner=document.createElement('div');banner.className='admin-detail-line';banner.style.cssText='margin-bottom:10px;border:1px solid var(--gold2);border-radius:12px;padding:12px';
+   const heading=document.createElement('strong');heading.textContent='🎁 Подарочный набор';
+   const note=document.createElement('p');note.className='muted';note.style.margin='5px 0 0';note.textContent='Состав, открытка и дополнительные пожелания будут сохранены как единый заказ.';
+   banner.append(heading,note);root.append(banner);
+  }
+  entries.forEach(product=>{
+   const id=String(product[0]),qty=Number(cart[id]||0);
+   const row=document.createElement('div');row.className='lineitem';
+   const details=document.createElement('span');details.append(document.createTextNode(product[3]+' '+product[1]+' × '+qty));
+   const controls=document.createElement('div');controls.style.cssText='display:flex;gap:6px;margin-top:6px';
+   for(const [delta,label] of [[-1,'−'],[1,'＋']]){
+    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=label;
+    button.dataset.cartProductId=id;button.dataset.cartQty=String(delta);button.setAttribute('aria-label',(delta<0?'Уменьшить':'Увеличить')+' количество: '+product[1]);controls.append(button);
+   }
+   details.append(controls);
+   const price=document.createElement('b');price.textContent=money(Number(product[2])*qty);
+   row.append(details,price);root.append(row);
+  });
  }
-
- const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[product[0]] || 0)),0);
+ const subtotal = entries.reduce((sum,product) => sum + (Number(product[2]) * Number(cart[String(product[0])] || 0)),0);
  const discountAmount = activePromo ? Number(activePromo.discount_stars||0) : 0;
  const builderExtras = window.pendingGiftBundleId ? Math.max(0,Number(window.pendingGiftBundleExtraStars||0)) : 0;
  const total = Math.max(0,subtotal-discountAmount)+builderExtras;
@@ -2719,8 +2743,8 @@ function drawCart() {
  const pickup=document.getElementById('deliveryMethod')?.value==='pickup';
  document.getElementById('deliveryCost').textContent = pickup ? '0 ⭐ · самовывоз' : 'По адресу';
  document.getElementById('total').textContent = money(total);
- document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + cart[p[0]],0) + ' товаров';
- document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
+ document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + Number(cart[String(p[0])]||0),0) + ' товаров';
+ document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + Number(cart[String(p[0])]||0),0)})` : '';
  const notice = document.getElementById('deliveryNotice');
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
@@ -2729,7 +2753,7 @@ function drawCart() {
 }
 
 function changeQty(id,d) {
- 
+ id=String(id);
  const next = Number(cart[id] || 0) + d;
  if (next > 10) { toast('Максимум 10 штук одного товара.'); return; }
  cart[id] = Math.max(0,next);
@@ -2740,6 +2764,20 @@ function changeQty(id,d) {
  drawCart();
 }
 
+
+
+const cartItemsRoot=document.getElementById('cartItems');
+if(cartItemsRoot&&cartItemsRoot.dataset.cartQtyHandler!=='1'){
+ cartItemsRoot.dataset.cartQtyHandler='1';
+ cartItemsRoot.addEventListener('click',event=>{
+  const button=event.target?.closest?.('button[data-cart-product-id][data-cart-qty]');
+  if(!button||!cartItemsRoot.contains(button))return;
+  event.preventDefault();event.stopPropagation();
+  const id=button.dataset.cartProductId,delta=Number(button.dataset.cartQty);
+  if(!products.some(product=>String(product[0])===id)||![-1,1].includes(delta))return;
+  changeQty(id,delta);
+ });
+}
 
 function previousEkaterinburgMonth(){const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit'}).formatToParts(new Date());const y=Number(p.find(x=>x.type==='year')?.value),m=Number(p.find(x=>x.type==='month')?.value),d=new Date(Date.UTC(y,m-2,1));return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');}
 async function loadAdminReputation(){
@@ -5061,14 +5099,14 @@ async function applyPromoCode(){
  const code=(input?.value||'').trim().toUpperCase(),entries=products.filter(p=>Number(cart[p[0]]||0)>0);
  if(!code){toast('Введите промокод.');return;}if(!entries.length){toast('Сначала добавьте товары в корзину.');return;}
  button.disabled=true;status.textContent='Проверяем промокод на сервере…';
- try{const result=await apiFetch('/api/promo/validate',{method:'POST',body:JSON.stringify({code,items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])}))})});
+ try{const result=await apiFetch('/api/promo/validate',{method:'POST',body:JSON.stringify({code,items:entries.map(p=>({id:String(p[0]),qty:Number(cart[String(p[0])])}))})});
  activePromo={code:result.code,discount_stars:Number(result.discount_stars||0),total_stars:Number(result.total_stars||0),discount_percent:Number(result.discount_percent||0)};
  status.textContent='Промокод применён: скидка '+activePromo.discount_percent+'% · экономия '+money(activePromo.discount_stars)+'. Итог повторно проверяется сервером при оформлении.';drawCart();
  }catch(e){activePromo=null;status.textContent=e.message||'Промокод не применён.';drawCart();}finally{button.disabled=false;}
 }
 async function checkout() {
  const entries=products.filter(p=>Number(cart[p[0]]||0)>0);
- if(entries.some(p=>Number(cart[p[0]])>10))return toast('Максимум 10 штук одного товара.');
+ if(entries.some(p=>Number(cart[String(p[0])])>10))return toast('Максимум 10 штук одного товара.');
  if(!entries.length)return toast('Корзина пуста.');
  if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
  if(entries.some(p=>p[2]==null))return toast('У одной из работ ещё не указана цена.');
@@ -5081,7 +5119,7 @@ async function checkout() {
  if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Подтверждаем бесплатный самовывоз из пункта выдачи…':'Проверяем адрес и автомобильный маршрут…';
  try{
   const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
-   items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])})),
+   items:entries.map(p=>({id:String(p[0]),qty:Number(cart[String(p[0])])})),
    gift_bundle_id:window.pendingGiftBundleId||'',
    promo_code:activePromo?.code||'',
    delivery_method:deliveryMethod,
