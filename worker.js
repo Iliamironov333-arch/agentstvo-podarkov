@@ -2869,6 +2869,48 @@ if (path === "/api/admin/products" && method === "GET") {
         return json({ products: await getProducts(env) }, 200, origin);
       }
 
+      if (path === "/api/catalog-semantic-search" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const query = String(body.query || "").trim().slice(0, 140);
+        if (query.length < 3) return json({ product_ids: [] }, 200, origin);
+        if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
+        const catalog = (await getProducts(env)).slice(0, 100).map(item => ({
+          id: String(item.id), title: String(item.title || "").slice(0, 140),
+          description: String(item.description || "").slice(0, 700),
+          category: String(item.category || "").slice(0, 60)
+        }));
+        const instructions = [
+          "Ты — поисковый помощник каталога Агентства подарков.",
+          "Подбирай товары по смыслу, настроению, сезону, цветам, тематике и описанию, а не только по совпадению слов.",
+          "Например, запрос «что-то осеннее и тёплое» может подходить к уютным осенним, домашним, природным или сезонным работам, даже если слова запроса отсутствуют в описании.",
+          "Используй только переданный каталог. Не выдумывай товары и не меняй их ID.",
+          "Верни только JSON без Markdown в формате: {\"product_ids\":[\"id1\",\"id2\"]}.",
+          "Порядок ID — от наиболее подходящего к менее подходящему. Если подходящих работ нет, верни пустой массив.",
+          "Не включай товары, связь которых с запросом слабая. Максимум 20 ID."
+        ].join("\n");
+        try {
+          const response = await workersAiFetch(env, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
+              input: [{ role: "user", content: "Запрос покупателя: " + query + "\nКаталог: " + JSON.stringify(catalog) }],
+              max_output_tokens: 450, temperature: 0.1 })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) return json({ error: "ИИ-поиск временно недоступен." }, response.status, origin);
+          const output = typeof data.output_text === "string" ? data.output_text : "";
+          const match = output.match(/\{[\s\S]*\}/);
+          if (!match) throw new Error("Некорректный ответ ИИ-поиска");
+          const parsed = JSON.parse(match[0]);
+          const allowed = new Set(catalog.map(item => item.id));
+          const product_ids = Array.isArray(parsed.product_ids)
+            ? [...new Set(parsed.product_ids.map(String).filter(id => allowed.has(id)))].slice(0,20) : [];
+          return json({ product_ids, semantic: true }, 200, origin);
+        } catch (error) {
+          console.error("Semantic catalog search failed:", String(error).slice(0,300));
+          return json({ error: "Не удалось выполнить поиск по смыслу." }, 503, origin);
+        }
+      }
+
       if (path === "/api/me" && method === "GET") {
         const me = await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id=?")
           .bind(telegramId).first();
