@@ -1971,7 +1971,7 @@ async function loadProducts() {
  try {
   const data = await apiFetch('/api/products');
   if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
-  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.created_at || null,Number(p.early_access_enabled)===1]);
+  products = data.products.map(p => [Number(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null,Number(p.early_access_enabled)===1]);
   catalogLoaded = true;
   drawProducts();
   drawCart();
