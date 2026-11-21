@@ -2944,7 +2944,7 @@ if (path === "/api/admin/packs" && method === "GET") {
         return json({ error: "Доступ к Агентству ограничен владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
       if (activeBlock?.block_type === "purchases" && method === "POST" &&
-          ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
+          ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe","/api/packs/purchase"].includes(path)) {
         return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
 
