@@ -2744,7 +2744,7 @@ function drawCart() {
  document.getElementById('deliveryCost').textContent = pickup ? '0 ⭐ · самовывоз' : 'По адресу';
  document.getElementById('total').textContent = money(total);
  document.getElementById('cartCount').textContent = entries.reduce((s,p) => s + Number(cart[String(p[0])]||0),0) + ' товаров';
- document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + cart[p[0]],0)})` : '';
+ document.getElementById('cartBadge').textContent = entries.length ? `(${entries.reduce((s,p) => s + Number(cart[String(p[0])]||0),0)})` : '';
  const notice = document.getElementById('deliveryNotice');
  if (notice) notice.textContent = !catalogLoaded
   ? 'Загружаем актуальный каталог с сервера. Оплата пока недоступна.'
@@ -5106,7 +5106,7 @@ async function applyPromoCode(){
 }
 async function checkout() {
  const entries=products.filter(p=>Number(cart[p[0]]||0)>0);
- if(entries.some(p=>Number(cart[p[0]])>10))return toast('Максимум 10 штук одного товара.');
+ if(entries.some(p=>Number(cart[String(p[0])])>10))return toast('Максимум 10 штук одного товара.');
  if(!entries.length)return toast('Корзина пуста.');
  if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
  if(entries.some(p=>p[2]==null))return toast('У одной из работ ещё не указана цена.');
@@ -5119,7 +5119,7 @@ async function checkout() {
  if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Подтверждаем бесплатный самовывоз из пункта выдачи…':'Проверяем адрес и автомобильный маршрут…';
  try{
   const data=await apiFetch('/api/orders',{method:'POST',body:JSON.stringify({
-   items:entries.map(p=>({id:p[0],qty:Number(cart[p[0]])})),
+   items:entries.map(p=>({id:String(p[0]),qty:Number(cart[String(p[0])])})),
    gift_bundle_id:window.pendingGiftBundleId||'',
    promo_code:activePromo?.code||'',
    delivery_method:deliveryMethod,
