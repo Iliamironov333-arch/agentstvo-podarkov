@@ -1160,7 +1160,11 @@ html body > div.bottom button{
 }
 
 /* Управляемые рекламные слайды и опросы */
-.announcement-stack{display:grid;gap:12px;margin:14px 0}
+.announcement-stack{display:grid;gap:12px;margin:14px 0 0}
+.catalog-search-wrap{display:flex;align-items:center;gap:10px;margin:4px 0 14px;padding:0 14px;min-height:48px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:0 3px 12px #00000008}
+.catalog-search-wrap>span{font-size:25px;line-height:1;color:var(--muted)}
+.catalog-search-wrap input{flex:1;min-width:0;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;padding:10px 0!important;font:inherit;color:var(--text)}
+.catalog-search-wrap input::-webkit-search-cancel-button{cursor:pointer}
 .announcement-carousel{position:relative;overflow:hidden;border-radius:18px;touch-action:pan-y;isolation:isolate}
 .announcement-track{display:flex;transition:transform .32s cubic-bezier(.2,.75,.25,1);will-change:transform}
 .announcement-slide{box-sizing:border-box;flex:0 0 100%;min-width:0;min-height:142px;padding:17px;border:1px solid #d7b46f;border-radius:18px;overflow:hidden;color:#3e2a12;background:linear-gradient(135deg,#fff0c9,#fffaf0 75%);box-shadow:0 8px 24px #79511a12}
@@ -1478,8 +1482,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 </nav>
 <main>
 <section id="menuView">
- <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p></div>
- <div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div>
+ <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p><div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выберите раздел</span></div>
  <div class="menu-grid">
   <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
@@ -1705,9 +1708,9 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
    <input type="hidden" id="adminAnnouncementId">
    <label>Заголовок<input id="adminAnnouncementTitle" maxlength="100" placeholder="Например: Новая коллекция уже в каталоге"></label>
    <label>Текст объявления<textarea id="adminAnnouncementBody" rows="4" maxlength="3000" placeholder="Что важно сообщить покупателям?"></textarea></label>
-   <div class="admin-search"><label>Текст кнопки (необязательно)<input id="adminAnnouncementButtonText" maxlength="40" placeholder="Например: Открыть магазин"></label><label>Ссылка кнопки (необязательно)<input id="adminAnnouncementLink" type="url" maxlength="500" placeholder="https://…"></label></div>
+   <div class="admin-search"><label>Текст кнопки (необязательно)<input id="adminAnnouncementButtonText" maxlength="40" placeholder="Например: Открыть магазин"></label><label>Куда ведёт кнопка<select id="adminAnnouncementDestination"><option value="">Без кнопки</option><option value="catalogView">🛍️ Каталог</option><option value="supportView">🤖 ИИ-помощник</option><option value="menuView">🏠 Главное меню</option><option value="ordersView">📦 Мои заказы</option><option value="balanceView">⭐ Баланс</option><option value="profileView">👤 Профиль</option><option value="vipView">👑 VIP</option><option value="dealsView">🎁 Акции</option></select></label></div>
    <div class="admin-search"><label>Смайлик<select id="adminAnnouncementEmoji"><option>🎁</option><option>📢</option><option>✨</option><option>🎨</option><option>🛍️</option><option>💛</option><option>🍂</option><option>❄️</option><option>🌸</option><option>👑</option><option>🔥</option><option>⭐</option><option>🎉</option><option>🧸</option></select></label><label>Оформление<select id="adminAnnouncementBackground"><option value="gold">Золотистое</option><option value="cream">Кремовое</option><option value="dark">Тёмное</option><option value="rose">Розовое</option><option value="green">Зелёное</option><option value="blue">Голубое</option><option value="purple">Фиолетовое</option></select></label></div>
-   <label>Изображение (необязательно, HTTPS URL)<input id="adminAnnouncementImage" type="url" maxlength="1000" placeholder="https://…"></label>
+   <input type="hidden" id="adminAnnouncementImageUrl"><label>Фотография объявления (необязательно)<input id="adminAnnouncementImageFile" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewAdminAnnouncementImage(this)"><small class="muted">Выберите изображение из галереи устройства — оно загрузится в хранилище, как фотография товара.</small></label><div id="adminAnnouncementImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminAnnouncementImagePreview" alt="Предпросмотр объявления"><div><small id="adminAnnouncementImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminAnnouncementImage()">Убрать фотографию</button></div></div>
    <div class="admin-search"><label>Тип слайда<select id="adminAnnouncementType" onchange="updateAnnouncementTypeUi()"><option value="ad">Реклама</option><option value="poll">Опрос</option></select></label><label>Показывать в<select id="adminAnnouncementPlacement"><option value="home">Главное меню</option><option value="shop">Магазин</option><option value="both">В обоих местах</option></select></label></div>
    <label id="adminAnnouncementPollOptionsWrap" class="hidden">Варианты ответа (каждый с новой строки, от 2 до 10)<textarea id="adminAnnouncementPollOptions" rows="4" maxlength="1000" placeholder="Первый вариант&#10;Второй вариант"></textarea></label>
    <label>Порядок показа<input id="adminAnnouncementSortOrder" type="number" min="-10000" max="10000" value="0"></label>
@@ -1772,8 +1775,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <button class="secondary" type="button" onclick="showView('menuView')">← Вернуться в главное меню</button>
 </section>
 <section id="catalogView" class="hidden">
- <div class="hero"><small>Осенняя коллекция</small><h2>Подарок, который<br>запомнится ✨</h2><p>Выбирай авторские работы и необычные идеи из нашего каталога.</p></div>
- <div id="shopAnnouncements" class="announcement-stack" aria-live="polite"></div>
+ <label class="catalog-search-wrap" for="catalogSearch"><span>⌕</span><input id="catalogSearch" type="search" autocomplete="off" placeholder="Поиск по товарам и работам…"></label>
  <div class="sectionhead"><h2>Каталог</h2><span id="count">43 работы</span></div>
  <div class="panel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><b>🎁 Собери подарок</b><p class="notice" style="margin:4px 0 0">Выберите товары, оформление и дополнительные сюрпризы.</p></div><button class="primary" type="button" onclick="openGiftBuilder()">Открыть конструктор →</button></div>
  <div class="grid" id="products"></div>
@@ -1979,6 +1981,7 @@ let activePromo = null;
 let vipActive = false;
 let vipStatusVerified = false;
 let activeFilter = 'all';
+let catalogSearchQuery = '';
 let quickBuyMode=false;
 let giftBuilderSelection={};
 let giftBuilderLayoutOrder=[];
@@ -2390,7 +2393,10 @@ function drawProducts() {
  };
  // Каталог всегда начинается с самых недавно добавленных работ.
  // Названия и ручные приоритеты не должны перебивать дату создания.
+ const query=catalogSearchQuery.trim().toLocaleLowerCase('ru-RU');
  const shown = [...products].filter(p => {
+  const matchesQuery=!query || [p[1],p[6],p[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query));
+  if(!matchesQuery)return false;
   if(activeFilter==='all') return true;
   if(activeFilter==='autumn') return autumnIds.has(String(p[0]));
   if(activeFilter==='new') {
@@ -3371,16 +3377,41 @@ function updateAnnouncementAudienceUi() {
 function parseAnnouncementIds() {
  return [...new Set((document.getElementById('adminAnnouncementIds')?.value||'').split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500);
 }
+let adminAnnouncementPreviewUrl=null;
+function previewSavedAdminAnnouncementImage(url){
+ const box=document.getElementById('adminAnnouncementImagePreviewBox'),img=document.getElementById('adminAnnouncementImagePreview'),status=document.getElementById('adminAnnouncementImageStatus');
+ if(!box||!img)return;
+ if(adminAnnouncementPreviewUrl){URL.revokeObjectURL(adminAnnouncementPreviewUrl);adminAnnouncementPreviewUrl=null;}
+ if(url){img.src=url;box.classList.remove('hidden');status.textContent='Текущая фотография';}
+ else{img.removeAttribute('src');box.classList.add('hidden');status.textContent='Фотография не выбрана';}
+}
+function previewAdminAnnouncementImage(input){
+ const file=input?.files?.[0];if(!file)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)){input.value='';toast('Поддерживаются JPG, PNG и WEBP.');return;}
+ if(adminAnnouncementPreviewUrl)URL.revokeObjectURL(adminAnnouncementPreviewUrl);
+ adminAnnouncementPreviewUrl=URL.createObjectURL(file);
+ document.getElementById('adminAnnouncementImagePreview').src=adminAnnouncementPreviewUrl;
+ document.getElementById('adminAnnouncementImagePreviewBox').classList.remove('hidden');
+ document.getElementById('adminAnnouncementImageStatus').textContent=file.name+' · выбрано';
+}
+function clearAdminAnnouncementImage(){
+ const input=document.getElementById('adminAnnouncementImageFile');if(input)input.value='';
+ const url=document.getElementById('adminAnnouncementImageUrl');if(url)url.value='';
+ if(adminAnnouncementPreviewUrl){URL.revokeObjectURL(adminAnnouncementPreviewUrl);adminAnnouncementPreviewUrl=null;}
+ const img=document.getElementById('adminAnnouncementImagePreview');if(img)img.removeAttribute('src');
+ document.getElementById('adminAnnouncementImagePreviewBox')?.classList.add('hidden');
+ const status=document.getElementById('adminAnnouncementImageStatus');if(status)status.textContent='Фотография не выбрана';
+}
 function announcementFormData() {
  return {
   id:document.getElementById('adminAnnouncementId').value,
   title:document.getElementById('adminAnnouncementTitle').value.trim(),
   body:document.getElementById('adminAnnouncementBody').value.trim(),
-  link_url:document.getElementById('adminAnnouncementLink').value.trim(),
+  link_url:document.getElementById('adminAnnouncementDestination').value ? 'app:'+document.getElementById('adminAnnouncementDestination').value : '',
   button_text:document.getElementById('adminAnnouncementButtonText').value.trim(),
   emoji:document.getElementById('adminAnnouncementEmoji').value,
   background:document.getElementById('adminAnnouncementBackground').value,
-  image_url:document.getElementById('adminAnnouncementImage').value.trim(),
+  image_url:document.getElementById('adminAnnouncementImageUrl').value.trim(),
   slide_type:document.getElementById('adminAnnouncementType').value,
   placement:document.getElementById('adminAnnouncementPlacement').value,
   poll_options:document.getElementById('adminAnnouncementPollOptions').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),
@@ -3400,7 +3431,9 @@ function updateAnnouncementTypeUi() {
  document.getElementById('adminAnnouncementPollOptionsWrap')?.classList.toggle('hidden',!isPoll);
 }
 function resetAdminAnnouncementForm() {
- ['adminAnnouncementId','adminAnnouncementTitle','adminAnnouncementBody','adminAnnouncementLink','adminAnnouncementButtonText','adminAnnouncementImage','adminAnnouncementIds','adminAnnouncementStart','adminAnnouncementEnd','adminAnnouncementPollOptions'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ ['adminAnnouncementId','adminAnnouncementTitle','adminAnnouncementBody','adminAnnouncementButtonText','adminAnnouncementImageUrl','adminAnnouncementIds','adminAnnouncementStart','adminAnnouncementEnd','adminAnnouncementPollOptions'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ document.getElementById('adminAnnouncementDestination').value='';
+ clearAdminAnnouncementImage();
  document.getElementById('adminAnnouncementEmoji').value='🎁';
  document.getElementById('adminAnnouncementBackground').value='gold';
  document.getElementById('adminAnnouncementType').value='ad';
@@ -3446,7 +3479,7 @@ async function loadAdminAnnouncements() {
    const meta=document.createElement('small');meta.textContent=(item.slide_type==='poll'?'Опрос':'Реклама')+' · '+(item.placement==='both'?'главная + магазин':item.placement==='shop'?'магазин':'главная')+' · '+(item.auto_advance_enabled?'авто '+(item.auto_advance_seconds||5)+' сек.':'без авто')+' · '+(item.manual_swipe_enabled?'свайп разрешён':'свайп запрещён')+' · '+(item.audience_type==='all'?'все':'выбранные ID')+' · '+(item.starts_at||'сразу')+' — '+(item.ends_at||'без даты окончания');
    const actions=document.createElement('div');actions.className='row-actions';
    const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';
-   edit.addEventListener('click',()=>{document.getElementById('adminAnnouncementId').value=item.id;document.getElementById('adminAnnouncementTitle').value=item.title;document.getElementById('adminAnnouncementBody').value=item.body;document.getElementById('adminAnnouncementLink').value=item.link_url||'';document.getElementById('adminAnnouncementButtonText').value=item.button_text||'';document.getElementById('adminAnnouncementEmoji').value=item.emoji||'📢';document.getElementById('adminAnnouncementBackground').value=item.background||'gold';document.getElementById('adminAnnouncementImage').value=item.image_url||'';document.getElementById('adminAnnouncementType').value=item.slide_type||'ad';document.getElementById('adminAnnouncementPlacement').value=item.placement||'home';document.getElementById('adminAnnouncementPollOptions').value=(JSON.parse(item.poll_options_json||'[]')||[]).join('\n');document.getElementById('adminAnnouncementSortOrder').value=item.sort_order||0;document.getElementById('adminAnnouncementAutoAdvance').checked=!!item.auto_advance_enabled;document.getElementById('adminAnnouncementAutoSeconds').value=item.auto_advance_seconds||5;document.getElementById('adminAnnouncementManualSwipe').checked=item.manual_swipe_enabled!==0;updateAnnouncementTypeUi();document.getElementById('adminAnnouncementAudience').value=item.audience_type;let ids=[];try{ids=JSON.parse(item.audience_ids||'[]')}catch{}document.getElementById('adminAnnouncementIds').value=ids.join(', ');document.getElementById('adminAnnouncementStart').value=announcementLocalInput(item.starts_at);document.getElementById('adminAnnouncementEnd').value=announcementLocalInput(item.ends_at);document.getElementById('adminAnnouncementStatus').value=item.status;document.getElementById('adminAnnouncementEditorTitle').textContent='Редактирование объявления №'+item.id;updateAnnouncementAudienceUi();document.getElementById('adminAnnouncementEditorTitle').scrollIntoView({behavior:'smooth',block:'center'});});
+   edit.addEventListener('click',()=>{document.getElementById('adminAnnouncementId').value=item.id;document.getElementById('adminAnnouncementTitle').value=item.title;document.getElementById('adminAnnouncementBody').value=item.body;document.getElementById('adminAnnouncementDestination').value=String(item.link_url||'').startsWith('app:')?String(item.link_url).slice(4):'';document.getElementById('adminAnnouncementButtonText').value=item.button_text||'';document.getElementById('adminAnnouncementEmoji').value=item.emoji||'📢';document.getElementById('adminAnnouncementBackground').value=item.background||'gold';document.getElementById('adminAnnouncementImageUrl').value=item.image_url||'';previewSavedAdminAnnouncementImage(item.image_url||'');document.getElementById('adminAnnouncementType').value=item.slide_type||'ad';document.getElementById('adminAnnouncementPlacement').value=item.placement||'home';document.getElementById('adminAnnouncementPollOptions').value=(JSON.parse(item.poll_options_json||'[]')||[]).join('\n');document.getElementById('adminAnnouncementSortOrder').value=item.sort_order||0;document.getElementById('adminAnnouncementAutoAdvance').checked=!!item.auto_advance_enabled;document.getElementById('adminAnnouncementAutoSeconds').value=item.auto_advance_seconds||5;document.getElementById('adminAnnouncementManualSwipe').checked=item.manual_swipe_enabled!==0;updateAnnouncementTypeUi();document.getElementById('adminAnnouncementAudience').value=item.audience_type;let ids=[];try{ids=JSON.parse(item.audience_ids||'[]')}catch{}document.getElementById('adminAnnouncementIds').value=ids.join(', ');document.getElementById('adminAnnouncementStart').value=announcementLocalInput(item.starts_at);document.getElementById('adminAnnouncementEnd').value=announcementLocalInput(item.ends_at);document.getElementById('adminAnnouncementStatus').value=item.status;document.getElementById('adminAnnouncementEditorTitle').textContent='Редактирование объявления №'+item.id;updateAnnouncementAudienceUi();document.getElementById('adminAnnouncementEditorTitle').scrollIntoView({behavior:'smooth',block:'center'});});
    const toggle=document.createElement('button');toggle.type='button';toggle.className='secondary';toggle.textContent=item.status==='published'?'Снять с публикации':item.status==='archived'?'Вернуть в черновики':'Опубликовать';
    toggle.addEventListener('click',async()=>{const next=item.status==='published'?'archived':'published';if(!confirm(next==='published'?'Опубликовать объявление?':'Снять объявление с публикации?'))return;toggle.disabled=true;try{await apiFetch('/api/admin/announcement-status',{method:'POST',body:JSON.stringify({id:item.id,status:next})});toast('Статус объявления изменён.');await loadAdminAnnouncements();}catch(e){toast(e.message||'Не удалось изменить статус.');}finally{toggle.disabled=false;}});
    actions.append(edit,toggle);card.append(title,body,meta,actions);root.append(card);
@@ -3455,10 +3488,21 @@ async function loadAdminAnnouncements() {
 }
 async function saveAdminAnnouncement() {
  const data=announcementFormData();
+ const imageFile=document.getElementById('adminAnnouncementImageFile')?.files?.[0]||null;
  if(data.title.length<2||!data.body){toast('Заполните заголовок и текст.');return;}
  if(data.audience_type==='selected'&&!data.audience_ids.length){toast('Укажите Telegram ID получателей.');return;}
- try {await apiFetch('/api/admin/announcement-save',{method:'POST',body:JSON.stringify(data)});toast('Объявление сохранено.');resetAdminAnnouncementForm();await loadAdminAnnouncements();}
- catch(e){toast(e.message||'Не удалось сохранить объявление.');}
+ try {
+  const saved=await apiFetch('/api/admin/announcement-save',{method:'POST',body:JSON.stringify(data)});
+  const announcementId=String(data.id||saved.id||'');
+  if(imageFile){
+   if(!announcementId)throw new Error('Объявление сохранено, но сервер не вернул его номер для фотографии.');
+   const compressed=await prepareAdminProductImage(imageFile);
+   const form=new FormData();form.append('announcement_id',announcementId);form.append('image',compressed,'announcement-image.webp');
+   const uploaded=await apiFetch('/api/admin/announcement-image-upload',{method:'POST',body:form});
+   document.getElementById('adminAnnouncementImageUrl').value=uploaded.image_url||'';
+  }
+  toast('Объявление сохранено.');resetAdminAnnouncementForm();await loadAdminAnnouncements();
+ } catch(e){toast(e.message||'Не удалось сохранить объявление.');}
 }
 function renderAnnouncementCarousel(root,items){
  if(!root)return;root.replaceChildren();if(!items.length){root.classList.add('hidden');return;}root.classList.remove('hidden');
@@ -3475,7 +3519,7 @@ function renderAnnouncementCarousel(root,items){
    const options=optionsFor(item),results=Array.isArray(item.vote_results)?item.vote_results:options.map(()=>0),total=results.reduce((a,b)=>a+Number(b||0),0);
    if(item.my_vote!==null&&item.my_vote!==undefined){options.forEach((label,i)=>{const count=Number(results[i]||0),percent=total?Math.round(count/total*100):0,row=document.createElement('div');row.className='announcement-poll-result';row.style.setProperty('--poll-width',percent+'%');const span=document.createElement('span');span.textContent=label+' · '+percent+'% ('+count+')'+(Number(item.my_vote)===i?' ✓':'');row.append(span);card.append(row);});const note=document.createElement('p');note.className='announcement-poll-note';note.textContent='Ваш голос учтён · Всего голосов: '+total;card.append(note);}
    else{const group=document.createElement('div');group.className='announcement-poll-options';options.forEach((label,i)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',async()=>{button.disabled=true;try{await apiFetch('/api/announcement-vote',{method:'POST',body:JSON.stringify({announcement_id:item.id,option_index:i})});toast('Голос принят!');await loadAnnouncements();}catch(e){toast(e.message||'Не удалось отправить голос.');button.disabled=false;}});group.append(button);});card.append(group);}
-  }else if(item.link_url){const link=document.createElement('a');link.className='announcement-cta';link.href=item.link_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=item.button_text||'Подробнее';card.append(link);}
+  }else if(item.link_url){const link=document.createElement('button');link.type='button';link.className='announcement-cta';link.textContent=item.button_text||'Подробнее';link.addEventListener('click',()=>{const target=String(item.link_url).replace(/^app:/,'');const allowed=['menuView','catalogView','supportView','balanceView','profileView','ordersView','vipView','dealsView','aboutView','leaderboardView'];if(allowed.includes(target))showView(target);});card.append(link);}
   track.append(card);const dot=document.createElement('span');dots.append(dot);
  });
  const dotEls=Array.from(dots.children),update=()=>{track.style.transform='translateX(-'+index*100+'%)';dotEls.forEach((d,i)=>d.classList.toggle('active',i===index));};
@@ -3489,7 +3533,6 @@ async function loadAnnouncements(){
  if(!initData)return;
  try{const data=await apiFetch('/api/announcements'),items=data.announcements||[];
   renderAnnouncementCarousel(document.getElementById('customerAnnouncements'),items.filter(x=>x.placement==='home'||x.placement==='both'));
-  renderAnnouncementCarousel(document.getElementById('shopAnnouncements'),items.filter(x=>x.placement==='shop'||x.placement==='both'));
  }catch(error){console.warn('Announcements unavailable:',error);}
 }
 
@@ -5030,6 +5073,7 @@ async function openCase() {
 }
 
 updateDeliveryMethodUI();
+document.getElementById('catalogSearch')?.addEventListener('input',event=>{catalogSearchQuery=event.target.value||'';drawProducts();});
 document.querySelectorAll('#filters button[data-filter]').forEach(b => b.onclick = () => {
  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active',x === b));
  activeFilter = b.dataset.filter;
