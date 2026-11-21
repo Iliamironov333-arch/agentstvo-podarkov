@@ -4360,6 +4360,7 @@ async function loadSurprisePacks(){
 function renderSurprisePacks(){
  const root=document.getElementById('surprisePacksList');if(!root)return;root.replaceChildren();
  if(!surprisePacks.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Сейчас новых паков нет. Загляните позже!';root.append(empty);return;}
+ const count=document.getElementById('count');if(count&&activeFilter==='packs')count.textContent=surprisePacks.length+' паков';
  surprisePacks.forEach(pack=>{
   const type=SURPRISE_PACK_TYPES[pack.pack_type]||SURPRISE_PACK_TYPES.common;
   const card=document.createElement('article');card.className='product surprise-pack-card';
