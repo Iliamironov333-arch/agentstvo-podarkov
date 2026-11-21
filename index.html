@@ -1851,14 +1851,9 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
  <div id="vipTariffs" class="panel"><h3>✨ VIP на месяц</h3><div class="price">500 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Доступ на 30 дней. Подписка активируется после подтверждения оплаты Telegram.</p><button class="primary" onclick="subscribeVip('subscription')">Оформить VIP на месяц</button></div>
  <div class="panel"><h3>♾️ VIP навсегда</h3><div class="price">2 000 ⭐ <small>оплата счётом Telegram Stars</small></div><p class="muted">Постоянный VIP-доступ. Статус фиксируется в серверной базе после подтверждения платежа.</p><button class="primary" onclick="subscribeVip('lifetime')">Купить VIP навсегда</button></div>
  <div class="panel"><h3>👑 Преимущества подписки</h3><div class="muted" style="display:grid;gap:10px">
-  <div>🤖 <strong>Продвинутый ИИ-помощник</strong><br>Автоматически включается для активных VIP.</div>
-  <div>💬 <strong>5 диалогов с ИИ</strong><br>Лимит VIP — пять диалогов; настройка в этом разделе не предусмотрена.</div>
   <div>⚡ <strong>Приоритетная доставка</strong><br>При оформлении заказа доступна VIP-опция приоритетной доставки.</div>
-  <div>✨ <strong>Ранний доступ к новым поделкам</strong><br>VIP смогут приобретать новые работы раньше общего выхода.</div>
-  <div>👤 <strong>Редактирование имени профиля</strong><br>Дополнительная возможность для подписчиков.</div>
-  <div>⭐ <strong>+20% Stars при продаже бонусов</strong><br>VIP получает повышенное начисление на баланс при продаже бонусов.</div>
- </div><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p><p class="notice" id="vipBenefitsPrompt">Активируйте подписку, чтобы управлять дополнительными преимуществами.</p></div>
- <div class="panel"><h3>🎁 Кэшбэк 5%</h3><p class="muted">5% стоимости обычной покупки возвращается на баланс. Кэшбэк доступен всем пользователям и не начисляется за покупку VIP-подписки.</p></div>
+  <div>✨ <strong>Ранний доступ к новым поделкам</strong><br>Владелец, модераторы и активные VIP видят отмеченные товары сразу; остальным покупателям они открываются через 72 часа после публикации.</div>
+ </div><p class="notice" id="vipStatus">Статус VIP загружается из серверной базы.</p></div>
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2 id="supportMainHeading">🤖 ИИ помощник</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
