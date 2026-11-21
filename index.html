@@ -1482,7 +1482,7 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 </nav>
 <main>
 <section id="menuView">
- <div class="hero announcement-home-hero"><div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div></div>
+ <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p><div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выберите раздел</span></div>
  <div class="menu-grid">
   <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
@@ -3505,19 +3505,11 @@ async function saveAdminAnnouncement() {
  } catch(e){toast(e.message||'Не удалось сохранить объявление.');}
 }
 function renderAnnouncementCarousel(root,items){
- if(!root)return;root.replaceChildren();
- const intro={id:'agency-intro',title:'Агентство подарков 🎁',body:'Авторские поделки, рисунки и подарки с душой.',emoji:'🎁',background:'gold',slide_type:'intro',auto_advance_enabled:1,auto_advance_seconds:5,manual_swipe_enabled:1};
- const seen=new Set(),unique=[];
- (Array.isArray(items)?items:[]).forEach(item=>{
-  const signature=[item.slide_type||'ad',item.title||'',item.body||'',item.image_url||'',item.link_url||''].map(x=>String(x).trim().toLocaleLowerCase()).join('|');
-  if(seen.has(signature))return;seen.add(signature);unique.push(item);
- });
- const slides=[intro,...unique];
- root.classList.remove('hidden');
+ if(!root)return;root.replaceChildren();if(!items.length){root.classList.add('hidden');return;}root.classList.remove('hidden');
  const carousel=document.createElement('div'),track=document.createElement('div'),dots=document.createElement('div');carousel.className='announcement-carousel';track.className='announcement-track';dots.className='announcement-carousel-dots';
  let index=0,timer=null,startX=null;
  const optionsFor=item=>{try{return JSON.parse(item.poll_options_json||'[]')}catch{return []}};
- slides.forEach(item=>{
+ items.forEach(item=>{
   const card=document.createElement('article');card.className='announcement-slide announcement-bg-'+(item.background||'gold');
   const emoji=document.createElement('div');emoji.className='announcement-emoji';emoji.textContent=item.emoji||'📢';card.append(emoji);
   if(item.image_url&&/^https:\/\//i.test(item.image_url)){const img=document.createElement('img');img.className='announcement-image';img.src=item.image_url;img.alt='';img.loading='lazy';card.append(img);}
@@ -3531,11 +3523,11 @@ function renderAnnouncementCarousel(root,items){
   track.append(card);const dot=document.createElement('span');dots.append(dot);
  });
  const dotEls=Array.from(dots.children),update=()=>{track.style.transform='translateX(-'+index*100+'%)';dotEls.forEach((d,i)=>d.classList.toggle('active',i===index));};
- const schedule=()=>{if(timer)clearTimeout(timer);timer=null;const active=slides[index];if(slides.length>1&&Number(active.auto_advance_enabled)===1){timer=setTimeout(()=>{index=(index+1)%slides.length;update();schedule();},Math.max(2,Math.min(60,Number(active.auto_advance_seconds)||5))*1000);}};
- const move=delta=>{if(slides[index]?.manual_swipe_enabled===0)return;index=(index+delta+slides.length)%slides.length;update();schedule();};
- carousel.addEventListener('pointerdown',e=>{if(slides[index]?.manual_swipe_enabled===0)return;startX=e.clientX;});
+ const schedule=()=>{if(timer)clearTimeout(timer);timer=null;const active=items[index];if(items.length>1&&Number(active.auto_advance_enabled)===1){timer=setTimeout(()=>{index=(index+1)%items.length;update();schedule();},Math.max(2,Math.min(60,Number(active.auto_advance_seconds)||5))*1000);}};
+ const move=delta=>{if(items[index]?.manual_swipe_enabled===0)return;index=(index+delta+items.length)%items.length;update();schedule();};
+ carousel.addEventListener('pointerdown',e=>{if(items[index]?.manual_swipe_enabled===0)return;startX=e.clientX;});
  carousel.addEventListener('pointerup',e=>{if(startX===null)return;const dx=e.clientX-startX;startX=null;if(Math.abs(dx)>38)move(dx<0?1:-1);});
- carousel.addEventListener('pointercancel',()=>{startX=null;});carousel.append(track);root.append(carousel);if(slides.length>1)root.append(dots);update();schedule();
+ carousel.addEventListener('pointercancel',()=>{startX=null;});carousel.append(track);root.append(carousel);if(items.length>1)root.append(dots);update();schedule();
 }
 async function loadAnnouncements(){
  if(!initData)return;
