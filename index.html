@@ -5102,7 +5102,8 @@ async function runSemanticCatalogSearch(query,requestId){
   const data=await apiFetch('/api/catalog-semantic-search',{method:'POST',body:JSON.stringify({query:query.trim()})});
   if(requestId!==semanticSearchRequest||query!==(document.getElementById('catalogSearch')?.value||''))return;
   const ids=Array.isArray(data.product_ids)?data.product_ids.map(String):[];
-  semanticSearchProductIds=ids;
+  const literalIds=products.filter(product=>[product[1],product[6],product[4]].some(value=>String(value||'').toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU')))).map(product=>String(product[0]));
+  semanticSearchProductIds=[...new Set([...literalIds,...ids])];
   if(hint)hint.textContent=ids.length?'✨ ИИ подобрал '+ids.length+' '+(ids.length===1?'подходящую работу':'подходящих работ')+' по смыслу запроса.':'По смыслу запроса подходящих работ не нашлось. Попробуйте описать иначе.';
   drawProducts();
  }catch(error){
