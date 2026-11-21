@@ -35,6 +35,25 @@ CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, or
 
 CREATE TABLE IF NOT EXISTS orders (     id TEXT PRIMARY KEY,     telegram_id TEXT NOT NULL,     product_id TEXT,     product_title TEXT NOT NULL,     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),     price_stars INTEGER NOT NULL CHECK (price_stars >= 0),     discount_percent INTEGER NOT NULL DEFAULT 0,     total_stars INTEGER NOT NULL CHECK (total_stars >= 0),     payment_status TEXT NOT NULL DEFAULT 'pending'         CHECK (payment_status IN ('pending','paid','cancelled','refunded')),     fulfillment_status TEXT NOT NULL DEFAULT 'awaiting_payment'         CHECK (fulfillment_status IN ('awaiting_payment','awaiting_delivery','delivered','cancelled')),     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     paid_at TEXT,     delivered_at TEXT, promo_code TEXT, discount_stars INTEGER NOT NULL DEFAULT 0, priority_order INTEGER NOT NULL DEFAULT 0,     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id),     FOREIGN KEY (product_id) REFERENCES products(id) );
 
+CREATE TABLE IF NOT EXISTS surprise_packs (
+  id TEXT PRIMARY KEY,
+  pack_type TEXT NOT NULL CHECK(pack_type IN ('common','rare','epic','legendary','secret')),
+  title TEXT NOT NULL,
+  price_points INTEGER NOT NULL CHECK(price_points > 0),
+  reward_type TEXT NOT NULL CHECK(reward_type IN ('product','points')),
+  reward_product_id TEXT,
+  reward_points INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','sold','archived')),
+  is_active INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sold_at TEXT,
+  sold_to TEXT,
+  order_id TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_packs_one_active_type
+  ON surprise_packs(pack_type) WHERE status='active' AND is_active=1;
+
 CREATE TABLE IF NOT EXISTS payment_intents (payload TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('order','topup','vip')), reference_id TEXT, amount_stars INTEGER NOT NULL CHECK (amount_stars > 0), bonus_points INTEGER NOT NULL DEFAULT 0 CHECK (bonus_points >= 0), plan_type TEXT, status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','failed')), charge_id TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, paid_at TEXT, FOREIGN KEY (telegram_id) REFERENCES users(telegram_id));
 
 CREATE TABLE IF NOT EXISTS payments (     id INTEGER PRIMARY KEY AUTOINCREMENT,     order_id TEXT NOT NULL UNIQUE,     telegram_id TEXT NOT NULL,     telegram_payment_charge_id TEXT UNIQUE,     currency TEXT NOT NULL DEFAULT 'XTR'         CHECK (currency = 'XTR'),     amount_stars INTEGER NOT NULL CHECK (amount_stars > 0),     status TEXT NOT NULL DEFAULT 'pending'         CHECK (status IN ('pending','paid','refunded','failed')),     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,     confirmed_at TEXT,     FOREIGN KEY (order_id) REFERENCES orders(id),     FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) );
