@@ -288,6 +288,21 @@ async function processPendingOrderPostcards(env, limit = 10) {
 }
 
 async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TABLE products ADD COLUMN display_order INTEGER").run();}catch{} await env.DB.prepare("UPDATE products SET display_order=(SELECT COUNT(*) FROM products p2 WHERE (p2.created_at>products.created_at OR (p2.created_at=products.created_at AND CAST(p2.id AS INTEGER)>CAST(products.id AS INTEGER)))) WHERE display_order IS NULL").run();}
+async function hasEarlyAccessPrivileges(env, telegramId) {
+  const id=String(telegramId||"").trim();
+  if(!id)return false;
+  if(await isAdminAccount(env,id))return true;
+  const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(id).first();
+  return !!vip;
+}
+function filterEarlyAccessProducts(products, privileged) {
+  const now=Date.now();
+  return (products||[]).filter(product=>{
+    if(Number(product.early_access_enabled)!==1 || privileged)return true;
+    const published=Date.parse(String(product.published_at||"").replace(" ","T")+"Z");
+    return Number.isFinite(published) && now-published>=72*60*60*1000;
+  });
+}
 async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
@@ -2866,7 +2881,8 @@ if (path === "/api/admin/products" && method === "GET") {
       }
 
       if (path === "/api/products" && method === "GET") {
-        return json({ products: await getProducts(env) }, 200, origin);
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        return json({ products: filterEarlyAccessProducts(await getProducts(env),privileged) }, 200, origin);
       }
 
       if (path === "/api/catalog-semantic-search" && method === "POST") {
@@ -3215,11 +3231,13 @@ if (path === "/api/admin/products" && method === "GET") {
         if ((priorityDelivery || priorityOrder) && !activeVipForOrder) return json({error:"Приоритетная доставка и приоритетная обработка доступны только с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        const visibleCatalog=filterEarlyAccessProducts(catalog,privileged);
         const quantities = new Map();
         for (const item of body.items) {
           const id = String(item.id ?? "");
           const qty = Number(item.qty);
-          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !catalog.some(p => String(p.id) === id)) return json({ error: "Некорректный товар или количество" }, 400, origin);
+          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !visibleCatalog.some(p => String(p.id) === id)) return json({ error: "Товар пока доступен только владельцу, модераторам и VIP-покупателям либо некорректно указано количество." }, 403, origin);
           quantities.set(id, (quantities.get(id) || 0) + qty);
           if (quantities.get(id) > 10) return json({ error: "Максимум 10 единиц одного товара" }, 400, origin);
         }
