@@ -4200,7 +4200,7 @@ async function loadAdminPacks(){
  status.textContent='Загружаем паки…';root.replaceChildren();
  try{
   const data=await apiFetch('/api/admin/packs');adminPacksCache=Array.isArray(data.packs)?data.packs:[];
-  const select=document.getElementById('adminPackProduct');if(select){select.replaceChildren();(data.products||[]).forEach(p=>{const option=document.createElement('option');option.value=String(p.id);option.textContent=p.title+' · '+Number(p.price_stars||0)+' ⭐';select.append(option);});}
+  const select=document.getElementById('adminPackProduct');if(select){select.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Выберите поделку из каталога';placeholder.disabled=true;placeholder.selected=true;select.append(placeholder);(data.products||[]).forEach(p=>{const option=document.createElement('option');option.value=String(p.id);option.textContent=p.title+' · '+Number(p.price_stars||0)+' ⭐';select.append(option);});}
   status.textContent='Паков: '+adminPacksCache.length+' · Активные паки отображаются в каталоге';
   if(!adminPacksCache.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Паков пока нет. Создайте первый!';root.append(empty);return;}
   adminPacksCache.forEach(pack=>{
@@ -4223,7 +4223,7 @@ function newAdminPack(){
  document.getElementById('adminPackEditorTitle').textContent='Новый пак';
  document.getElementById('adminPackId').value='';document.getElementById('adminPackType').value='common';
  document.getElementById('adminPackTitle').value='';document.getElementById('adminPackPrice').value='';
- document.getElementById('adminPackRewardType').value='product';document.getElementById('adminPackRewardPoints').value='';
+ document.getElementById('adminPackRewardType').value='product';document.getElementById('adminPackRewardPoints').value='';document.getElementById('adminPackProduct').value='';
  document.getElementById('adminPackActive').checked=true;toggleAdminPackRewardFields();
  editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -4290,7 +4290,7 @@ async function purchaseSurprisePack(packId,button){
  if(button)button.disabled=true;
  try{
   const result=await apiFetch('/api/packs/purchase',{method:'POST',body:JSON.stringify({pack_id:String(packId)})});
-  await loadSurprisePacks();showPackReveal(result);toast('Пак успешно открыт!');
+  await loadSurprisePacks();await loadMe();showPackReveal(result);toast('Пак успешно открыт!');
  }catch(error){toast(error.message||'Не удалось открыть пак.');if(button)button.disabled=false;}
 }
 function newAdminProduct(){
