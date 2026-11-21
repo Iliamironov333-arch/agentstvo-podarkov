@@ -2910,7 +2910,7 @@ if (path === "/api/admin/packs" && method === "GET") {
       }
 
       // Emergency sales pause: keep the catalog readable and existing paid orders intact.
-      if (method === "POST" && ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe"].includes(path)) {
+      if (method === "POST" && ["/api/orders","/api/custom-orders","/api/balance/topup","/api/vip/subscribe","/api/packs/purchase"].includes(path)) {
         const salesPause = await env.DB.prepare("SELECT value FROM app_settings WHERE key='sales_paused'").first();
         if (salesPause?.value === "1") return json({ error: "Оформление новых покупок временно приостановлено владельцем. Уже оплаченные заказы продолжают обрабатываться." }, 503, origin);
       }
@@ -2964,8 +2964,9 @@ if (path === "/api/admin/packs" && method === "GET") {
         if(!Number.isSafeInteger(price)||price<1)return json({error:"У пака некорректная цена."},409,origin);
         let rewardProduct=null;
         if(pack.reward_type==="product"){
-          rewardProduct=await env.DB.prepare("SELECT id,title,image_url FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
+          rewardProduct=await env.DB.prepare("SELECT id,title,image_url,early_access_enabled,published_at FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
           if(!rewardProduct)return json({error:"Награда больше недоступна. Обратитесь в поддержку."},409,origin);
+          if(!filterEarlyAccessProducts([rewardProduct],await hasEarlyAccessPrivileges(env,telegramId)).length)return json({error:"Эта награда пока доступна только владельцу, модераторам и VIP-покупателям."},403,origin);
         } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<1) {
           return json({error:"У пака некорректно настроена награда."},409,origin);
         }
