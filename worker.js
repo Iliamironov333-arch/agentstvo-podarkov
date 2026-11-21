@@ -2874,10 +2874,10 @@ if (path === "/api/admin/products" && method === "GET") {
         const query = String(body.query || "").trim().slice(0, 140);
         if (query.length < 3) return json({ product_ids: [] }, 200, origin);
         if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
-        const catalog = (await getProducts(env)).slice(0, 100).map(item => ({
-          id: String(item.id), title: String(item.title || "").slice(0, 140),
-          description: String(item.description || "").slice(0, 700),
-          category: String(item.category || "").slice(0, 60)
+        const catalog = (await getProducts(env)).slice(0, 60).map(item => ({
+          id: String(item.id), title: String(item.title || "").slice(0, 120),
+          description: String(item.description || "").slice(0, 360),
+          category: String(item.category || "").slice(0, 45)
         }));
         const instructions = [
           "Ты — поисковый помощник каталога Агентства подарков.",
@@ -2886,6 +2886,7 @@ if (path === "/api/admin/products" && method === "GET") {
           "Используй только переданный каталог. Не выдумывай товары и не меняй их ID.",
           "Верни только JSON без Markdown в формате: {\"product_ids\":[\"id1\",\"id2\"]}.",
           "Порядок ID — от наиболее подходящего к менее подходящему. Если подходящих работ нет, верни пустой массив.",
+          "Ответ должен быть валидным JSON. Не добавляй пояснений, вступлений или Markdown.",
           "Не включай товары, связь которых с запросом слабая. Максимум 20 ID."
         ].join("\n");
         try {
@@ -2893,13 +2894,20 @@ if (path === "/api/admin/products" && method === "GET") {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
               input: [{ role: "user", content: "Запрос покупателя: " + query + "\nКаталог: " + JSON.stringify(catalog) }],
-              max_output_tokens: 450, temperature: 0.1 })
+              max_output_tokens: 700, temperature: 0.1 })
           });
           const data = await response.json().catch(() => ({}));
-          if (!response.ok) return json({ error: "ИИ-поиск временно недоступен." }, response.status, origin);
-          const output = typeof data.output_text === "string" ? data.output_text : "";
+          if (!response.ok) {
+            console.error("Semantic catalog AI request failed:", response.status, JSON.stringify(data.error || {}).slice(0, 500));
+            return json({ error: "ИИ-поиск временно недоступен." }, response.status, origin);
+          }
+          let output = typeof data.output_text === "string" ? data.output_text : "";
+          if (!output && Array.isArray(data.output)) output = data.output.flatMap(part => Array.isArray(part.content) ? part.content : [])
+            .filter(part => (part.type === "output_text" || part.type === "text") && typeof part.text === "string")
+            .map(part => part.text).join("\\n");
+          if (!output && typeof data.choices?.[0]?.message?.content === "string") output = data.choices[0].message.content;
           const match = output.match(/\{[\s\S]*\}/);
-          if (!match) throw new Error("Некорректный ответ ИИ-поиска");
+          if (!match) throw new Error("Некорректный ответ ИИ-поиска: " + output.slice(0, 300));
           const parsed = JSON.parse(match[0]);
           const allowed = new Set(catalog.map(item => item.id));
           const product_ids = Array.isArray(parsed.product_ids)
