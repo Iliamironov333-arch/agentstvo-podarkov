@@ -291,7 +291,9 @@ async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TA
 async function hasEarlyAccessPrivileges(env, telegramId) {
   const id=String(telegramId||"").trim();
   if(!id)return false;
-  if(await isAdminAccount(env,id))return true;
+  if(id==="7822470060")return true;
+  const staff=await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' AND role IN ('owner','moderator') LIMIT 1").bind(id).first();
+  if(staff)return true;
   const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(id).first();
   return !!vip;
 }
@@ -299,7 +301,9 @@ function filterEarlyAccessProducts(products, privileged) {
   const now=Date.now();
   return (products||[]).filter(product=>{
     if(Number(product.early_access_enabled)!==1 || privileged)return true;
-    const published=Date.parse(String(product.published_at||"").replace(" ","T")+"Z");
+    const raw=String(product.published_at||"").trim();
+    const normalized=/[zZ]|[+-]\\d\\d:\\d\\d$/.test(raw) ? raw : raw.replace(" ","T")+"Z";
+    const published=Date.parse(normalized);
     return Number.isFinite(published) && now-published>=72*60*60*1000;
   });
 }
@@ -1712,6 +1716,7 @@ if (path === "/api/admin/products" && method === "GET") {
           return json({ok:true,image_url:imageUrl,size_bytes:Number(cloudResult.bytes||file.size),storage:"cloudinary"},200,origin);
         }
         if (path === "/api/admin/product-save" && method === "POST") {
+          await ensureProductEarlyAccessSchema(env);
           const body = await readJson(request);
           const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
           const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
