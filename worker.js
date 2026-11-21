@@ -1633,7 +1633,7 @@ if (path === "/api/admin/products" && method === "GET") {
           const file=form.get("image");
           if(!/^\\d{1,12}$/.test(id)||!file||typeof file.arrayBuffer!=="function")return json({error:"Выберите объявление и фотографию."},400,origin);
           if(!["image/jpeg","image/png","image/webp"].includes(file.type))return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
-          if(file.size<1||file.size>900*1024)return json({error:"Размер изображения после сжатия не должен превышать 900 КБ."},413,origin);
+          if(file.size<1||file.size>5*1024*1024)return json({error:"Размер изображения после сжатия не должен превышать 5 МБ."},413,origin);
           if(!env.CLOUDINARY_API_KEY||!env.CLOUDINARY_API_SECRET)return json({error:"Cloudinary ещё не подключён: проверьте секреты Worker."},503,origin);
           const announcement=await env.DB.prepare("SELECT id FROM announcements WHERE id=?").bind(Number(id)).first();
           if(!announcement)return json({error:"Сначала сохраните объявление."},404,origin);
@@ -1660,7 +1660,7 @@ if (path === "/api/admin/products" && method === "GET") {
           const file = form.get("image");
           if (!id || !file || typeof file.arrayBuffer !== "function") return json({error:"Выберите товар и файл изображения."},400,origin);
           if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
-          if (file.size < 1 || file.size > 900*1024) return json({error:"Размер изображения после сжатия не должен превышать 900 КБ."},413,origin);
+          if (file.size < 1 || file.size > 900*1024) return json({error:"Размер изображения после сжатия не должен превышать 5 МБ."},413,origin);
           if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return json({error:"Cloudinary ещё не подключён: добавьте CLOUDINARY_API_KEY и CLOUDINARY_API_SECRET в секреты Worker."},503,origin);
           const product = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
           if (!product) return json({error:"Сначала сохраните товар."},404,origin);
