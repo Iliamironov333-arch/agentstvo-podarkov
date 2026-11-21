@@ -4171,7 +4171,7 @@ async function prepareAdminProductImage(file){
  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.82));
  if(!blob)throw new Error('Не удалось сжать изображение.');
- if(blob.size>900*1024)throw new Error('Фото после сжатия всё ещё больше 900 КБ. Выберите изображение поменьше.');
+ if(blob.size>5*1024*1024)throw new Error('Фото после сжатия больше 5 МБ. Выберите изображение поменьше.');
  return new File([blob],'product-image.webp',{type:blob.type||'image/webp'});
 }
 async function saveAdminProduct(){
