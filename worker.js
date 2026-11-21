@@ -927,6 +927,8 @@ async function handleWebhook(request, env) {
         statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
           .bind(earned, telegramId));
       }
+      statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
+      statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const cashback = Math.floor(Math.max(0,Number(order.total_stars||0))*0.05);
       if (cashback > 0) {
         statements.push(env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'vip_cashback',?,? WHERE changes()=1 AND EXISTS (SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP))")
@@ -934,8 +936,6 @@ async function handleWebhook(request, env) {
         statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
           .bind(cashback,telegramId));
       }
-      statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
-      statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
       if (!results[1] || !results[1].meta || results[1].meta.changes !== 1) return json({ ok: true });
       const custom=await env.DB.prepare("SELECT id,subject FROM custom_orders WHERE id=? AND telegram_id=?").bind(order.id,telegramId).first();
