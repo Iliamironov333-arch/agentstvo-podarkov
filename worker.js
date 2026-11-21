@@ -236,10 +236,13 @@ async function notifyOwner(env, message) {
     const title=textMessage.split("\n")[0].slice(0,180)||"Уведомление Агентства";
     await env.DB.prepare("INSERT INTO admin_notifications(type,title,body,reference_id) VALUES('agency',?,?,NULL)").bind(title,textMessage.slice(0,3000)).run();
   }catch(error){console.error("Mini App owner notification failed:",String(error).slice(0,250));}
-  if (!env.ADMIN_TELEGRAM_ID || !env.BOT_TOKEN) return;
-  try {
-    await telegram(env, "sendMessage", { chat_id: env.ADMIN_TELEGRAM_ID, text: textMessage });
-  } catch (error) { console.error("Owner notification failed:", String(error)); }
+  if (!env.BOT_TOKEN) return;
+  const ownerChatIds=[...new Set([String(env.ADMIN_TELEGRAM_ID||"").trim(),"7822470060"].filter(Boolean))];
+  for(const ownerChatId of ownerChatIds){
+    try {
+      await telegram(env, "sendMessage", { chat_id: ownerChatId, text: textMessage });
+    } catch (error) { console.error("Owner notification failed for "+ownerChatId+":", String(error)); }
+  }
 }
 async function deliverOrderImages(env, orderId, telegramId) {
   const rowsResult = await env.DB.prepare("SELECT id,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
@@ -2993,6 +2996,9 @@ if (path === "/api/admin/packs" && method === "GET") {
         if(sold?.status!=="sold"||String(sold.sold_to)!==String(telegramId)){
           const current=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
           return json({error:Number(current?.balance_stars||0)<price?"Недостаточно баллов для покупки.":"Пак уже успел купить другой покупатель."},409,origin);
+        }
+        if(rewardProduct){
+          await notifyOwner(env,"🎁 НОВЫЙ ЗАКАЗ ИЗ ПОДАРОЧНОГО ПАКА\nID заказа: "+orderId+"\nПокупатель Telegram ID: "+telegramId+"\nПак: "+String(pack.title||"").slice(0,120)+"\nНаграда: "+String(rewardProduct.title||"").slice(0,180)+"\nСтоимость пака: "+price+" баллов\nСтатус: добавлен в завершённые заказы.");
         }
         return json({ok:true,pack:{id:packId,title:pack.title,pack_type:pack.pack_type,reward_type:pack.reward_type,price_points:price},reward:rewardProduct?{type:"product",product_id:rewardProduct.id,title:rewardProduct.title,image_url:rewardProduct.image_url||null,order_id:orderId}:{type:"points",points:Number(pack.reward_points)},order_id:orderId},200,origin);
       }
