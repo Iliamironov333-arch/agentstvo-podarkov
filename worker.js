@@ -288,11 +288,36 @@ async function processPendingOrderPostcards(env, limit = 10) {
 }
 
 async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TABLE products ADD COLUMN display_order INTEGER").run();}catch{} await env.DB.prepare("UPDATE products SET display_order=(SELECT COUNT(*) FROM products p2 WHERE (p2.created_at>products.created_at OR (p2.created_at=products.created_at AND CAST(p2.id AS INTEGER)>CAST(products.id AS INTEGER)))) WHERE display_order IS NULL").run();}
+async function hasEarlyAccessPrivileges(env, telegramId) {
+  const id=String(telegramId||"").trim();
+  if(!id)return false;
+  if(id==="7822470060")return true;
+  const staff=await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' AND role IN ('owner','moderator') LIMIT 1").bind(id).first();
+  if(staff)return true;
+  const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(id).first();
+  return !!vip;
+}
+function filterEarlyAccessProducts(products, privileged) {
+  const now=Date.now();
+  return (products||[]).filter(product=>{
+    if(Number(product.early_access_enabled)!==1 || privileged)return true;
+    const raw=String(product.published_at||"").trim();
+    const normalized=/[zZ]|[+-]\d\d:\d\d$/.test(raw) ? raw : raw.replace(" ","T")+"Z";
+    const published=Date.parse(normalized);
+    return Number.isFinite(published) && now-published>=72*60*60*1000;
+  });
+}
+async function ensureProductEarlyAccessSchema(env) {
+  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN early_access_enabled INTEGER NOT NULL DEFAULT 0").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN published_at TEXT").run(); } catch {}
+  try { await env.DB.prepare("UPDATE products SET published_at=created_at WHERE is_active=1 AND published_at IS NULL").run(); } catch {}
+}
 async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
   await ensureProductDisplayOrder(env);
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
+  await ensureProductEarlyAccessSchema(env);
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at,early_access_enabled,published_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
@@ -1594,7 +1619,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           return json({ok:true},200,origin);
         }
 if (path === "/api/admin/products" && method === "GET") {
-          await ensureProductDisplayOrder(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
+          await ensureProductDisplayOrder(env); await ensureProductEarlyAccessSchema(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at,early_access_enabled,published_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
         }
@@ -1691,6 +1716,7 @@ if (path === "/api/admin/products" && method === "GET") {
           return json({ok:true,image_url:imageUrl,size_bytes:Number(cloudResult.bytes||file.size),storage:"cloudinary"},200,origin);
         }
         if (path === "/api/admin/product-save" && method === "POST") {
+          await ensureProductEarlyAccessSchema(env);
           const body = await readJson(request);
           const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
           const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
@@ -1709,13 +1735,13 @@ if (path === "/api/admin/products" && method === "GET") {
           if (id) {
             const existing = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
             if (!existing) return json({ error: "Товар не найден." }, 404, origin);
-            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=? WHERE id=?")
-              .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
+            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=?,early_access_enabled=?,published_at=CASE WHEN ?=1 AND published_at IS NULL THEN CURRENT_TIMESTAMP WHEN ?=0 THEN NULL ELSE published_at END WHERE id=?")
+              .bind(title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0, isActive, isActive, id).run();
             if (!imageUrl) await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run();
           } else {
             const newId = makeId();
-            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new) VALUES (?,?,?,?,?,?,?,1)")
-              .bind(newId, title, description || null, imageUrl || null, category, price, isActive).run();
+            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new,early_access_enabled,published_at) VALUES (?,?,?,?,?,?,?,1,?,CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END)")
+              .bind(newId, title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0, isActive).run();
             return json({ ok: true, id: newId, created: true }, 201, origin);
           }
           return json({ ok: true, id, created: false }, 200, origin);
@@ -2866,7 +2892,8 @@ if (path === "/api/admin/products" && method === "GET") {
       }
 
       if (path === "/api/products" && method === "GET") {
-        return json({ products: await getProducts(env) }, 200, origin);
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        return json({ products: filterEarlyAccessProducts(await getProducts(env),privileged) }, 200, origin);
       }
 
       if (path === "/api/catalog-semantic-search" && method === "POST") {
@@ -2874,7 +2901,8 @@ if (path === "/api/admin/products" && method === "GET") {
         const query = String(body.query || "").trim().slice(0, 140);
         if (query.length < 3) return json({ product_ids: [] }, 200, origin);
         if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
-        const catalog = (await getProducts(env)).slice(0, 60).map(item => ({
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        const catalog = filterEarlyAccessProducts(await getProducts(env),privileged).slice(0, 60).map(item => ({
           id: String(item.id), title: String(item.title || "").slice(0, 120),
           description: String(item.description || "").slice(0, 360),
           category: String(item.category || "").slice(0, 45)
@@ -3215,11 +3243,13 @@ if (path === "/api/admin/products" && method === "GET") {
         if ((priorityDelivery || priorityOrder) && !activeVipForOrder) return json({error:"Приоритетная доставка и приоритетная обработка доступны только с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
+        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
+        const visibleCatalog=filterEarlyAccessProducts(catalog,privileged);
         const quantities = new Map();
         for (const item of body.items) {
           const id = String(item.id ?? "");
           const qty = Number(item.qty);
-          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !catalog.some(p => String(p.id) === id)) return json({ error: "Некорректный товар или количество" }, 400, origin);
+          if (!Number.isInteger(qty) || qty < 1 || qty > 10 || !visibleCatalog.some(p => String(p.id) === id)) return json({ error: "Товар пока доступен только владельцу, модераторам и VIP-покупателям либо некорректно указано количество." }, 403, origin);
           quantities.set(id, (quantities.get(id) || 0) + qty);
           if (quantities.get(id) > 10) return json({ error: "Максимум 10 единиц одного товара" }, 400, origin);
         }

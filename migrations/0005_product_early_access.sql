@@ -1,0 +1,1 @@
+ALTER TABLE products ADD COLUMN early_access_enabled INTEGER NOT NULL DEFAULT 0;
