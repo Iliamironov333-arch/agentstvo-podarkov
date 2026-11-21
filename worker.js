@@ -927,6 +927,13 @@ async function handleWebhook(request, env) {
         statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
           .bind(earned, telegramId));
       }
+      const cashback = Math.floor(Math.max(0,Number(order.total_stars||0))*0.05);
+      if (cashback > 0) {
+        statements.push(env.DB.prepare("INSERT OR IGNORE INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'vip_cashback',?,? WHERE changes()=1 AND EXISTS (SELECT 1 FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP))")
+          .bind(telegramId,cashback,"VIP-кэшбэк 5% за заказ "+order.id,"vip-cashback:"+order.id,telegramId));
+        statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
+          .bind(cashback,telegramId));
+      }
       statements.push(env.DB.prepare("UPDATE promo_codes SET reserved_count=MAX(0,reserved_count-1),redeemed_count=redeemed_count+1,is_active=0,updated_at=CURRENT_TIMESTAMP WHERE code=(SELECT code FROM promo_redemptions WHERE order_id=? AND status='reserved') AND changes()=1").bind(order.id));
       statements.push(env.DB.prepare("UPDATE promo_redemptions SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE order_id=? AND status='reserved' AND changes()=1").bind(order.id));
       const results = await env.DB.batch(statements);
@@ -3426,7 +3433,10 @@ if (path === "/api/admin/products" && method === "GET") {
         if(!bonus)return json({error:"Выберите корректный бонус."},400,origin);
         if(!Number.isSafeInteger(quantity)||quantity<1||quantity>3650)return json({error:"Введите целое количество от 1 до 3650."},400,origin);
         if(!/^[a-zA-Z0-9_-]{8,100}$/.test(key))return json({error:"Не удалось подтвердить операцию. Повторите попытку."},400,origin);
-        const amount=quantity*bonus.price;
+        const baseAmount=quantity*bonus.price;
+        const activeVip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(telegramId).first();
+        const vipBonus=!!activeVip;
+        const amount=baseAmount+(vipBonus?Math.floor(baseAmount*0.20):0);
         if(!Number.isSafeInteger(amount)||amount<1||amount>1000000)return json({error:"Сумма продажи превышает допустимое значение."},400,origin);
         const existing=await env.DB.prepare("SELECT id FROM bonus_transactions WHERE idempotency_key=?").bind("bonus-sale:"+key).first();
         if(existing)return json({error:"Эта продажа уже обработана. Обновите профиль."},409,origin);
@@ -3435,7 +3445,7 @@ if (path === "/api/admin/products" && method === "GET") {
           env.DB.prepare("INSERT INTO bonus_transactions(telegram_id,actor_telegram_id,bonus_type,quantity,operation_type,stars_amount,idempotency_key) SELECT ?,NULL,?,?, 'sale',?,? WHERE changes()=1")
             .bind(telegramId,type,quantity,amount,"bonus-sale:"+key),
           env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'bonus_sale',?,? WHERE changes()=1")
-            .bind(telegramId,amount,"Продажа бонуса: "+bonus.label+" · "+quantity+" "+bonus.unit,"bonus-sale-balance:"+key),
+            .bind(telegramId,amount,"Продажа бонуса: "+bonus.label+" · "+quantity+" "+bonus.unit+(vipBonus?" · VIP +20%":""),"bonus-sale-balance:"+key),
           env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND changes()=1")
             .bind(amount,telegramId)
         ]);
@@ -3445,8 +3455,8 @@ if (path === "/api/admin/products" && method === "GET") {
           env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
         ]);
         const buyerName=latest?.first_name||user.first_name||"Покупатель";
-        await notifyOwner(env,"💰 ПРОДАЖА БОНУСОВ\nПокупатель: "+buyerName+(latest?.username?" (@"+latest.username+")":"")+"\nTelegram ID: "+telegramId+"\nБонус: "+bonus.label+"\nКоличество: "+quantity+" "+bonus.unit+"\nНачислено: "+amount+" ⭐");
-        return json({ok:true,sold:true,bonus_type:type,quantity,stars_amount:amount,balance_stars:Number(latest?.balance_stars||0),bonuses:inventory},200,origin);
+        await notifyOwner(env,"💰 ПРОДАЖА БОНУСОВ\nПокупатель: "+buyerName+(latest?.username?" (@"+latest.username+")":"")+"\nTelegram ID: "+telegramId+"\nБонус: "+bonus.label+"\nКоличество: "+quantity+" "+bonus.unit+"\nНачислено: "+amount+" ⭐"+(vipBonus?" (включая VIP +20%)":""));
+        return json({ok:true,sold:true,bonus_type:type,quantity,stars_amount:amount,vip_bonus:vipBonus,base_stars:baseAmount,balance_stars:Number(latest?.balance_stars||0),bonuses:inventory},200,origin);
       }
       if (path === "/api/balance/topup" && method === "POST") {
         const body = await readJson(request);
