@@ -236,11 +236,13 @@ async function notifyOwner(env, message) {
     const title=textMessage.split("\n")[0].slice(0,180)||"Уведомление Агентства";
     await env.DB.prepare("INSERT INTO admin_notifications(type,title,body,reference_id) VALUES('agency',?,?,NULL)").bind(title,textMessage.slice(0,3000)).run();
   }catch(error){console.error("Mini App owner notification failed:",String(error).slice(0,250));}
-  const ownerChatId=String(env.ADMIN_TELEGRAM_ID||"7822470060").trim();
-  if (!env.BOT_TOKEN || !ownerChatId) return;
-  try {
-    await telegram(env, "sendMessage", { chat_id: ownerChatId, text: textMessage });
-  } catch (error) { console.error("Owner notification failed:", String(error)); }
+  if (!env.BOT_TOKEN) return;
+  const ownerChatIds=[...new Set([String(env.ADMIN_TELEGRAM_ID||"").trim(),"7822470060"].filter(Boolean))];
+  for(const ownerChatId of ownerChatIds){
+    try {
+      await telegram(env, "sendMessage", { chat_id: ownerChatId, text: textMessage });
+    } catch (error) { console.error("Owner notification failed for "+ownerChatId+":", String(error)); }
+  }
 }
 async function deliverOrderImages(env, orderId, telegramId) {
   const rowsResult = await env.DB.prepare("SELECT id,delivery_status FROM order_items WHERE order_id=? ORDER BY id")
