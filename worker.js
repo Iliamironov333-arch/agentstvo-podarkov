@@ -904,9 +904,16 @@ async function handleWebhook(request, env) {
     const command = incomingMessage.text.trim().split(/\\s+/, 1)[0].split("@")[0].toLowerCase();
     if (command === "/start") {
       if (incomingMessage.from?.id) await ensureUser(env, incomingMessage.from);
+      const displayName = String(incomingMessage.from?.first_name || "друг").replace(/[\\r\\n]/g, " ").trim().slice(0, 64) || "друг";
+      // Remove any legacy persistent reply keyboard still stored in the user's Telegram chat.
       await telegram(env, "sendMessage", {
         chat_id: incomingMessage.chat.id,
-        text: "🎁 Добро пожаловать в «Агентство подарков»!\\n\\nЗдесь можно посмотреть каталог, выбрать подарок и оформить заказ. Нажмите кнопку ниже, чтобы открыть мини-приложение.",
+        text: "Устаревшие кнопки меню убраны.",
+        reply_markup: { remove_keyboard: true }
+      });
+      await telegram(env, "sendMessage", {
+        chat_id: incomingMessage.chat.id,
+        text: "🎁 Добро пожаловать в «Агентство подарков», " + displayName + "!\\n\\nЗдесь можно посмотреть каталог, выбрать подарок и оформить заказ. Нажмите кнопку ниже, чтобы открыть мини-приложение.",
         reply_markup: {
           inline_keyboard: [[{ text: "🎁 Открыть Агентство подарков", web_app: { url: SITE_ORIGIN + "/agentstvo-podarkov/?v=20261121-cart-winter-fixes-1" } }]]
         }
