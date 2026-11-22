@@ -1287,7 +1287,7 @@ export default {
         if (!(await tableExists(env, "group_invite_codes"))) return json({ error: "Система приглашений пока не настроена." }, 503, origin);
         const body = await readJson(request);
         const code = String(body.code || "").trim();
-        if (!/^\\d{4,32}$/.test(code)) return json({ error: "Введите цифровой код длиной от 4 до 32 цифр." }, 400, origin);
+        if (!/^\d{4,32}$/.test(code)) return json({ error: "Введите цифровой код длиной от 4 до 32 цифр." }, 400, origin);
         if (!(await tableExists(env, "ai_moderator_settings"))) return json({ error: "Правила группы пока недоступны." }, 503, origin);
         const settingsRow = await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
         let settings = {};
@@ -1470,7 +1470,7 @@ export default {
           const body = await readJson(request);
           const code = String(body.code || "").trim();
           const mode = String(body.mode || "");
-          if (!/^\\d{4,32}$/.test(code)) return json({ error: "Код должен содержать от 4 до 32 цифр." }, 400, origin);
+          if (!/^\d{4,32}$/.test(code)) return json({ error: "Код должен содержать от 4 до 32 цифр." }, 400, origin);
           if (!["one_time", "reusable"].includes(mode)) return json({ error: "Выберите корректный режим кода." }, 400, origin);
           const activeCount = await env.DB.prepare(
             "SELECT COUNT(*) AS total FROM group_invite_codes WHERE deleted_at IS NULL AND (mode='reusable' OR used_at IS NULL)"
