@@ -2244,7 +2244,7 @@ async function loadProducts() {
  if (!initData) return;
  try {
   const data = await apiFetch('/api/products');
-  if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
+  if (!Array.isArray(data.products)) throw new Error('Сервер вернул некорректный каталог.');
   products = data.products.map(p => [String(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null]);
   // IDs in D1 are TEXT (often UUIDs). Never coerce them to Number: UUIDs become NaN and collide as one cart key.
   const validProductIds=new Set(products.map(product=>String(product[0])));
