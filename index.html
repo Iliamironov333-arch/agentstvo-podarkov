@@ -2533,7 +2533,7 @@ async function submitGroupInviteCode(){
  const button=document.getElementById('groupInviteSubmitButton');
  const status=document.getElementById('groupInviteStatus');
  const code=String(input?.value||'').trim();
- if(!/^\\d{4,32}$/.test(code)){status.textContent='Введите код длиной от 4 до 32 цифр.';return;}
+ if(!/^\d{4,32}$/.test(code)){status.textContent='Введите код длиной от 4 до 32 цифр.';return;}
  button.disabled=true;status.textContent='Проверяем код на сервере…';
  try{
   const data=await apiFetch('/api/group-invites/validate',{method:'POST',body:JSON.stringify({code})});
@@ -2545,7 +2545,7 @@ async function submitGroupInviteCode(){
   status.textContent=error.status===403?'Код неверный, удалён или уже использован.':(error.message||'Не удалось проверить код. Попробуйте позже.');
  }finally{button.disabled=false;}
 }
-async function loadPublicDeals(){async function loadPublicDeals(){
+async function loadPublicDeals(){
  const status=document.getElementById('publicPromosStatus'),root=document.getElementById('publicPromosList');
  if(!status||!root)return;
  status.textContent='Загружаем публичные промокоды…';root.replaceChildren();
@@ -3594,7 +3594,7 @@ async function saveAdminGroupInvite(){
  const input=document.getElementById('adminGroupInviteCode');
  const mode=document.getElementById('adminGroupInviteMode')?.value||'one_time';
  const code=String(input?.value||'').trim();
- if(!/^\\d{4,32}$/.test(code)){toast('Введите цифровой код длиной от 4 до 32 цифр.');return;}
+ if(!/^\d{4,32}$/.test(code)){toast('Введите цифровой код длиной от 4 до 32 цифр.');return;}
  const button=document.querySelector('#adminGroupInvitesPanel button.primary');
  if(button)button.disabled=true;
  try{
