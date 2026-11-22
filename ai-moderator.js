@@ -557,6 +557,7 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
       .bind(JSON.stringify(details).slice(0,16000),active.id).run();
     try{await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Покупатель «"+displayName+"» отменил(а) заказ."});}catch(error){console.error("AI group cancellation notice failed:",String(error).slice(0,220));}
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_cancelled_by_buyer",details:{draft_id:active.id}});
+    await aiNotifyOwner(env,"❌ Покупатель отменил(а) авторскую работу из группы\nЗаказ: "+active.id+"\nПокупатель: "+displayName+" · Telegram ID: "+user.id);
     return true;
   }
   if(details.step==="item"){
