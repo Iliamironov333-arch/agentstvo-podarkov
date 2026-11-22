@@ -550,8 +550,14 @@ async function aiGroupOrderStep(env,chatId,user,text,settings,replyToMessageId,r
     return true;
   }
   if(/^(отмена|отменить|передумал|передумала|не надо|стоп)$/i.test(lower)){
-    await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'").bind(active.id).run();
-    await aiGroupOrderReply(env,chatId,user.id,active.id,details,"Хорошо, сбор заказа остановлен. Если захотите вернуться к идее, я помогу 😊",replyToMessageId);return true;
+    const displayName=String(user.first_name||"Покупатель").replace(/[<>\n\r]/g," ").slice(0,80);
+    details.chat_deleted=true;details.ai_enabled=false;details.conversation=[];details.owner_messages=[];
+    details.chat_deleted_at=new Date().toISOString();details.terminal_at=new Date().toISOString();details.cancelled_by="buyer";
+    await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status='collecting'")
+      .bind(JSON.stringify(details).slice(0,16000),active.id).run();
+    try{await aiTelegram(env,"sendMessage",{chat_id:chatId,text:"Покупатель «"+displayName+"» отменил(а) заказ."});}catch(error){console.error("AI group cancellation notice failed:",String(error).slice(0,220));}
+    await aiLog(env,{chat_id:chatId,actor:user.id,type:"group_order_cancelled_by_buyer",details:{draft_id:active.id}});
+    return true;
   }
   if(details.step==="item"){
     details.order_fields.item=String(text).trim().slice(0,700);details.step="details";
@@ -1538,8 +1544,14 @@ async function handleAiAdminRoute(path,method,request,env,telegramId,rootOwner,p
       return aiJson({ok:approved===true,error:approved===true?undefined:"Не удалось подтвердить заказ. Проверьте уведомление владельца."},approved===true?200:409);
     }
     if(body.action==="cancel") {
-      await env.DB.prepare("UPDATE ai_order_drafts SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('collecting','review')").bind(String(body.id||"")).run();
-      await aiLog(env,{actor:telegramId,type:"ai_order_cancelled",details:{id:body.id}});
+      const id=String(body.id||"").slice(0,80);
+      const draft=await env.DB.prepare("SELECT id,chat_id,telegram_id,first_name,subject,details_json,status FROM ai_order_drafts WHERE id=? AND status IN ('collecting','review')").bind(id).first();
+      if(!draft)return aiJson({error:"Заказ не найден или уже завершён."},404);
+      let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+      details.chat_deleted=true;details.ai_enabled=false;details.conversation=[];details.owner_messages=[];details.chat_deleted_at=new Date().toISOString();details.terminal_at=new Date().toISOString();details.cancelled_by="owner";
+      await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('collecting','review')").bind(JSON.stringify(details).slice(0,16000),id).run();
+      if(details.source==="group"&&draft.chat_id){try{await aiTelegram(env,"sendMessage",{chat_id:String(draft.chat_id),text:"Заказ «"+String(draft.subject||"Авторская работа").replace(/[<>\n\r]/g," ").slice(0,100)+"» закрыт владельцем Агентства."});}catch(error){console.error("AI group admin cancellation notice failed:",String(error).slice(0,220));}}
+      await aiLog(env,{actor:telegramId,target:draft.telegram_id,type:"ai_order_cancelled",details:{id,source:details.source||""}});
       return aiJson({ok:true});
     }
     return aiJson({error:"Неизвестное действие."},400);
