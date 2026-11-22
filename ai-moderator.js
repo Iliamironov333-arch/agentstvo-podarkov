@@ -309,6 +309,11 @@ function aiIsCompliment(text) {
   if(!value || value.length>240) return false;
   return /(?:замечательн\w*\s+(?:работ\w*|иде\w*|вещ\w*|получил\w*)|прекрасн\w*\s+(?:работ\w*|иде\w*|вещ\w*|получил\w*)|отличн\w*\s+(?:работ\w*|иде\w*|получил\w*)|красив\w*\s+(?:работ\w*|получил\w*|сделан\w*)|интересненьк\w*|интересн\w*\s+(?:работ\w*|иде\w*|получил\w*)|молодц\w*|умниц\w*|крут\w*|супер|шикарн\w*|великолепн\w*|здорово\s+(?:получил\w*|сделан\w*)|очень\s+красив\w*|мне\s+нравится|мне\s+очень\s+понравил\w*|выглядит\s+здорово|так\s+держать)/i.test(value);
 }
+function aiIsThanks(text) {
+  const value=String(text||"").trim().toLowerCase().replace(/ё/g,"е");
+  if(!value || value.length>240) return false;
+  return /(?:^|[^\p{L}\p{N}_])(?:спасибо|благодарю|благодарим|благодарен|благодарна|благодарны|признателен|признательна|признательны)(?=$|[^\p{L}\p{N}_])/iu.test(value);
+}
 function aiAgencyIntent(text) {
   const value=String(text||"").trim();
   if(!value)return false;
@@ -1064,6 +1069,8 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const activeGroupOrder=await env.DB.prepare("SELECT id FROM ai_order_drafts WHERE chat_id=? AND telegram_id=? AND status='collecting' ORDER BY created_at DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
     const recentOrderMessages=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(chatId,String(user.id)).all();
     const orderHistory=(recentOrderMessages.results||[]).reverse();
+    // Благодарность обрабатываем только как продолжение недавнего ответа ИИ этому участнику.
+    const gratitudeReply=aiIsThanks(text) && orderHistory.at(-1)?.role==="assistant";
     const orderTopicsAsked=new Set();
     for(const item of orderHistory){
       if(item.role!=="assistant")continue;
@@ -1078,10 +1085,10 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
     const adminAccount=isOwner || !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(String(user.id)).first());
     const recentImage=await env.DB.prepare("SELECT id FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND content LIKE '[Изображение работы%' ORDER BY id DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || gratitudeReply || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
-    if(settings.ai_answers && relevant && (await aiAdminAnswersAllowed(env,user.id)) && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text))) {
+    if(settings.ai_answers && relevant && (await aiAdminAnswersAllowed(env,user.id)) && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text) || gratitudeReply)) {
       try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id,message.reply_to_message?.message_id||null); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.",message.message_id);
