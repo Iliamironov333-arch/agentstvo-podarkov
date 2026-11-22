@@ -3337,8 +3337,8 @@ if (path === "/api/admin/packs" && method === "GET") {
           : null;
         const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
         const activityRow = await env.DB.prepare(
-          "SELECT (SELECT COUNT(*) FROM orders WHERE telegram_id=?) AS all_orders,(SELECT COUNT(*) FROM orders WHERE telegram_id=? AND payment_status='paid') AS paid_orders,(SELECT COALESCE(SUM(total_stars),0) FROM orders WHERE telegram_id=? AND payment_status='paid') AS total_spent_stars,(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded')) AS custom_orders,(SELECT COUNT(*) FROM favorites WHERE telegram_id=?) AS favorites_count"
-        ).bind(telegramId,telegramId,telegramId,telegramId,telegramId).first().catch(()=>null);
+          "SELECT ((SELECT COUNT(*) FROM orders WHERE telegram_id=?)+(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded'))) AS all_orders,(SELECT COUNT(*) FROM orders WHERE telegram_id=? AND payment_status='paid') AS paid_orders,(SELECT COALESCE(SUM(total_stars),0) FROM orders WHERE telegram_id=? AND payment_status='paid') AS total_spent_stars,(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded')) AS custom_orders,(SELECT COUNT(*) FROM favorites WHERE telegram_id=?) AS favorites_count"
+        ).bind(telegramId,telegramId,telegramId,telegramId,telegramId,telegramId).first().catch(()=>null);
         let warnings = [];
         if (await tableExists(env,"ai_warnings") && await tableExists(env,"ai_moderator_settings")) {
           const moderatorSettings = await env.DB.prepare("SELECT group_chat_id,settings_json FROM ai_moderator_settings WHERE id=1").first();
