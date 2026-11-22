@@ -174,7 +174,7 @@ input,textarea{accent-color:var(--gold)}
 .admin-category-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
 .admin-category-nav button{min-height:58px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);text-align:left;padding:10px 12px;font-weight:700}
 .admin-category-nav button small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:3px}
-.admin-category-nav button.active{border-color:var(--gold);background:linear-gradient(130deg,#6b471e33,var(--panel));box-shadow:0 0 0 1px #dca34233}
+.admin-category-nav button.active{border-color:var(--gold);background:var(--panel2);box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 25%,transparent)}
 .admin-category-section{min-width:0}
 .admin-category-section>.panel{margin-top:10px}
 .admin-category-section .sectionhead{margin-top:12px}
@@ -182,7 +182,7 @@ input,textarea{accent-color:var(--gold)}
 body.light-theme select{background-color:#fff;color:#382819;border-color:#dfc8a8}
 body.light-theme select option{background:#fff;color:#382819}
 body.light-theme .admin-category-nav button{background:#fff;color:#382819}
-body.light-theme .admin-category-nav button.active{background:linear-gradient(130deg,#fff0d2,#fffaf3);border-color:#d88a20}
+body.light-theme .admin-category-nav button.active{background:var(--panel2);border-color:var(--gold)}
 
 /* Формы и панель владельца: единая сетка, без горизонтального сдвига */
 html,body{width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none}
@@ -263,7 +263,7 @@ body.dark-theme .toast{background:#292f38;border-color:#647184;color:#f3f5f8}
 body.dark-theme input:not([type=checkbox]):not([type=radio]):not([type=file]),body.dark-theme textarea,body.dark-theme select{background:#292f38!important;color:#f3f5f8!important;border-color:#4a5665!important;color-scheme:dark}
 body.dark-theme select option{background:#20242b;color:#f3f5f8}
 body.dark-theme .admin-category-nav button{background:#20242b;color:#f3f5f8}
-body.dark-theme .admin-category-nav button.active{background:#343b47;border-color:#e5b85c}
+body.dark-theme .admin-category-nav button.active{background:var(--panel2);border-color:var(--gold)}
 body.dark-theme .admin-metric{background:linear-gradient(145deg,#252b34,#1c2027)}
 body.dark-theme .admin-metric span{color:#c0cad7}
 body.dark-theme .admin-detail-title,body.dark-theme .admin-order-actions h4,body.dark-theme .admin-balance-controls h4{color:#f4d58d}
@@ -2028,11 +2028,11 @@ body.winter-season .owner-admin-pill:focus-visible{
 </section>
 <section id="dealsView" class="hidden">
  <div class="hero"><small id="dealsSeasonLabel">Осенняя акция</small><h2 id="dealsSeasonTitle">🍂 Скидка 10% на всё</h2><p id="dealsSeasonDescription">Выбирайте авторские подарки из каталога. Скидка 10% сохраняется; цены в каталоге не изменяются.</p><button class="primary" onclick="showView('catalogView')">Перейти в магазин</button></div>
- <div class="panel"><div class="sectionhead"><h3>🏷️ Публичные промокоды</h3><button class="secondary" type="button" onclick="loadPublicDeals()">↻ Обновить</button></div><p class="muted">Здесь отображаются только активные промокоды, которые владелец отметил публичными в панели управления.</p><div id="publicPromosStatus" class="notice" aria-live="polite">Загружаем публичные промокоды…</div><div id="publicPromosList"></div></div>
+ <div class="panel"><div class="sectionhead"><h3>🏷️ Публичные промокоды</h3><button class="secondary" type="button" onclick="loadPublicDeals()">↻ Обновить</button></div><div id="publicPromosStatus" class="notice" aria-live="polite">Загружаем публичные промокоды…</div><div id="publicPromosList"></div></div>
 </section>
 <section id="aboutView" class="hidden">
  <div class="sectionhead"><h2>ℹ️ О проекте</h2></div>
- <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span id="aboutSeasonDiscountLabel">Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="showView('privacyPolicyView')">🔐 Политика конфиденциальности</button><div class="panel" style="margin-top:14px"><h3>📌 Правила группы</h3><p class="muted">Правила синхронизируются с настройками ИИ-бота в панели владельца.</p><div id="publicGroupRulesStatus" class="notice" aria-live="polite">Загружаем правила группы…</div><div id="publicGroupRulesText" style="white-space:pre-wrap;line-height:1.6"></div></div><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+ <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span id="aboutSeasonDiscountLabel">Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="showView('privacyPolicyView')">🔐 Политика конфиденциальности</button><div class="panel" style="margin-top:14px"><h3>📌 Правила группы</h3><div id="publicGroupRulesStatus" class="notice" aria-live="polite">Загружаем правила группы…</div><div id="publicGroupRulesText" style="white-space:pre-wrap;line-height:1.6"></div></div><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
 </section>
 <section id="privacyPolicyView" class="hidden">
  <div class="sectionhead"><h2>🔐 Политика конфиденциальности</h2><button class="secondary" type="button" onclick="showView('aboutView')">← О проекте</button></div>
@@ -2487,7 +2487,7 @@ async function loadPublicGroupRules(){
  try{
   const data=await apiFetch('/api/public/group-rules');
   if(!String(data.rules_text||'').trim()){status.textContent='В панели владельца пока не заполнен текст правил группы.';return;}
-  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Актуальная версия из панели владельца.'+(data.rules_enabled?'':' Автоматическая отправка правил новым участникам сейчас выключена.');
+  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Правила группы';
  }catch(error){status.textContent='Не удалось загрузить правила. Попробуйте обновить раздел.';}
 }
 async function loadPublicDeals(){
