@@ -1985,6 +1985,8 @@ body.winter-season .owner-admin-pill:focus-visible{
    <div class="admin-metric"><span>Всего потрачено</span><strong id="profileSpent">—</strong></div>
    <div class="admin-metric"><span>Избранные работы</span><strong id="profileFavorites">—</strong></div>
    <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="profileCustomOrders">—</strong></div>
+   <div class="admin-metric"><span>Средний чек</span><strong id="profileAverageCheck">—</strong></div>
+   <div class="admin-metric"><span>Последний заказ</span><strong id="profileLastOrder" style="font-size:16px">—</strong></div>
    <div class="admin-metric"><span>С нами с</span><strong id="profileMemberSince" style="font-size:16px">—</strong></div>
   </div>
   <p class="notice" id="profileAnalyticsHint">Здесь отображается только Ваша личная статистика.</p>
@@ -5758,6 +5760,8 @@ async function loadMe() {
   setProfile('profileSpent',fmt(activity.total_spent_stars)+' ⭐');
   setProfile('profileFavorites',fmt(activity.favorites_count));
   setProfile('profileCustomOrders',fmt(activity.custom_orders));
+  setProfile('profileAverageCheck',fmt(activity.average_check)+' ⭐');
+  setProfile('profileLastOrder',activity.last_order_at?new Date(String(activity.last_order_at).replace(' ','T')+'Z').toLocaleDateString('ru-RU'):'Пока нет');
   setProfile('profileMemberSince',activity.member_since?new Date(String(activity.member_since).replace(' ','T')+'Z').toLocaleDateString('ru-RU'):'—');
   const warningRoot=document.getElementById('profileWarningsList');
   if(warningRoot){warningRoot.replaceChildren();const warnings=Array.isArray(me.warnings)?me.warnings:[];
