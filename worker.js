@@ -225,12 +225,12 @@ async function decryptGroupInviteCode(env, packedBase64) {
 }
 async function buildGroupInviteMemberPayload(env, telegramId, groupUrl) {
   if (!(await tableExists(env, "ai_moderator_settings"))) return null;
-  const settingsRow = await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
+  const settingsRow = await env.DB.prepare("SELECT settings_json,group_chat_id FROM ai_moderator_settings WHERE id=1").first();
   let settings = {};
   try { settings = JSON.parse(settingsRow?.settings_json || "{}"); } catch {}
   const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
   if (settings.rules_enabled !== true || !rulesText) return null;
-  const chatId = String(settings.group_chat_id || "").trim();
+  const chatId = String(settingsRow?.group_chat_id || "").trim();
   let activeWarnings = 0;
   if (chatId && await tableExists(env, "ai_warnings")) {
     const warningRow = await env.DB.prepare(
