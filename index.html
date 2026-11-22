@@ -1455,23 +1455,6 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-/* Анимации добавления работы и успешной покупки */
-.cart-add-splash{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(180deg,#b9edff 0%,#65c8ed 48%,#168bbd 100%);animation:cartSeaIn .22s ease-out both}
-.cart-add-splash:before,.cart-add-splash:after{content:"";position:absolute;left:-15%;width:130%;height:38%;border-radius:48% 52% 0 0;background:rgba(255,255,255,.25);bottom:-15%;animation:cartWave 1.35s ease-in-out both}
-.cart-add-splash:after{bottom:-22%;background:rgba(0,91,145,.22);animation-delay:.08s}
-.cart-add-scene{position:relative;z-index:1;display:grid;justify-items:center;gap:10px;text-align:center;color:#064c70;text-shadow:0 1px 0 rgba(255,255,255,.5)}
-.cart-add-ring{font-size:100px;line-height:1;filter:drop-shadow(0 12px 12px rgba(0,60,100,.2));animation:cartFloatRing 1.35s cubic-bezier(.2,.75,.25,1) both}
-.cart-add-title{font-size:19px;font-weight:850;background:rgba(255,255,255,.78);padding:9px 16px;border-radius:999px;box-shadow:0 8px 25px rgba(0,65,100,.12);animation:cartSeaTitle .55s .18s both}
-@keyframes cartSeaIn{from{opacity:0}to{opacity:1}}
-@keyframes cartWave{0%{transform:translateX(-8%) rotate(-4deg)}50%{transform:translateX(5%) rotate(3deg)}100%{transform:translateX(-2%) rotate(0)}}
-@keyframes cartFloatRing{0%{opacity:0;transform:translateY(90px) rotate(-35deg) scale(.55)}45%{opacity:1;transform:translateY(-18px) rotate(16deg) scale(1.12)}70%{transform:translateY(7px) rotate(-7deg) scale(.98)}100%{transform:translateY(0) rotate(0) scale(1)}}
-@keyframes cartSeaTitle{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
-.cart-purchase-prizes{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;margin:16px 0}
-.cart-purchase-item{padding:10px;border-radius:15px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .25s both}
-.cart-purchase-item img{width:100%;height:125px;object-fit:contain;border-radius:10px;display:block;margin-bottom:8px}
-.cart-purchase-item b{display:block;font-size:13px}
-.cart-purchase-item small{display:block;margin-top:4px;opacity:.7}
-@media(prefers-reduced-motion:reduce){.cart-add-splash,.cart-add-splash:before,.cart-add-splash:after,.cart-add-ring,.cart-add-title{animation:none!important}}
 .surprise-pack-card{border:1px solid rgba(207,157,64,.38);box-shadow:0 10px 28px rgba(100,70,20,.08)}.surprise-pack-art{background:radial-gradient(circle at 50% 35%,#fff2c9,#d9a64d 62%,#8b5b20);min-height:150px}.surprise-pack-art span{font-size:76px;filter:drop-shadow(0 8px 8px rgba(60,35,5,.22))}.pack-reveal-overlay{position:fixed;inset:0;z-index:10050;background:rgba(20,15,8,.78);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .25s ease}.pack-reveal-overlay.shown{opacity:1}.pack-reveal-panel{width:min(420px,100%);border-radius:26px;padding:24px;text-align:center;background:var(--panel,#fff);color:var(--text,#241d13);box-shadow:0 25px 80px rgba(0,0,0,.3);transform:translateY(20px) scale(.94);animation:packPanelIn .55s cubic-bezier(.2,.8,.2,1) forwards}.pack-reveal-envelope{font-size:92px;display:inline-block;position:relative;animation:packTear .95s ease-in-out both}.pack-reveal-envelope:after{content:'✦';position:absolute;left:50%;top:48%;font-size:28px;color:#fff4c5;opacity:0;animation:packSpark .7s .45s both}.pack-reveal-prize{margin:18px 0;padding:18px;border-radius:18px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}.pack-reveal-prize img{display:block;max-width:100%;max-height:210px;object-fit:contain;border-radius:14px;margin:0 auto 12px}.pack-reveal-prize p{font-size:13px;opacity:.75;margin:8px 0 0}@keyframes packTear{0%,100%{transform:rotate(0) scale(1);opacity:1}12%{transform:rotate(-10deg) scale(1.05)}24%{transform:rotate(11deg) scale(1.1)}36%{transform:rotate(-9deg) scale(1.12)}48%{transform:rotate(8deg) scale(1.16)}62%{transform:rotate(-5deg) scale(1.22)}78%{transform:rotate(18deg) scale(1.45);opacity:.8}100%{transform:rotate(28deg) scale(1.8);opacity:0}}@keyframes packSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.3)}}@keyframes packPanelIn{to{transform:translateY(0) scale(1)}}@keyframes packPrizeIn{from{opacity:0;transform:translateY(18px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
 /* Зимняя палитра: убираем оставшиеся осенние золотисто-коричневые акценты. */
 body.winter-season .primary,
@@ -2558,7 +2541,6 @@ function addProductToCart(productId){
  persistCart();
  drawProducts();
  drawCart();
- showCartAddAnimation(product);
  return true;
 }
 
@@ -4391,37 +4373,6 @@ function renderSurprisePacks(){
   body.append(rarity,title,price,button);card.append(art,body);root.append(card);
  });
 }
-function showCartAddAnimation(product){
- document.querySelectorAll('.cart-add-splash').forEach(node=>node.remove());
- const overlay=document.createElement('div');overlay.className='cart-add-splash';overlay.setAttribute('aria-hidden','true');
- const scene=document.createElement('div');scene.className='cart-add-scene';
- const ring=document.createElement('div');ring.className='cart-add-ring';ring.textContent='🛟';
- const title=document.createElement('div');title.className='cart-add-title';title.textContent='🌊 '+(product?.[1]||'Работа')+' добавлена в корзину!';
- scene.append(ring,title);overlay.append(scene);document.body.append(overlay);
- window.setTimeout(()=>{if(overlay.isConnected)overlay.remove();},1550);
-}
-function showCartPurchaseReveal(items){
- document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
- const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
- overlay.setAttribute('role','presentation');
- const panel=document.createElement('div');panel.className='pack-reveal-panel';
- panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','cartPurchaseRevealHeading');
- const envelope=document.createElement('div');envelope.className='pack-reveal-envelope';envelope.textContent='🎁';
- const heading=document.createElement('h2');heading.id='cartPurchaseRevealHeading';heading.textContent='Покупка успешна!';
- const note=document.createElement('p');note.textContent='Твои работы теперь в заказах ❤️';
- const prizes=document.createElement('div');prizes.className='cart-purchase-prizes';
- (items||[]).forEach(item=>{
-  const card=document.createElement('div');card.className='cart-purchase-item';
-  if(item.image){const img=document.createElement('img');img.src=item.image;img.alt=item.title;card.append(img);}
-  const name=document.createElement('b');name.textContent=item.title;card.append(name);
-  const qty=document.createElement('small');qty.textContent='Количество: '+item.qty;card.append(qty);
-  prizes.append(card);
- });
- const close=document.createElement('button');close.className='primary pack-reveal-close';close.type='button';close.textContent='Закрыть';close.addEventListener('click',()=>closePackReveal(overlay));
- panel.append(envelope,heading,note,prizes,close);overlay.append(panel);
- overlay.addEventListener('click',event=>{if(event.target===overlay)closePackReveal(overlay);});
- document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
-}
 function closePackReveal(overlay){
  const target=overlay||document.querySelector('.pack-reveal-overlay');
  if(target)target.remove();
@@ -5160,7 +5111,6 @@ async function applyPromoCode(){
 }
 async function checkout() {
  const entries=products.filter(p=>Number(cart[p[0]]||0)>0);
- const purchasedItems=entries.map(p=>({title:p[1],image:p[5]||'',qty:Number(cart[String(p[0])]||0)}));
  if(entries.some(p=>Number(cart[String(p[0])])>10))return toast('Максимум 10 штук одного товара.');
  if(!entries.length)return toast('Корзина пуста.');
  if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
@@ -5194,7 +5144,7 @@ async function checkout() {
   if(!wasGiftBundle&&deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(!wasGiftBundle&&totalLabel)totalLabel.textContent=money(data.total_stars||0);
   if(data.paid){
-   showCartPurchaseReveal(purchasedItems);
+   
    quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
    if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Заказ оплачен с баланса. Самовывоз: Новаторов, 8 · доставка бесплатно.':'Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
    toast('Заказ оплачен с баланса! 🎁');
@@ -5204,7 +5154,6 @@ async function checkout() {
   if(statusBox)statusBox.textContent=(deliveryMethod==='pickup'?'Самовывоз: Новаторов, 8 · доставка бесплатно. ':'Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. ')+'Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
-    showCartPurchaseReveal(purchasedItems);
     quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
     quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверьте «Мои заказы».');loadMe();
