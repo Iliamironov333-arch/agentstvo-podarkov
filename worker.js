@@ -391,6 +391,10 @@ async function ensureProductEarlyAccessSchema(env) {
   try { await env.DB.prepare("ALTER TABLE products ADD COLUMN published_at TEXT").run(); } catch {}
   try { await env.DB.prepare("UPDATE products SET published_at=created_at WHERE is_active=1 AND published_at IS NULL").run(); } catch {}
 }
+async function ensureGiftNotificationsSchema(env){
+ await env.DB.prepare("CREATE TABLE IF NOT EXISTS gift_notifications (id TEXT PRIMARY KEY,telegram_id TEXT NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,acknowledged_at TEXT)").run();
+ await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_gift_notifications_pending ON gift_notifications(telegram_id,acknowledged_at,created_at)").run();
+}
 async function ensureSurprisePacksSchema(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS surprise_packs (id TEXT PRIMARY KEY, pack_type TEXT NOT NULL CHECK(pack_type IN ('common','rare','epic','legendary','secret')), title TEXT NOT NULL, price_points INTEGER NOT NULL CHECK(price_points>0), reward_type TEXT NOT NULL CHECK(reward_type IN ('product','points')), reward_product_id TEXT, reward_points INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','sold','archived')), is_active INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sold_at TEXT, sold_to TEXT, order_id TEXT)").run();
   await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_surprise_packs_one_active_type ON surprise_packs(pack_type) WHERE status='active' AND is_active=1").run();
@@ -1186,7 +1190,7 @@ function adminPermissionForPath(path, method) {
   if (path === "/api/admin/users" || path === "/api/admin/user") return "users_view";
   if (path === "/api/admin/reputation") return "users_view";
   if (path.startsWith("/api/admin/reputation/")) return "owner_only";
-  if (path === "/api/admin/balance-adjust" || path === "/api/admin/user-bonuses") return "users_balance";
+  if (path === "/api/admin/balance-adjust" || path === "/api/admin/user-bonuses" || path === "/api/admin/gift-pack") return "users_balance";
   if (path === "/api/admin/block-user") return "users_ban";
   if (path === "/api/admin/unblock-user") return "users_unban";
   if (path === "/api/admin/orders" || path === "/api/admin/order") return "orders_view";
@@ -2139,10 +2143,41 @@ if (path === "/api/admin/packs" && method === "GET") {
           await env.DB.batch(statements);
           return json({ok:true,month:monthKey,first:rewards.first?{name:first?.first_name||first?.username||first?.telegram_id,points:firstPoints,reward:rewards.first,rank:rewards.first_rank||null}:null,second:rewards.second?{name:second?.first_name||second?.username||second?.telegram_id,points:secondPoints,reward:rewards.second}:null},200,origin);
         }
+        if(path==="/api/admin/gift-pack"&&method==="POST"){
+          await ensureGiftNotificationsSchema(env);
+          const body=await readJson(request),targetId=String(body.telegram_id||"").trim().slice(0,64),type=String(body.pack_type||""),title=String(body.title||"").trim().slice(0,100),rewardType=String(body.reward_type||""),productId=String(body.reward_product_id||"").trim().slice(0,100),rewardPoints=Number(body.reward_points||0),message=String(body.message||"").trim().slice(0,600);
+          if(!targetId)return json({error:"Выберите получателя подарка."},400,origin);
+          if(!["common","rare","epic","legendary","secret"].includes(type))return json({error:"Выберите редкость пака."},400,origin);
+          if(title.length<2)return json({error:"Название пака должно содержать минимум 2 символа."},400,origin);
+          if(!["product","points"].includes(rewardType))return json({error:"Выберите содержимое пака."},400,origin);
+          const target=await env.DB.prepare("SELECT telegram_id FROM users WHERE telegram_id=?").bind(targetId).first();if(!target)return json({error:"Покупатель не найден."},404,origin);
+          let reward,orderId=null;
+          if(rewardType==="product"){
+            const product=await env.DB.prepare("SELECT id,title,image_url FROM products WHERE id=? AND is_active=1").bind(productId).first();if(!product)return json({error:"Выберите опубликованную работу из каталога."},400,origin);
+            reward={type:"product",product_id:String(product.id),title:String(product.title),image_url:product.image_url||null};orderId=makeId();
+          }else{
+            if(!Number.isSafeInteger(rewardPoints)||rewardPoints<1||rewardPoints>1000000)return json({error:"Количество баллов должно быть от 1 до 1 000 000."},400,origin);
+            reward={type:"points",points:rewardPoints};
+          }
+          const eventId=makeId(),payload={title,pack_type:type,reward,message},statements=[];
+          if(rewardType==="product"){
+            statements.push(env.DB.prepare("INSERT INTO orders (id,telegram_id,product_id,product_title,quantity,price_stars,discount_percent,total_stars,payment_status,fulfillment_status,paid_at,delivered_at,discount_stars,priority_order) VALUES (?,?,?,?,?,0,0,0,'paid','delivered',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,0)").bind(orderId,targetId,productId,reward.title,1));
+            statements.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_title,quantity,image_url,delivery_status,delivered_at) VALUES (?,?,?,1,?,'sent',CURRENT_TIMESTAMP)").bind(orderId,productId,reward.title,reward.image_url));
+          }else{
+            const key="admin-gift-balance:"+eventId;
+            statements.push(env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?").bind(rewardPoints,targetId));
+            statements.push(env.DB.prepare("INSERT INTO balance_transactions(telegram_id,amount_stars,operation_type,description,idempotency_key) VALUES(?,?,'admin_gift',?,?)").bind(targetId,rewardPoints,"Подарок из пака «"+title+"»",key));
+          }
+          statements.push(env.DB.prepare("INSERT INTO gift_notifications(id,telegram_id,event_type,payload_json) VALUES(?,?,'gift_pack',?)").bind(eventId,targetId,JSON.stringify(payload)));
+          if(await tableExists(env,"admin_action_log"))statements.push(env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,targetId,"gift_pack_sent",JSON.stringify({event_id:eventId,title,pack_type:type,reward_type:rewardType,reward,order_id:orderId})));
+          await env.DB.batch(statements);
+          await notifyOwner(env,"🎁 Подарочный пак отправлен\nПолучатель: "+targetId+"\nПак: "+title+"\nНаграда: "+(reward.type==="product"?reward.title:reward.points+" баллов"));
+          return json({ok:true,event_id:eventId,order_id:orderId},200,origin);
+        }
         if (path === "/api/admin/users" && method === "GET") {
           const url = new URL(request.url);
           const term = (url.searchParams.get("q") || "").trim().slice(0, 64);
-          const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 25)));
+          const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || 25)));
           const rows = term
             ? await env.DB.prepare("SELECT telegram_id,username,first_name,balance_stars,created_at FROM users WHERE telegram_id LIKE ? OR username LIKE ? OR first_name LIKE ? ORDER BY created_at DESC LIMIT ?")
                 .bind("%" + term + "%", "%" + term.replace(/^@/, "") + "%", "%" + term + "%", limit).all()
@@ -2229,6 +2264,7 @@ if (path === "/api/admin/packs" && method === "GET") {
             return json({ error: "Недостаточно баллов для списания или операция не выполнена. Баланс не изменён.", balance: Number(latest.balance_stars || 0) }, 409, origin);
           }
           const updated = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
+          if(amount>0){await ensureGiftNotificationsSchema(env);await env.DB.prepare("INSERT INTO gift_notifications(id,telegram_id,event_type,payload_json) VALUES(?,?,'balance_credit',?)").bind(makeId(),targetId,JSON.stringify({amount,reason})).run();}
           await notifyOwner(env, "⭐ Изменение баланса администратором\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
           return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
         }
@@ -3185,6 +3221,17 @@ if (path === "/api/admin/packs" && method === "GET") {
         return json({ error: "Покупки и оформление новых заказов для вашего аккаунта ограничены владельцем. Причина: " + activeBlock.reason }, 403, origin);
       }
 
+      if(path==="/api/gifts/pending"&&method==="GET"){
+        await ensureGiftNotificationsSchema(env);
+        const rows=await env.DB.prepare("SELECT id,event_type,payload_json,created_at FROM gift_notifications WHERE telegram_id=? AND acknowledged_at IS NULL ORDER BY created_at ASC LIMIT 5").bind(telegramId).all();
+        return json({notifications:(rows.results||[]).map(row=>{let payload={};try{payload=JSON.parse(row.payload_json||"{}")}catch{}return{id:row.id,event_type:row.event_type,payload,created_at:row.created_at};})},200,origin);
+      }
+      if(path==="/api/gifts/ack"&&method==="POST"){
+        await ensureGiftNotificationsSchema(env);
+        const body=await readJson(request),id=String(body.id||"").trim().slice(0,80);if(!id)return json({error:"Не найдено уведомление."},400,origin);
+        await env.DB.prepare("UPDATE gift_notifications SET acknowledged_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND acknowledged_at IS NULL").bind(id,telegramId).run();
+        return json({ok:true},200,origin);
+      }
       if (path === "/api/packs" && method === "GET") {
         await ensureSurprisePacksSchema(env);
         const rows = await env.DB.prepare("SELECT id,pack_type,title,price_points FROM surprise_packs WHERE status='active' AND is_active=1 ORDER BY CASE pack_type WHEN 'secret' THEN 1 WHEN 'legendary' THEN 2 WHEN 'epic' THEN 3 WHEN 'rare' THEN 4 ELSE 5 END").all();
