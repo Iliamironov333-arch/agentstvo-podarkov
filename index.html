@@ -5061,7 +5061,8 @@ async function loadSupportHistory(conversationId, actions = null) {
  supportPendingActions = Array.isArray(actions) ? actions : [];
  if (!initData) { root.textContent = 'Откройте мини-приложение через Telegram, чтобы начать диалог.'; return; }
  try {
-  const suffix = conversationId ? '?conversation_id=' + encodeURIComponent(conversationId) : '';
+  const requestedConversationId=conversationId||activeSupportConversationId||'';
+  const suffix = requestedConversationId ? '?conversation_id=' + encodeURIComponent(requestedConversationId) : '';
   const data = await apiFetch('/api/support/chat' + suffix);
   supportConversations = Array.isArray(data.conversations) ? data.conversations : [];
   supportChatLimit = Number(data.chat_limit || (data.vip ? 5 : 3));
@@ -5484,7 +5485,7 @@ async function loadMe() {
     const id=String(x.id).replace(/[^a-zA-Z0-9_-]/g,"");
     const state=x.status==="review"?"Передано владельцу на проверку":x.status==="approved"?"Ожидает оплаты":"Сбор пожеланий";
     const action=x.source==="group"
-      ?(x.group_url?'<a class="secondary order-action-btn" href="'+x.group_url+'" target="_blank" rel="noopener">👥 Перейти в группу</a>':'<span class="muted">Откройте группу, где Вы начали заказ.</span>')
+      ?(x.group_url?'<button type="button" class="secondary order-action-btn" data-ai-draft-action="group" data-ai-group-url="'+x.group_url+'">👥 Перейти в группу</button>':'<span class="muted">Откройте группу, где Вы начали заказ.</span>')
       :x.source==="miniapp_support_chat"
         ?'<button type="button" class="secondary order-action-btn" data-ai-draft-action="support" data-ai-draft-id="'+id+'" data-ai-support-id="'+String(x.support_conversation_id||"").replace(/[^a-zA-Z0-9_-]/g,"")+'">💬 Перейти в чат</button>'
         :'<button type="button" class="secondary order-action-btn" data-ai-draft-action="craft" data-ai-draft-id="'+id+'">💬 Перейти в чат</button>';
@@ -5609,11 +5610,17 @@ document.addEventListener('click',event=>{
   if(action==='craft'){
    craftDraftId=id;craftModeActive=true;showView('supportView');setUnifiedChatContext(false);
    const fresh=document.getElementById('supportNewCraftOrderButton');if(fresh)fresh.classList.add('hidden');
-   loadCraftConversation();return;
+   return;
   }
   if(action==='support'){
    activeSupportConversationId=aiAction.dataset.aiSupportId||'';
-   showView('supportView');setUnifiedChatContext(false);loadSupportHistory(activeSupportConversationId);return;
+   showView('supportView');setUnifiedChatContext(false);return;
+  }
+  if(action==='group'){
+   const url=aiAction.dataset.aiGroupUrl||'';
+   if(url&&window.Telegram?.WebApp?.openTelegramLink)window.Telegram.WebApp.openTelegramLink(url);
+   else if(url)window.open(url,'_blank','noopener');
+   return;
   }
  }
  const orderButton=event.target.closest('button[data-order-action][data-order-id]');
