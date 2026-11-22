@@ -3260,7 +3260,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           }));
           if (!catalog.length) return json({ product_ids: [], semantic: true }, 200, origin);
           const catalogFingerprint = await sha256Hex(JSON.stringify(catalog.map(item => [item.id,item.title,item.description,item.category])));
-          const cacheKey = await sha256Hex("catalog-search-v2:" + query + ":" + (privileged ? "vip" : "public") + ":" + catalogFingerprint);
+          const cacheKey = await sha256Hex("catalog-search-v3:" + query + ":" + (privileged ? "vip" : "public") + ":" + catalogFingerprint);
           try {
             const cached = await env.DB.prepare("SELECT product_ids FROM catalog_search_cache WHERE query_hash=? AND expires_at>CURRENT_TIMESTAMP").bind(cacheKey).first();
             if (cached?.product_ids) {
@@ -3281,11 +3281,11 @@ if (path === "/api/admin/packs" && method === "GET") {
             return { item, score };
           }).sort((a,b) => b.score-a.score);
           const matches = ranked.filter(row => row.score > 0);
-          const limit = matches.length ? 12 : 14;
+          const limit = matches.length ? 30 : 40;
           const compactCatalog = ranked.slice(0,limit).map(row => ({
-            id: row.item.id, title: row.item.title, description: row.item.description.slice(0,100), category: row.item.category
+            id: row.item.id, title: row.item.title, description: row.item.description.slice(0,170), category: row.item.category
           }));
-          const instructions = "Ты — семантический поисковик каталога Агентства подарков. Сопоставь запрос с работами по смыслу, настроению, сезону, цветам и теме. Используй только переданный список и его ID. Верни только JSON вида {\"product_ids\":[\"id1\"]}; ID упорядочи по релевантности, максимум 12. Не включай слабые совпадения.";
+          const instructions = "Ты — семантический поисковик каталога Агентства подарков. Сопоставь запрос с работами по смыслу, настроению, сезону, цветам и теме. Используй только переданный список и его ID. Верни только JSON вида {\"product_ids\":[\"id1\"]}; ID упорядочи по релевантности и верни до 20 подходящих работ. Не останавливайся на 2–3 результатах, если в переданном каталоге есть другие разумно подходящие работы. Учитывай близкие по смыслу темы, настроение, сезон, цветовую гамму, назначение и описание. Не добавляй совершенно посторонние работы.";
           const response = await workersAiFetch(env, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
@@ -3309,7 +3309,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           const product_ids = Array.isArray(parsed.product_ids)
             ? [...new Set(parsed.product_ids.map(String).filter(id => allowed.has(id)))].slice(0,20) : [];
           try {
-            await env.DB.prepare("INSERT INTO catalog_search_cache(query_hash,product_ids,expires_at) VALUES(?,?,datetime('now','+30 days')) ON CONFLICT(query_hash) DO UPDATE SET product_ids=excluded.product_ids,created_at=CURRENT_TIMESTAMP,expires_at=excluded.expires_at")
+            await env.DB.prepare("INSERT INTO catalog_search_cache(query_hash,product_ids,expires_at) VALUES(?,?,datetime('now','+7 days')) ON CONFLICT(query_hash) DO UPDATE SET product_ids=excluded.product_ids,created_at=CURRENT_TIMESTAMP,expires_at=excluded.expires_at")
               .bind(cacheKey,JSON.stringify(product_ids)).run();
           } catch (cacheError) {
             if (!isMissingTableError(cacheError,"catalog_search_cache")) console.warn("Semantic search cache write failed:",String(cacheError).slice(0,200));
