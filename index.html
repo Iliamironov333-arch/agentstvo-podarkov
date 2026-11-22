@@ -2483,8 +2483,8 @@ async function loadPublicGroupRules(){
  status.textContent='Загружаем актуальные правила…';root.textContent='';
  try{
   const data=await apiFetch('/api/public/group-rules');
-  if(!data.rules_enabled||!String(data.rules_text||'').trim()){status.textContent='Правила группы сейчас не опубликованы.';return;}
-  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Актуальная версия из панели владельца.';
+  if(!String(data.rules_text||'').trim()){status.textContent='В панели владельца пока не заполнен текст правил группы.';return;}
+  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Актуальная версия из панели владельца.'+(data.rules_enabled?'':' Автоматическая отправка правил новым участникам сейчас выключена.');
  }catch(error){status.textContent='Не удалось загрузить правила. Попробуйте обновить раздел.';}
 }
 async function loadPublicDeals(){
