@@ -2005,18 +2005,10 @@ body.winter-season .owner-admin-pill:focus-visible{
   </div>
   <p class="notice" id="profileAnalyticsHint">Здесь отображается только Ваша личная статистика.</p>
  </div>
- <div class="panel" id="profileWarningsPanel">
-  <h3>⚠️ Мои предупреждения</h3>
-  <div id="profileWarningsList" class="muted">Загружаем сведения…</div>
- </div>
- <div class="panel">
-  <h3>⚙️ Управление аккаунтом</h3>
-  <div style="display:grid;gap:9px">
-   <button class="secondary" type="button" onclick="showView('ordersView')">📦 Мои заказы и статусы</button>
-   <button class="secondary" type="button" onclick="showView('balanceView')">⭐ Баланс и платежи</button>
-   <button class="secondary" type="button" onclick="showView('supportView')">💬 Связаться с поддержкой</button>
-  </div>
- </div>
+ <details class="orders-collapsible" id="profileWarningsPanel">
+  <summary>⚠️ Мои предупреждения</summary>
+  <div id="profileWarningsList" class="muted" style="padding:12px 0">Загружаем сведения…</div>
+ </details>
  <div class="panel"><div class="sectionhead"><h3>🎁 Мои бонусы</h3><span>обмен на Stars</span></div><p class="muted">Бонусы выдаются владельцем Агентства. При продаже бонусов активный VIP получает дополнительно +20% Stars к сумме обмена.</p><div id="bonusInventory"><p class="muted">Загружаем бонусы…</p></div></div>
 </section>
 <section id="vipView" class="hidden">
