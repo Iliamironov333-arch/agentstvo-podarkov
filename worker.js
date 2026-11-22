@@ -1368,11 +1368,20 @@ export default {
       if (path === "/api/group-invites/access" && method === "GET") {
         if (!(await tableExists(env, "group_invite_sessions"))) return json({ error: "Система сохранённого доступа пока не настроена." }, 503, origin);
         const token = String(request.headers.get("X-Group-Access-Token") || "").trim();
-        if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return json({ error: "Сохранённый доступ не найден." }, 401, origin);
-        const tokenHash = await groupInviteSessionHash(env, token);
-        const session = await env.DB.prepare(
-          "SELECT s.id,s.invite_id FROM group_invite_sessions s JOIN group_invite_codes c ON c.id=s.invite_id WHERE s.token_hash=? AND s.telegram_id=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND c.deleted_at IS NULL LIMIT 1"
-        ).bind(tokenHash, telegramId).first();
+        let session = null;
+        if (/^[A-Za-z0-9_-]{40,60}$/.test(token)) {
+          const tokenHash = await groupInviteSessionHash(env, token);
+          session = await env.DB.prepare(
+            "SELECT s.id,s.invite_id FROM group_invite_sessions s JOIN group_invite_codes c ON c.id=s.invite_id WHERE s.token_hash=? AND s.telegram_id=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND c.deleted_at IS NULL LIMIT 1"
+          ).bind(tokenHash, telegramId).first();
+        }
+        // Telegram initData is already verified above. Fall back to the user's active server-side
+        // session so access survives browser/device changes without re-entering the invite code.
+        if (!session) {
+          session = await env.DB.prepare(
+            "SELECT s.id,s.invite_id FROM group_invite_sessions s JOIN group_invite_codes c ON c.id=s.invite_id WHERE s.telegram_id=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND c.deleted_at IS NULL ORDER BY s.created_at DESC LIMIT 1"
+          ).bind(telegramId).first();
+        }
         if (!session) return json({ error: "Сохранённый доступ истёк или был отозван." }, 401, origin);
         await env.DB.prepare("UPDATE group_invite_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?").bind(session.id).run();
         const groupUrl = String(env.GROUP_INVITE_URL || "").trim();
