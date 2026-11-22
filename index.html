@@ -2059,6 +2059,23 @@ body.winter-season .owner-admin-pill:focus-visible{
    <h3>📌 Правила группы</h3>
    <div id="groupInviteRulesText" style="white-space:pre-wrap;line-height:1.65"></div>
    <button class="primary hidden" id="groupInviteJoinButton" type="button" style="width:100%;margin-top:16px">➡️ Вступить в группу</button>
+   <div id="groupBuyerActivity" class="panel hidden" style="margin-top:14px">
+    <h3>📊 Ваша активность</h3>
+    <div class="admin-metrics" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+     <div class="admin-metric"><span>Оплаченные заказы</span><strong id="groupStatOrders">—</strong></div>
+     <div class="admin-metric"><span>Потрачено Stars</span><strong id="groupStatSpent">—</strong></div>
+     <div class="admin-metric"><span>Избранные работы</span><strong id="groupStatFavorites">—</strong></div>
+     <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="groupStatCustom">—</strong></div>
+    </div>
+    <p class="notice" id="groupStatSince">Статистика загружается из вашего профиля.</p>
+   </div>
+   <div id="groupMemberSettings" class="panel hidden" style="margin-top:14px">
+    <h3>⚙️ Настройки участника</h3>
+    <p class="muted">Настройки оформления и уведомлений. Доступ к группе сохраняется на этом устройстве.</p>
+    <button class="secondary" id="groupThemeToggle" type="button" style="width:100%;margin-top:8px" onclick="toggleTheme();updateGroupThemeLabel()">🌙 Включить ночной режим</button>
+    <p class="notice">Ночной режим меняет оформление всего мини-приложения. Выбор сохраняется на устройстве.</p>
+    <p class="notice" id="groupWarningSettingsNote">Настройки предупреждений появятся здесь после уточнения, о каких событиях нужно предупреждать участников.</p>
+   </div>
   </div>
  </div>
 </section>
@@ -2509,24 +2526,67 @@ function updateSeasonalCopy(){
  set('aboutSeasonDiscountLabel',copy.name+' скидка');
 }
 let groupInviteAccess = null;
+const GROUP_ACCESS_STORAGE_KEY='gift-group-access-token';
+function getSavedGroupAccessToken(){try{return localStorage.getItem(GROUP_ACCESS_STORAGE_KEY)||''}catch{return''}}
+function saveGroupAccessToken(token){try{if(token)localStorage.setItem(GROUP_ACCESS_STORAGE_KEY,String(token));else localStorage.removeItem(GROUP_ACCESS_STORAGE_KEY)}catch{}}
+function updateGroupThemeLabel(){
+ const button=document.getElementById('groupThemeToggle');if(!button)return;
+ const dark=document.body.classList.contains('dark-theme');
+ button.textContent=dark?'☀️ Выключить ночной режим':'🌙 Включить ночной режим';
+}
 function renderGroupInviteAccess(){
  const form=document.getElementById('groupInviteCodeForm');
  const panel=document.getElementById('groupInviteRulesPanel');
  const rules=document.getElementById('groupInviteRulesText');
  const join=document.getElementById('groupInviteJoinButton');
  const status=document.getElementById('groupInviteStatus');
+ const activity=document.getElementById('groupBuyerActivity');
+ const settings=document.getElementById('groupMemberSettings');
  if(!form||!panel||!rules||!join)return;
  if(!groupInviteAccess){
   form.classList.remove('hidden');panel.classList.add('hidden');join.classList.add('hidden');
+  activity?.classList.add('hidden');settings?.classList.add('hidden');
   return;
  }
  form.classList.add('hidden');panel.classList.remove('hidden');join.classList.remove('hidden');
+ activity?.classList.remove('hidden');settings?.classList.remove('hidden');
  rules.textContent=groupInviteAccess.rules_text;
- status.textContent='Код подтверждён сервером. Доступ к правилам открыт.';
+ if(status)status.textContent='Доступ подтверждён сервером и сохранён для этого Telegram-аккаунта на этом устройстве.';
+ updateGroupThemeLabel();
  join.onclick=()=>{
   if(tg?.openTelegramLink)tg.openTelegramLink(groupInviteAccess.group_url);
   else window.open(groupInviteAccess.group_url,'_blank','noopener');
  };
+ loadGroupBuyerActivity();
+}
+async function loadGroupBuyerActivity(){
+ const root=document.getElementById('groupBuyerActivity');if(!root||!groupInviteAccess)return;
+ try{
+  const me=await apiFetch('/api/me');const a=me.activity||{};
+  const set=(id,value)=>{const node=document.getElementById(id);if(node)node.textContent=String(value)};
+  set('groupStatOrders',Number(a.paid_orders||0).toLocaleString('ru-RU'));
+  set('groupStatSpent',Number(a.total_spent_stars||0).toLocaleString('ru-RU')+' ⭐');
+  set('groupStatFavorites',Number(a.favorites_count||0).toLocaleString('ru-RU'));
+  set('groupStatCustom',Number(a.custom_orders||0).toLocaleString('ru-RU'));
+  const since=document.getElementById('groupStatSince');
+  if(since)since.textContent=a.member_since?'В Агентстве подарков с '+new Date(String(a.member_since).replace(' ','T')+'Z').toLocaleDateString('ru-RU')+'.':'Статистика вашего профиля обновлена.';
+ }catch(error){const since=document.getElementById('groupStatSince');if(since)since.textContent='Не удалось загрузить статистику. Откройте раздел позже.';}
+}
+async function loadSavedGroupInviteAccess(){
+ if(groupInviteAccess){renderGroupInviteAccess();return}
+ const token=getSavedGroupAccessToken();
+ if(!token){renderGroupInviteAccess();return}
+ const status=document.getElementById('groupInviteStatus');if(status)status.textContent='Проверяем сохранённый доступ…';
+ try{
+  const data=await apiFetch('/api/group-invites/access',{headers:{'X-Group-Access-Token':token}});
+  if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/'))throw new Error('Сохранённый доступ не подтверждён.');
+  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url)};
+  renderGroupInviteAccess();
+ }catch(error){
+  if(error.status===401||error.status===403)saveGroupAccessToken('');
+  if(status)status.textContent='Сохранённый доступ недействителен. Введите код приглашения ещё раз.';
+  renderGroupInviteAccess();
+ }
 }
 async function submitGroupInviteCode(){
  const input=document.getElementById('groupInviteCodeInput');
@@ -2537,8 +2597,9 @@ async function submitGroupInviteCode(){
  button.disabled=true;status.textContent='Проверяем код на сервере…';
  try{
   const data=await apiFetch('/api/group-invites/validate',{method:'POST',body:JSON.stringify({code})});
-  if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/'))throw new Error('Сервер не подтвердил доступ к группе.');
+  if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/')||!String(data.session_token||''))throw new Error('Сервер не подтвердил доступ или не создал сохранённую сессию.');
   groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url)};
+  saveGroupAccessToken(data.session_token);
   if(input)input.value='';
   renderGroupInviteAccess();
  }catch(error){
@@ -2587,7 +2648,7 @@ function showView(id) {
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView' || id === 'vipPlansView') loadVip();
  if (id === 'leaderboardView') loadPublicLeaderboard();
- if (id === 'groupInviteView') renderGroupInviteAccess();
+ if (id === 'groupInviteView') loadSavedGroupInviteAccess();
  if (id === 'dealsView') loadPublicDeals();
  if (id === 'adminPanelView') {
   document.getElementById('adminGroupInvitesPanel')?.classList.toggle('hidden',adminSession?.root_owner!==true);
