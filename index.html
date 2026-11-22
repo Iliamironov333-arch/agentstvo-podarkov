@@ -3208,7 +3208,7 @@ async function loadPublicRanks(){
 
 let adminGiftUsersCache=[];
 async function loadAdminGiftUsers(){
- const panel=document.getElementById('adminGiftPackPanel');const canGift=adminSession?.root_owner===true||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;if(panel)panel.classList.toggle('hidden',!canGift);
+ const panel=document.getElementById('adminGiftPackPanel');const canGift=adminSession?.root_owner===true||adminSession?.role==='owner'||(adminSession?.permissions?.users_balance===true&&adminSession?.permissions?.users_view===true&&adminSession?.permissions?.catalog_view===true);if(panel)panel.classList.toggle('hidden',!canGift);
  const select=document.getElementById('adminGiftUser');if(!select||!initData||!canGift)return;
  try{
   const data=await apiFetch('/api/admin/users?limit=500');adminGiftUsersCache=Array.isArray(data.users)?data.users:[];
