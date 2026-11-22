@@ -3290,7 +3290,7 @@ if (path === "/api/admin/packs" && method === "GET") {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
               input: [{ role: "user", content: "Запрос: " + query + "\nРаботы: " + JSON.stringify(compactCatalog) }],
-              max_output_tokens: 160, temperature: 0.1 })
+              max_output_tokens: 2000, temperature: 0.1 })
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
