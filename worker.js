@@ -1239,6 +1239,19 @@ export default {
         return new Response(bytes, { status: 200, headers: { "Content-Type": image.mime_type, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff", ...corsHeaders(origin) } });
       }
 
+      if (path === "/api/public/promos" && method === "GET") {
+        if (!(await tableExists(env,"promo_codes"))) return json({ok:true,promos:[]},200,origin);
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS promo_publicity (code TEXT PRIMARY KEY,is_public INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+        const rows=await env.DB.prepare("SELECT p.code,p.discount_percent,p.starts_at,p.ends_at,p.max_uses,p.product_ids,p.category_ids FROM promo_codes p INNER JOIN promo_publicity v ON v.code=p.code AND v.is_public=1 WHERE p.is_active=1 AND (p.starts_at IS NULL OR p.starts_at='' OR datetime(p.starts_at)<=datetime('now')) AND (p.ends_at IS NULL OR p.ends_at='' OR datetime(p.ends_at)>=datetime('now')) AND (p.max_uses IS NULL OR p.redeemed_count<p.max_uses) ORDER BY p.created_at DESC LIMIT 100").all();
+        return json({ok:true,promos:rows.results||[]},200,origin);
+      }
+      if (path === "/api/public/group-rules" && method === "GET") {
+        if (!(await tableExists(env,"ai_moderator_settings"))) return json({ok:true,rules_enabled:false,rules_text:""},200,origin);
+        const row=await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
+        let settings={};try{settings=JSON.parse(row?.settings_json||"{}");}catch{}
+        return json({ok:true,rules_enabled:settings.rules_enabled===true,rules_text:settings.rules_enabled===true?String(settings.rules_text||"").slice(0,3000):""},200,origin);
+      }
+
       const user = await validateTelegram(request.headers.get("X-Telegram-Init-Data"), env.BOT_TOKEN);
       if (!user) return json({ error: "Telegram authentication failed. Откройте Mini App через Telegram." }, 401, origin);
       const telegramId = String(user.id).trim();
@@ -1615,10 +1628,11 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
         }
                 if(path==="/api/admin/promos"&&method==="GET"){
           if(!(await tableExists(env,"promo_codes")))return json({ok:true,promos:[],migration_pending:true,scope_migration_pending:true},200,origin);
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS promo_publicity (code TEXT PRIMARY KEY,is_public INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
           const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
           const rows=await env.DB.prepare(scopeReady
-            ? "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,product_ids,category_ids,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100"
-            : "SELECT code,discount_percent,max_uses,reserved_count,redeemed_count,starts_at,ends_at,is_active,'[]' AS product_ids,'[]' AS category_ids,created_at,updated_at FROM promo_codes ORDER BY created_at DESC LIMIT 100").all();
+            ? "SELECT p.code,p.discount_percent,p.max_uses,p.reserved_count,p.redeemed_count,p.starts_at,p.ends_at,p.is_active,p.product_ids,p.category_ids,COALESCE(v.is_public,0) AS is_public,p.created_at,p.updated_at FROM promo_codes p LEFT JOIN promo_publicity v ON v.code=p.code ORDER BY p.created_at DESC LIMIT 100"
+            : "SELECT p.code,p.discount_percent,p.max_uses,p.reserved_count,p.redeemed_count,p.starts_at,p.ends_at,p.is_active,'[]' AS product_ids,'[]' AS category_ids,COALESCE(v.is_public,0) AS is_public,p.created_at,p.updated_at FROM promo_codes p LEFT JOIN promo_publicity v ON v.code=p.code ORDER BY p.created_at DESC LIMIT 100").all();
           return json({ok:true,promos:rows.results||[],scope_migration_pending:!scopeReady},200,origin);
         }
         if(path==="/api/admin/promo-save"&&method==="POST"){
@@ -1628,6 +1642,7 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
           const starts=typeof body.starts_at==="string"&&body.starts_at.trim()?body.starts_at.trim().replace("T"," ").slice(0,19).padEnd(19,":00"):null;
           const ends=typeof body.ends_at==="string"&&body.ends_at.trim()?body.ends_at.trim().replace("T"," ").slice(0,19).padEnd(19,":00"):null;
           const active=body.is_active===true||body.is_active===1?1:0;
+          const isPublic=body.is_public===true||body.is_public===1?1:0;
           const productIds=promoScopeValues(body.product_ids),categoryIds=promoScopeValues(body.category_ids);
           if(!/^[A-Z0-9_-]{3,32}$/.test(code)||!Number.isSafeInteger(percent)||percent<1||percent>90||(maxUses!==null&&(!Number.isSafeInteger(maxUses)||maxUses<1)))return json({error:"Проверьте код, скидку 1–90% и лимит использований."},400,origin);
           if(starts&&ends&&Date.parse(starts)>=Date.parse(ends))return json({error:"Дата окончания должна быть позже даты начала."},400,origin);
@@ -1646,7 +1661,9 @@ if(path==="/api/admin/gift-certificates"&&method==="GET"){
             await env.DB.prepare("INSERT INTO promo_codes (code,discount_percent,max_uses,starts_at,ends_at,is_active) VALUES (?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET discount_percent=excluded.discount_percent,max_uses=excluded.max_uses,starts_at=excluded.starts_at,ends_at=excluded.ends_at,is_active=excluded.is_active,updated_at=CURRENT_TIMESTAMP")
               .bind(code,percent,maxUses,starts,ends,active).run();
           }
-          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"promo_code_saved",JSON.stringify({code,discount_percent:percent,max_uses:maxUses,is_active:active,product_ids:productIds,category_ids:categoryIds})).run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS promo_publicity (code TEXT PRIMARY KEY,is_public INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+          await env.DB.prepare("INSERT INTO promo_publicity(code,is_public,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(code) DO UPDATE SET is_public=excluded.is_public,updated_at=CURRENT_TIMESTAMP").bind(code,isPublic).run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"promo_code_saved",JSON.stringify({code,discount_percent:percent,max_uses:maxUses,is_active:active,is_public:isPublic,product_ids:productIds,category_ids:categoryIds})).run();
           return json({ok:true,code},200,origin);
         }
                 if (path === "/api/admin/product-order" && method === "POST") {
