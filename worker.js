@@ -2250,21 +2250,24 @@ if (path === "/api/admin/packs" && method === "GET") {
           if (!target) return json({ error: "Пользователь не найден." }, 404, origin);
           const operationId = makeId();
           const description = "Операция администратора: " + reason;
-          const results = await env.DB.batch([
+          const giftEventId=amount>0?makeId():null;
+          if(giftEventId)await ensureGiftNotificationsSchema(env);
+          const statements=[
             env.DB.prepare("UPDATE users SET balance_stars=balance_stars+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND balance_stars+?>=0")
               .bind(amount, targetId, amount),
             env.DB.prepare("INSERT INTO balance_transactions (telegram_id,amount_stars,operation_type,description,idempotency_key) SELECT ?,?,'admin_adjustment',?,? WHERE changes()=1")
               .bind(targetId, amount, description, "admin:" + operationId),
             env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,target_telegram_id,action_type,details) SELECT ?,?,'balance_adjustment',? WHERE changes()=1")
               .bind(telegramId, targetId, JSON.stringify({ amount, reason, operation_id: operationId }))
-          ]);
+          ];
+          if(giftEventId)statements.push(env.DB.prepare("INSERT INTO gift_notifications(id,telegram_id,event_type,payload_json) VALUES(?,?,'balance_credit',?)").bind(giftEventId,targetId,JSON.stringify({amount,reason})));
+          const results = await env.DB.batch(statements);
           if (!results[0]?.meta || results[0].meta.changes !== 1) {
             const latest = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
             if (!latest) return json({ error: "Пользователь не найден." }, 404, origin);
             return json({ error: "Недостаточно баллов для списания или операция не выполнена. Баланс не изменён.", balance: Number(latest.balance_stars || 0) }, 409, origin);
           }
           const updated = await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(targetId).first();
-          if(amount>0){await ensureGiftNotificationsSchema(env);await env.DB.prepare("INSERT INTO gift_notifications(id,telegram_id,event_type,payload_json) VALUES(?,?,'balance_credit',?)").bind(makeId(),targetId,JSON.stringify({amount,reason})).run();}
           await notifyOwner(env, "⭐ Изменение баланса администратором\nПользователь: " + targetId + "\nОперация: " + (amount > 0 ? "+" : "") + amount + " баллов\nПричина: " + reason);
           return json({ ok: true, telegram_id: targetId, amount, balance: Number(updated?.balance_stars || 0) }, 200, origin);
         }
