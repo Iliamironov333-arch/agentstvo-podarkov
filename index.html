@@ -2073,8 +2073,10 @@ body.winter-season .owner-admin-pill:focus-visible{
     <h3>⚙️ Настройки участника</h3>
     <p class="muted">Настройки оформления и уведомлений. Доступ к группе сохраняется на этом устройстве.</p>
     <button class="secondary" id="groupThemeToggle" type="button" style="width:100%;margin-top:8px" onclick="toggleTheme();updateGroupThemeLabel()">🌙 Включить ночной режим</button>
-    <p class="notice">Ночной режим меняет оформление всего мини-приложения. Выбор сохраняется на устройстве.</p>
-    <p class="notice" id="groupWarningSettingsNote">Настройки предупреждений появятся здесь после уточнения, о каких событиях нужно предупреждать участников.</p>
+    <p class="notice">Переключатель выше меняет только оформление мини-приложения и сохраняет выбор на этом устройстве.</p>
+    <div class="lineitem"><span>🌙 Ночной режим группы</span><b id="groupNightModerationStatus">Загрузка…</b></div>
+    <p class="notice" id="groupNightModerationNote">Расписание ночного режима загрузится после проверки доступа.</p>
+    <p class="notice" id="groupWarningSettingsNote">Сведения о ваших предупреждениях загрузятся после проверки доступа.</p>
    </div>
   </div>
  </div>
@@ -2553,6 +2555,16 @@ function renderGroupInviteAccess(){
  rules.textContent=groupInviteAccess.rules_text;
  if(status)status.textContent='Доступ подтверждён сервером и сохранён для этого Telegram-аккаунта на этом устройстве.';
  updateGroupThemeLabel();
+ const moderation=groupInviteAccess.moderation||{};
+ const warningNote=document.getElementById('groupWarningSettingsNote');
+ const warningThreshold=Math.max(1,Number(moderation.warnings_before_restriction||2));
+ const activeWarnings=Math.max(0,Number(moderation.active_warnings||0));
+ const escalation=moderation.warning_escalation_action==='mute'?'временное ограничение сообщений':moderation.warning_escalation_action==='warning'?'дополнительное предупреждение':'ограничение участия в группе';
+ if(warningNote)warningNote.textContent=(activeWarnings===0?'У вас нет активных предупреждений.':'У вас активных предупреждений: '+activeWarnings+'.')+' Порог — '+warningThreshold+' активных предупреждения(й); после него может применяться '+escalation+'. Предупреждение действует '+Number(moderation.warning_active_days||20)+' дней, история хранится '+Number(moderation.warning_history_days||60)+' дней.';
+ const nightStatus=document.getElementById('groupNightModerationStatus');
+ const nightNote=document.getElementById('groupNightModerationNote');
+ if(nightStatus)nightStatus.textContent=moderation.night_mode===false?'Выключен':'Включён';
+ if(nightNote)nightNote.textContent=moderation.night_mode===false?'Ночные ограничения группы сейчас отключены.':('По расписанию группы: '+(moderation.night_start||'23:00')+'–'+(moderation.night_end||'07:00')+' по Екатеринбургу.');
  join.onclick=()=>{
   if(tg?.openTelegramLink)tg.openTelegramLink(groupInviteAccess.group_url);
   else window.open(groupInviteAccess.group_url,'_blank','noopener');
@@ -2580,7 +2592,7 @@ async function loadSavedGroupInviteAccess(){
  try{
   const data=await apiFetch('/api/group-invites/access',{headers:{'X-Group-Access-Token':token}});
   if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/'))throw new Error('Сохранённый доступ не подтверждён.');
-  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url)};
+  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url),moderation:data.moderation||{}};
   renderGroupInviteAccess();
  }catch(error){
   if(error.status===401||error.status===403)saveGroupAccessToken('');
@@ -2598,7 +2610,7 @@ async function submitGroupInviteCode(){
  try{
   const data=await apiFetch('/api/group-invites/validate',{method:'POST',body:JSON.stringify({code})});
   if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/')||!String(data.session_token||''))throw new Error('Сервер не подтвердил доступ или не создал сохранённую сессию.');
-  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url)};
+  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url),moderation:data.moderation||{}};
   saveGroupAccessToken(data.session_token);
   if(input)input.value='';
   renderGroupInviteAccess();
