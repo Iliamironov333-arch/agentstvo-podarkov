@@ -1455,6 +1455,28 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+/* Полноэкранная сезонная заставка корзины: визуальная, но полностью прозрачная для касаний */
+.cart-add-splash{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none!important;user-select:none;animation:cartSeaIn .22s ease-out both}
+.cart-add-splash-waves{position:absolute;left:-10%;right:-10%;bottom:-3%;height:25%;display:flex;justify-content:space-around;align-items:center;color:#fff9;font-size:clamp(25px,6vw,52px);letter-spacing:18px;white-space:nowrap;animation:cartWave 1.5s ease-in-out both}
+.cart-add-scene{position:relative;z-index:1;display:grid;justify-items:center;gap:15px;width:min(390px,calc(100vw - 36px));text-align:center}
+.cart-add-ring{font-size:clamp(78px,22vw,112px);line-height:1;filter:drop-shadow(0 12px 12px #003c6433);animation:cartFloatRing 1.35s cubic-bezier(.2,.75,.25,1) both}
+.cart-add-confirm-card{display:flex;align-items:center;gap:12px;width:100%;padding:12px 15px;border:1px solid #ffffffa8;border-radius:19px;background:#ffffffeb;color:#302317;box-shadow:0 12px 34px #17354a30;animation:cartSeaTitle .45s .18s both}
+.cart-add-confirm-card img{width:66px;height:66px;flex:0 0 66px;object-fit:cover;border-radius:12px;background:#fff}
+.cart-add-copy{display:grid;gap:5px;text-align:left;min-width:0}
+.cart-add-copy strong{font-size:14px;line-height:1.3}
+.cart-add-copy span{font-size:11px;opacity:.72}
+@keyframes cartSeaIn{from{opacity:0}to{opacity:1}}
+@keyframes cartWave{0%{transform:translateX(-8%) rotate(-4deg)}50%{transform:translateX(5%) rotate(3deg)}100%{transform:translateX(-2%) rotate(0)}}
+@keyframes cartFloatRing{0%{opacity:0;transform:translateY(90px) rotate(-35deg) scale(.55)}45%{opacity:1;transform:translateY(-18px) rotate(16deg) scale(1.12)}70%{transform:translateY(7px) rotate(-7deg) scale(.98)}100%{transform:translateY(0) rotate(0) scale(1)}}
+@keyframes cartSeaTitle{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.cart-add-splash,.cart-add-splash-waves,.cart-add-ring,.cart-add-confirm-card{animation:none!important}}
+/* Физический отклик кнопок для касаний iPad/WebView, управляется той же чит-панелью */
+html.motion-enabled button.motion-pressed:not(:disabled){opacity:var(--motion-button-opacity);transform:scale(var(--motion-button-scale));box-shadow:inset 0 0 0 999px rgba(255,255,255,var(--motion-glass-opacity))}
+html[data-button-effect="none"] button.motion-pressed:not(:disabled){opacity:1;transform:none;box-shadow:none}
+html[data-button-effect="opacity"] button.motion-pressed:not(:disabled){transform:none}
+html[data-button-effect="scale"] button.motion-pressed:not(:disabled){opacity:1}
+html.motion-glass-off button.motion-pressed:not(:disabled){box-shadow:none}
+
 /* Локальные эффекты корзины — не затрагивают общие настройки плавности */
 .cart-add-fx{position:fixed;z-index:10040;top:18%;left:50%;transform:translateX(-50%);width:min(310px,calc(100vw - 32px));display:grid;justify-items:center;gap:8px;pointer-events:none;user-select:none;animation:cartFxIn .35s ease-out both}
 .cart-add-fx-icon{font-size:78px;line-height:1;filter:drop-shadow(0 8px 12px rgba(0,70,110,.24));animation:cartFxFloat 1.15s ease-in-out both}
@@ -2354,6 +2376,23 @@ async function loadUiMotionSettings(){
  try{const data=await apiFetch('/api/ui-motion');uiMotionSettings={...UI_MOTION_DEFAULTS,...data.settings};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();}
  catch(error){console.warn('Не удалось загрузить глобальные настройки плавности:',error);}
 }
+/* Надёжное состояние нажатия для сенсорных экранов. Значения всегда берутся из чит-панели. */
+(function bindMotionButtonPress(){
+ if(document.documentElement.dataset.motionPressBound==='1')return;
+ document.documentElement.dataset.motionPressBound='1';
+ let pressedButton=null;
+ const clear=()=>{if(pressedButton){pressedButton.classList.remove('motion-pressed');pressedButton=null;}};
+ const press=target=>{
+  const button=target?.closest?.('button');
+  if(!button||button.disabled||uiMotionSettings.enabled===false||uiMotionSettings.buttonEffect==='none')return;
+  clear();pressedButton=button;button.classList.add('motion-pressed');
+ };
+ document.addEventListener('pointerdown',event=>press(event.target),{capture:true,passive:true});
+ document.addEventListener('pointerup',clear,{capture:true,passive:true});
+ document.addEventListener('pointercancel',clear,{capture:true,passive:true});
+ document.addEventListener('pointerover',event=>{if(event.pointerType==='mouse'&&pressedButton&&event.target!==pressedButton)clear();},{capture:true,passive:true});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)clear();});
+})();
 function resetUiMotionSettings(){
  uiMotionSettings={...UI_MOTION_DEFAULTS};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
 }
@@ -4439,14 +4478,27 @@ function showVipPurchaseReveal(planType){
  panel.append(crown,sparkles,heading,note,detail,close);overlay.append(panel);overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.remove()});document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
 function showCartAddAnimation(product){
- document.querySelectorAll('.cart-add-fx').forEach(node=>node.remove());
+ document.querySelectorAll('.cart-add-splash').forEach(node=>node.remove());
  const season=getActiveSeasonForEffects();
- const scenes={autumn:{icon:'🍂',wave:'🍁',color:'#79451d'},winter:{icon:'🎄',wave:'❄️',color:'#174568'},spring:{icon:'🐣',wave:'🌷',color:'#3d6136'},summer:{icon:'🛟',wave:'🌊',color:'#075273'}};
- const scene=scenes[season],fx=document.createElement('div');fx.className='cart-add-fx';fx.dataset.season=season;fx.setAttribute('aria-hidden','true');
- const icon=document.createElement('div');icon.className='cart-add-fx-icon';icon.textContent=scene.icon;
- const label=document.createElement('div');label.className='cart-add-fx-label';label.style.color=scene.color;label.textContent=scene.wave+' '+(product?.[1]||'Картина')+' добавлена в корзину';
- fx.append(icon,label);document.body.append(fx);
- window.setTimeout(()=>fx.remove(),1550);
+ const scenes={
+  autumn:{icon:'🍂',wave:'🍁',title:'Осенняя коллекция',bg:'linear-gradient(180deg,#fff0d8 0%,#d99a4c 58%,#8b4e22 100%)',color:'#704018'},
+  winter:{icon:'🎄',wave:'❄️',title:'Новогодний подарок',bg:'linear-gradient(180deg,#e5f7ff 0%,#75b9df 58%,#245b88 100%)',color:'#16496d'},
+  spring:{icon:'🐣',wave:'🌷',title:'Весеннее настроение',bg:'linear-gradient(180deg,#fff7d9 0%,#bde7bb 58%,#6eae79 100%)',color:'#315d39'},
+  summer:{icon:'🛟',wave:'🌊',title:'Летний отдых',bg:'linear-gradient(180deg,#b9edff 0%,#65c8ed 48%,#168bbd 100%)',color:'#075273'}
+ };
+ const scene=scenes[season]||scenes.autumn;
+ const overlay=document.createElement('div');overlay.className='cart-add-splash';overlay.dataset.season=season;overlay.setAttribute('aria-hidden','true');overlay.style.background=scene.bg;
+ const waves=document.createElement('div');waves.className='cart-add-splash-waves';waves.textContent=scene.wave+'   '+scene.wave+'   '+scene.wave;
+ const sceneBox=document.createElement('div');sceneBox.className='cart-add-scene';sceneBox.style.color=scene.color;
+ const icon=document.createElement('div');icon.className='cart-add-ring';icon.textContent=scene.icon;
+ const card=document.createElement('div');card.className='cart-add-confirm-card';
+ if(product?.[5]){const image=document.createElement('img');image.src=product[5];image.alt=product[1]||'Добавленная работа';card.append(image);}
+ const copy=document.createElement('div');copy.className='cart-add-copy';
+ const title=document.createElement('strong');title.textContent=(product?.[1]||'Работа')+' добавлена в корзину';
+ const subtitle=document.createElement('span');subtitle.textContent=scene.title+' · можно продолжить покупки';
+ copy.append(title,subtitle);card.append(copy);
+ sceneBox.append(icon,card);overlay.append(waves,sceneBox);document.body.append(overlay);
+ window.setTimeout(()=>{if(overlay.isConnected)overlay.remove();},1750);
 }
 function showCartPurchaseReveal(items){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
