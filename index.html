@@ -5477,6 +5477,21 @@ async function loadMe() {
  try{
   const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[];
+  const aiDraftData=await apiFetch('/api/my/ai-orders').catch(()=>({orders:[]}));
+  const aiDrafts=Array.isArray(aiDraftData.orders)?aiDraftData.orders:[];
+  const unfinishedAi=aiDrafts.filter(x=>["collecting","review","approved"].includes(String(x.status))&&!x.chat_deleted);
+  const aiDraftCards=unfinishedAi.map(x=>{
+    const id=String(x.id).replace(/[^a-zA-Z0-9_-]/g,"");
+    const state=x.status==="review"?"Передано владельцу на проверку":x.status==="approved"?"Ожидает оплаты":"Сбор пожеланий";
+    const action=x.source==="group"
+      ?(x.group_url?'<a class="secondary order-action-btn" href="'+x.group_url+'" target="_blank" rel="noopener">👥 Перейти в группу</a>':'<span class="muted">Откройте группу, где Вы начали заказ.</span>')
+      :x.source==="miniapp_support_chat"
+        ?'<button type="button" class="secondary order-action-btn" data-ai-draft-action="support" data-ai-draft-id="'+id+'" data-ai-support-id="'+String(x.support_conversation_id||"").replace(/[^a-zA-Z0-9_-]/g,"")+'">💬 Перейти в чат</button>'
+        :'<button type="button" class="secondary order-action-btn" data-ai-draft-action="craft" data-ai-draft-id="'+id+'">💬 Перейти в чат</button>';
+    const cancel=x.can_cancel?'<button type="button" class="secondary order-action-btn" data-ai-draft-action="cancel" data-ai-draft-id="'+id+'">Отменить</button>':'';
+    return '<div class="order-card"><div class="lineitem"><span><b>🎨 Авторская работа</b><br><small>'+formatDate(x.created_at)+' · '+state+'</small></span><b>'+Number(x.approved_stars||x.estimated_stars||0)+' ⭐</b></div><div class="order-actions">'+action+cancel+'</div></div>';
+  }).join("");
+  
   orders.forEach(observeOrderMotionStatus);
   const pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
   const root=document.getElementById('ordersList');
@@ -5508,9 +5523,10 @@ async function loadMe() {
    const paidOrders=orders.filter(o=>!cancelledOrders.includes(o)&&(String(o.status||'').toLowerCase()==='paid'||String(o.payment_status||'').toLowerCase()==='paid'));
    const activeOrders=orders.filter(o=>!paidOrders.includes(o)&&!cancelledOrders.includes(o));
    const collapsedGroup=(key,title,items)=>items.length?'<details class="orders-collapsible" data-orders-group="'+key+'"><summary><span>'+title+'</span><small>'+items.length+'</small></summary>'+items.map(renderOrder).join('')+'</details>':'';
-   root.innerHTML=orders.length
+   const aiFolder=unfinishedAi.length?'<details class="orders-collapsible" data-ai-drafts-folder open><summary><span>🎨 Незавершённые</span><small>'+unfinishedAi.length+'</small></summary>'+aiDraftCards+'</details>':'';
+   root.innerHTML=aiFolder+(orders.length
     ?activeOrders.map(renderOrder).join('')+collapsedGroup('paid','Оплаченные заказы',paidOrders)+collapsedGroup('cancelled','Отменённые заказы',cancelledOrders)
-    :'<p class="muted">Пока заказов нет.</p>';
+    :'<p class="muted">Пока заказов нет.</p>');
    const paidDisclosure=root.querySelector('[data-orders-group="paid"]');if(paidDisclosure)paidDisclosure.open=paidWasOpen;
    const cancelledDisclosure=root.querySelector('[data-orders-group="cancelled"]');if(cancelledDisclosure)cancelledDisclosure.open=cancelledWasOpen;
   }
@@ -5576,7 +5592,30 @@ document.querySelectorAll('#filters button[data-filter]').forEach(b => b.onclick
 });
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape')document.getElementById('workDetailModal')?.classList.remove('open')});
+async function cancelAiDraftFromOrders(id){
+ if(!confirm('Отменить авторскую работу? Переписка по этому заказу будет закрыта и удалена из Вашего списка.'))return;
+ try{
+  await apiFetch('/api/my/ai-orders/cancel',{method:'POST',body:JSON.stringify({draft_id:id})});
+  showSeasonalSuccessReveal({icon:'✖️',title:'Заказ отменён',note:'Авторская работа закрыта.',detail:'Переписка по этому заказу удалена из Вашего списка.'});
+  toast('Авторская работа отменена.');
+  loadMe();
+ }catch(error){toast(error.message||'Не удалось отменить авторскую работу.');}
+}
 document.addEventListener('click',event=>{
+ const aiAction=event.target.closest('button[data-ai-draft-action]');
+ if(aiAction){
+  const id=aiAction.dataset.aiDraftId,action=aiAction.dataset.aiDraftAction;
+  if(action==='cancel'){cancelAiDraftFromOrders(id);return;}
+  if(action==='craft'){
+   craftDraftId=id;craftModeActive=true;showView('supportView');setUnifiedChatContext(false);
+   const fresh=document.getElementById('supportNewCraftOrderButton');if(fresh)fresh.classList.add('hidden');
+   loadCraftConversation();return;
+  }
+  if(action==='support'){
+   activeSupportConversationId=aiAction.dataset.aiSupportId||'';
+   showView('supportView');setUnifiedChatContext(false);loadSupportHistory(activeSupportConversationId);return;
+  }
+ }
  const orderButton=event.target.closest('button[data-order-action][data-order-id]');
  if(orderButton){const id=orderButton.dataset.orderId;if(orderButton.dataset.orderAction==='pay')payExistingOrder(id);else if(orderButton.dataset.orderAction==='cancel')cancelExistingOrder(id);}
  const chatButton=event.target.closest('button[data-order-chat][data-order-id]');
