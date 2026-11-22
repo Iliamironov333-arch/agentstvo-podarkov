@@ -1511,6 +1511,30 @@ body.winter-season .owner-admin-pill:focus-visible{
 .pack-reveal-overlay{overflow-y:auto;overscroll-behavior:contain;padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
 .pack-reveal-panel{max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
 .pack-reveal-close{position:sticky;bottom:0;width:100%;margin-top:16px;z-index:1}
+
+/* Seasonal action moments — isolated from global motion preferences. */
+.seasonal-bottom-moment{position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:4;width:min(340px,calc(100vw - 28px));min-height:66px;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;border:1px solid #ffffffa8;border-radius:22px;background:linear-gradient(135deg,#fffdf0f5,#ffffffeb);color:#49351d;box-shadow:0 12px 35px #2417082b;pointer-events:none;overflow:hidden;animation:seasonMomentRise .55s cubic-bezier(.2,.8,.2,1) both}
+.seasonal-bottom-moment .seasonal-moment-art{font-size:38px;line-height:1;filter:drop-shadow(0 5px 7px #0002);animation:seasonMomentFloat 2.2s ease-in-out infinite}
+.seasonal-bottom-moment .seasonal-moment-copy{font-size:13px;font-weight:800;text-align:left;line-height:1.3}
+.seasonal-bottom-moment .seasonal-moment-copy small{display:block;font-size:11px;font-weight:600;opacity:.7;margin-top:3px}
+.seasonal-bottom-moment[data-season=winter]{background:linear-gradient(135deg,#effaffef,#ffffffed);color:#174568}
+.seasonal-bottom-moment[data-season=spring]{background:linear-gradient(135deg,#f2f8e9f5,#ffffffed);color:#3d6136}
+.seasonal-bottom-moment[data-season=summer]{background:linear-gradient(135deg,#e7fafff5,#fff9e9ed);color:#075273}
+@keyframes seasonMomentRise{from{opacity:0;transform:translate(-50%,22px) scale(.92)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes seasonMomentFloat{0%,100%{transform:translateY(2px) rotate(-4deg)}50%{transform:translateY(-7px) rotate(4deg)}}
+.seasonal-vip-overlay{position:fixed;inset:0;z-index:10060;background:radial-gradient(ellipse at 50% 25%,#fff4d6dd,#21172ddd 78%);display:flex;align-items:center;justify-content:center;padding:18px;opacity:0;transition:opacity .3s ease}
+.seasonal-vip-overlay.shown{opacity:1}
+.seasonal-vip-panel{position:relative;width:min(430px,100%);max-height:min(86vh,760px);overflow:auto;border:1px solid #f5d99b;border-radius:28px;padding:26px 22px;text-align:center;color:#493016;background:linear-gradient(155deg,#fff9e9,#fff 58%,#f7e5bd);box-shadow:0 26px 90px #0007;transform:translateY(24px) scale(.94);animation:packPanelIn .6s cubic-bezier(.2,.8,.2,1) forwards}
+.seasonal-vip-crown{font-size:88px;line-height:1.2;display:block;animation:packTear 1s ease-in-out both;filter:drop-shadow(0 10px 12px #986b3040)}
+.seasonal-vip-sparkles{font-size:23px;letter-spacing:9px;margin:4px 0 10px;animation:packSpark .9s .25s both}
+.seasonal-vip-panel h2{margin:8px 0;font-size:25px}
+.seasonal-vip-panel p{line-height:1.45}
+.seasonal-vip-panel .primary{width:100%;margin-top:12px}
+.seasonal-vip-overlay[data-season=winter] .seasonal-vip-panel{background:linear-gradient(155deg,#effaff,#fff 58%,#d9efff);color:#174568;border-color:#a9d8f2}
+.seasonal-vip-overlay[data-season=spring] .seasonal-vip-panel{background:linear-gradient(155deg,#f4faed,#fff 58%,#e0efd4);color:#3d6136;border-color:#c7dfb7}
+.seasonal-vip-overlay[data-season=summer] .seasonal-vip-panel{background:linear-gradient(155deg,#e8faff,#fff 58%,#fff0c8);color:#075273;border-color:#a9dff0}
+@media(prefers-reduced-motion:reduce){.seasonal-bottom-moment,.seasonal-bottom-moment .seasonal-moment-art,.seasonal-vip-panel,.seasonal-vip-crown,.seasonal-vip-sparkles{animation:none!important;transition:none!important}}
+
 </style>
 </head>
 <body>
@@ -4386,13 +4410,43 @@ function renderSurprisePacks(){
   body.append(rarity,title,price,button);card.append(art,body);root.append(card);
  });
 }
+function getActiveSeasonForEffects(){try{const value=localStorage.getItem('gift-season-theme');return ['autumn','winter','spring','summer'].includes(value)?value:'autumn'}catch(e){return 'autumn'}}
+function showSeasonalBottomMoment(kind='order'){
+ document.querySelectorAll('.seasonal-bottom-moment').forEach(node=>node.remove());
+ const season=getActiveSeasonForEffects();
+ const scenes={
+  autumn:{art:'🍂🍁',title:kind==='order'?'Новый заказ начинается!':'Тёплые осенние пожелания',sub:'Листья кружатся вокруг твоей идеи'},
+  winter:{art:'❄️🎄',title:kind==='order'?'Пора создать зимнее чудо!':'Праздничное настроение',sub:'Снежинки и новогоднее волшебство'},
+  spring:{art:'🐣🌷',title:kind==='order'?'Весенняя идея оживает!':'Пасхальное настроение',sub:'Цветы, нежные краски и маленькое чудо'},
+  summer:{art:'🛟🌊',title:kind==='order'?'Начинаем летний заказ!':'Летнее настроение',sub:'Морская волна несёт твою идею'}
+ };
+ const scene=scenes[season],box=document.createElement('div');box.className='seasonal-bottom-moment';box.dataset.season=season;box.setAttribute('aria-hidden','true');
+ const art=document.createElement('div');art.className='seasonal-moment-art';art.textContent=scene.art;
+ const copy=document.createElement('div');copy.className='seasonal-moment-copy';copy.textContent=scene.title;
+ const small=document.createElement('small');small.textContent=scene.sub;copy.append(small);box.append(art,copy);document.body.append(box);
+ window.setTimeout(()=>box.remove(),2900);
+}
+function showVipPurchaseReveal(planType){
+ document.querySelectorAll('.seasonal-vip-overlay,.pack-reveal-overlay').forEach(node=>node.remove());
+ const season=getActiveSeasonForEffects(),overlay=document.createElement('div');overlay.className='seasonal-vip-overlay';overlay.dataset.season=season;overlay.setAttribute('role','presentation');
+ const panel=document.createElement('div');panel.className='seasonal-vip-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','vipPurchaseRevealTitle');
+ const crown=document.createElement('span');crown.className='seasonal-vip-crown';crown.textContent='👑';
+ const sparkles=document.createElement('div');sparkles.className='seasonal-vip-sparkles';sparkles.textContent=({autumn:'🍂 ✨ 🍁',winter:'❄️ ✨ 🎄',spring:'🌷 ✨ 🐣',summer:'🌊 ✨ ☀️'})[season];
+ const heading=document.createElement('h2');heading.id='vipPurchaseRevealTitle';heading.textContent='Добро пожаловать в VIP!';
+ const note=document.createElement('p');note.textContent=planType==='lifetime'?'VIP навсегда успешно оформлен!':'VIP-подписка на 30 дней успешно оформлена!';
+ const detail=document.createElement('p');detail.textContent='Тебе открыты особые возможности Агентства подарков. Спасибо за поддержку! 💛';
+ const close=document.createElement('button');close.type='button';close.className='primary';close.textContent='Отлично!';close.addEventListener('click',()=>overlay.remove());
+ panel.append(crown,sparkles,heading,note,detail,close);overlay.append(panel);overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.remove()});document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
+}
 function showCartAddAnimation(product){
  document.querySelectorAll('.cart-add-fx').forEach(node=>node.remove());
- const fx=document.createElement('div');fx.className='cart-add-fx';fx.setAttribute('aria-hidden','true');
- const icon=document.createElement('div');icon.className='cart-add-fx-icon';icon.textContent='🛟';
- const label=document.createElement('div');label.className='cart-add-fx-label';label.textContent='🌊 '+(product?.[1]||'Картина')+' добавлена в корзину';
+ const season=getActiveSeasonForEffects();
+ const scenes={autumn:{icon:'🍂',wave:'🍁',color:'#79451d'},winter:{icon:'🎄',wave:'❄️',color:'#174568'},spring:{icon:'🐣',wave:'🌷',color:'#3d6136'},summer:{icon:'🛟',wave:'🌊',color:'#075273'}};
+ const scene=scenes[season],fx=document.createElement('div');fx.className='cart-add-fx';fx.dataset.season=season;fx.setAttribute('aria-hidden','true');
+ const icon=document.createElement('div');icon.className='cart-add-fx-icon';icon.textContent=scene.icon;
+ const label=document.createElement('div');label.className='cart-add-fx-label';label.style.color=scene.color;label.textContent=scene.wave+' '+(product?.[1]||'Картина')+' добавлена в корзину';
  fx.append(icon,label);document.body.append(fx);
- window.setTimeout(()=>fx.remove(),1450);
+ window.setTimeout(()=>fx.remove(),1550);
 }
 function showCartPurchaseReveal(items){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
@@ -4785,9 +4839,9 @@ async function topUp(amount) {
 
 async function subscribeVip(planType) {
  try{const d=await apiFetch('/api/vip/subscribe',{method:'POST',body:JSON.stringify({plan_type:planType})});
- if(d.paid){toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
+ if(d.paid){showVipPurchaseReveal(planType);toast('VIP оплачен с внутреннего баланса!');loadVip();loadMe();loadBalance();refreshVipHelpCard();return;}
  if(!d.invoice_url)throw new Error('Сервер не вернул счёт VIP.');
- openInvoice(d.invoice_url,async s=>{if(s==='paid'){toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending'){toast('Платёж VIP обрабатывается.');}else{try{if(d.payload)await apiFetch('/api/vip/cancel',{method:'POST',body:JSON.stringify({payload:d.payload})});}catch(e){console.warn('Не удалось вернуть внутренний баланс VIP:',e);}toast('Оплата не завершена. Если часть суммы была списана с баланса, она возвращена.');loadMe();loadBalance();}});
+ openInvoice(d.invoice_url,async s=>{if(s==='paid'){showVipPurchaseReveal(planType);toast('Оплата VIP подтверждена!');loadVip();loadMe();loadBalance();refreshVipHelpCard();}else if(s==='pending'){toast('Платёж VIP обрабатывается.');}else{try{if(d.payload)await apiFetch('/api/vip/cancel',{method:'POST',body:JSON.stringify({payload:d.payload})});}catch(e){console.warn('Не удалось вернуть внутренний баланс VIP:',e);}toast('Оплата не завершена. Если часть суммы была списана с баланса, она возвращена.');loadMe();loadBalance();}});
  }catch(e){toast(e.message||'Не удалось оформить VIP.');}
 }
 
@@ -4983,6 +5037,7 @@ function isCraftOrderIntent(message){
  return /(?:индивидуальн\w*\s+(?:авторск\w*\s+)?работ\w*|авторск\w*\s+(?:работ\w*|подар\w*|издел\w*)|(?:заказать|оформить)\s+(?:мне\s+)?(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ)|(?:сделать|создать|изготовить)\s+(?:мне\s+)?(?:на\s+заказ|индивидуальн\w*|авторск\w*)|хочу\s+(?:заказать|создать|оформить)\s+(?:индивидуальн\w*|авторск\w*|работ\w*\s+на\s+заказ|на\s+заказ))/i.test(text);
 }
 async function openCraftInAssistant(){
+ showSeasonalBottomMoment('order');
  activeOrderChatId='';craftModeActive=true;
  const newOrder=document.getElementById('supportNewCraftOrderButton');if(newOrder)newOrder.classList.remove('hidden');
  const input=document.getElementById('supportMessage');if(input)input.placeholder='Напишите сообщение ИИ-помощнику…';
