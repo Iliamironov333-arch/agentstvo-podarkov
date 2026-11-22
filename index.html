@@ -1455,6 +1455,18 @@ html.motion-system-reduced *,html.motion-system-reduced *::before,html.motion-sy
 #adminUiMotionPanel .motion-settings-grid .motion-check{display:flex;align-items:center;gap:9px}
 @media(min-width:600px){#adminUiMotionPanel .motion-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+/* Локальные эффекты корзины — не затрагивают общие настройки плавности */
+.cart-add-fx{position:fixed;z-index:10040;top:18%;left:50%;transform:translateX(-50%);width:min(310px,calc(100vw - 32px));display:grid;justify-items:center;gap:8px;pointer-events:none;user-select:none;animation:cartFxIn .35s ease-out both}
+.cart-add-fx-icon{font-size:78px;line-height:1;filter:drop-shadow(0 8px 12px rgba(0,70,110,.24));animation:cartFxFloat 1.15s ease-in-out both}
+.cart-add-fx-label{padding:9px 15px;border-radius:999px;background:rgba(255,255,255,.96);color:#075273;font-weight:800;font-size:13px;text-align:center;box-shadow:0 5px 20px rgba(0,40,70,.16)}
+@keyframes cartFxIn{from{opacity:0;translate:0 18px}to{opacity:1;translate:0 0}}
+@keyframes cartFxFloat{0%{transform:translateY(28px) rotate(-22deg) scale(.7)}35%{transform:translateY(-10px) rotate(12deg) scale(1.08)}65%{transform:translateY(4px) rotate(-5deg) scale(.98)}100%{transform:translateY(0) rotate(0) scale(1)}}
+.cart-purchase-prizes{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;margin:16px 0}
+.cart-purchase-item{padding:10px;border-radius:15px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}
+.cart-purchase-item img{width:100%;height:135px;object-fit:contain;border-radius:10px;display:block;margin-bottom:8px}
+.cart-purchase-item b{display:block;font-size:13px}
+.cart-purchase-item small{display:block;margin-top:4px;opacity:.7}
+@media(prefers-reduced-motion:reduce){.cart-add-fx,.cart-add-fx-icon{animation:none!important}}
 .surprise-pack-card{border:1px solid rgba(207,157,64,.38);box-shadow:0 10px 28px rgba(100,70,20,.08)}.surprise-pack-art{background:radial-gradient(circle at 50% 35%,#fff2c9,#d9a64d 62%,#8b5b20);min-height:150px}.surprise-pack-art span{font-size:76px;filter:drop-shadow(0 8px 8px rgba(60,35,5,.22))}.pack-reveal-overlay{position:fixed;inset:0;z-index:10050;background:rgba(20,15,8,.78);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .25s ease}.pack-reveal-overlay.shown{opacity:1}.pack-reveal-panel{width:min(420px,100%);border-radius:26px;padding:24px;text-align:center;background:var(--panel,#fff);color:var(--text,#241d13);box-shadow:0 25px 80px rgba(0,0,0,.3);transform:translateY(20px) scale(.94);animation:packPanelIn .55s cubic-bezier(.2,.8,.2,1) forwards}.pack-reveal-envelope{font-size:92px;display:inline-block;position:relative;animation:packTear .95s ease-in-out both}.pack-reveal-envelope:after{content:'✦';position:absolute;left:50%;top:48%;font-size:28px;color:#fff4c5;opacity:0;animation:packSpark .7s .45s both}.pack-reveal-prize{margin:18px 0;padding:18px;border-radius:18px;background:rgba(211,163,76,.13);animation:packPrizeIn .65s .35s both}.pack-reveal-prize img{display:block;max-width:100%;max-height:210px;object-fit:contain;border-radius:14px;margin:0 auto 12px}.pack-reveal-prize p{font-size:13px;opacity:.75;margin:8px 0 0}@keyframes packTear{0%,100%{transform:rotate(0) scale(1);opacity:1}12%{transform:rotate(-10deg) scale(1.05)}24%{transform:rotate(11deg) scale(1.1)}36%{transform:rotate(-9deg) scale(1.12)}48%{transform:rotate(8deg) scale(1.16)}62%{transform:rotate(-5deg) scale(1.22)}78%{transform:rotate(18deg) scale(1.45);opacity:.8}100%{transform:rotate(28deg) scale(1.8);opacity:0}}@keyframes packSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.3)}}@keyframes packPanelIn{to{transform:translateY(0) scale(1)}}@keyframes packPrizeIn{from{opacity:0;transform:translateY(18px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
 /* Зимняя палитра: убираем оставшиеся осенние золотисто-коричневые акценты. */
 body.winter-season .primary,
@@ -2541,6 +2553,7 @@ function addProductToCart(productId){
  persistCart();
  drawProducts();
  drawCart();
+ showCartAddAnimation(product);
  return true;
 }
 
@@ -4373,6 +4386,36 @@ function renderSurprisePacks(){
   body.append(rarity,title,price,button);card.append(art,body);root.append(card);
  });
 }
+function showCartAddAnimation(product){
+ document.querySelectorAll('.cart-add-fx').forEach(node=>node.remove());
+ const fx=document.createElement('div');fx.className='cart-add-fx';fx.setAttribute('aria-hidden','true');
+ const icon=document.createElement('div');icon.className='cart-add-fx-icon';icon.textContent='🛟';
+ const label=document.createElement('div');label.className='cart-add-fx-label';label.textContent='🌊 '+(product?.[1]||'Картина')+' добавлена в корзину';
+ fx.append(icon,label);document.body.append(fx);
+ window.setTimeout(()=>fx.remove(),1450);
+}
+function showCartPurchaseReveal(items){
+ document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
+ const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
+ overlay.setAttribute('role','presentation');
+ const panel=document.createElement('div');panel.className='pack-reveal-panel';
+ panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','cartPurchaseRevealHeading');
+ const envelope=document.createElement('div');envelope.className='pack-reveal-envelope';envelope.textContent='🎁';
+ const heading=document.createElement('h2');heading.id='cartPurchaseRevealHeading';heading.textContent='Покупка успешна!';
+ const note=document.createElement('p');note.textContent='Твои картины успешно приобретены!';
+ const prizes=document.createElement('div');prizes.className='cart-purchase-prizes';
+ (items||[]).forEach(item=>{
+  const card=document.createElement('div');card.className='cart-purchase-item';
+  if(item.image){const img=document.createElement('img');img.src=item.image;img.alt=item.title;card.append(img);}
+  const name=document.createElement('b');name.textContent=item.title;card.append(name);
+  const qty=document.createElement('small');qty.textContent='Количество: '+item.qty;card.append(qty);
+  prizes.append(card);
+ });
+ const close=document.createElement('button');close.className='primary pack-reveal-close';close.type='button';close.textContent='Закрыть';close.addEventListener('click',()=>closePackReveal(overlay));
+ panel.append(envelope,heading,note,prizes,close);overlay.append(panel);
+ overlay.addEventListener('click',event=>{if(event.target===overlay)closePackReveal(overlay);});
+ document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
+}
 function closePackReveal(overlay){
  const target=overlay||document.querySelector('.pack-reveal-overlay');
  if(target)target.remove();
@@ -5111,6 +5154,7 @@ async function applyPromoCode(){
 }
 async function checkout() {
  const entries=products.filter(p=>Number(cart[p[0]]||0)>0);
+ const purchasedItems=entries.map(p=>({title:p[1],image:p[5]||'',qty:Number(cart[String(p[0])]||0)}));
  if(entries.some(p=>Number(cart[String(p[0])])>10))return toast('Максимум 10 штук одного товара.');
  if(!entries.length)return toast('Корзина пуста.');
  if(!catalogLoaded)return toast('Не удалось загрузить актуальные цены. Обнови приложение.');
@@ -5144,7 +5188,7 @@ async function checkout() {
   if(!wasGiftBundle&&deliveryCost)deliveryCost.textContent=money(data.delivery_stars||0);
   if(!wasGiftBundle&&totalLabel)totalLabel.textContent=money(data.total_stars||0);
   if(data.paid){
-   
+   showCartPurchaseReveal(purchasedItems);
    quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();
    if(statusBox)statusBox.textContent=deliveryMethod==='pickup'?'Заказ оплачен с баланса. Самовывоз: Новаторов, 8 · доставка бесплатно.':'Заказ оплачен с внутреннего баланса. Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км.';
    toast('Заказ оплачен с баланса! 🎁');
@@ -5154,6 +5198,7 @@ async function checkout() {
   if(statusBox)statusBox.textContent=(deliveryMethod==='pickup'?'Самовывоз: Новаторов, 8 · доставка бесплатно. ':'Маршрут: '+Number(data.distance_km||0).toFixed(2)+' км. Доставка: '+money(data.delivery_stars||0)+'. ')+'Списано с баланса: '+Number(data.balance_used_stars||0)+' ⭐. Через Telegram: '+Number(data.invoice_amount_stars||0)+' ⭐.';
   openInvoice(data.invoice_url,status=>{
    if(status==='paid'){
+    showCartPurchaseReveal(purchasedItems);
     quickBuyMode=false;cart={};activePromo=null;window.pendingGiftBundleId=null;persistCart();drawProducts();drawCart();loadMe();loadBalance();toast('Оплата подтверждена! Заказ оформлен 🎁');
    }else if(status==='pending'){
     quickBuyMode=false;toast('Платёж ещё обрабатывается. Проверьте «Мои заказы».');loadMe();
