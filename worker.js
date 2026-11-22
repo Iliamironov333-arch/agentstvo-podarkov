@@ -3690,6 +3690,54 @@ if (path === "/api/admin/packs" && method === "GET") {
         return json({ ok:true, refunded:refund>0, refunded_stars:refund },200,origin);
       }
 
+      if (path === "/api/my/ai-orders" && method === "GET") {
+        const rows=await env.DB.prepare("SELECT id,chat_id,telegram_id,first_name,subject,details_json,status,created_at,updated_at,group_message_id,order_id,estimated_stars,approved_stars FROM ai_order_drafts WHERE telegram_id=? AND status IN ('collecting','review','approved','paid','cancelled') ORDER BY created_at DESC LIMIT 50").bind(String(telegramId)).all();
+        const orders=(rows.results||[]).map(row=>{
+          let details={};try{details=JSON.parse(row.details_json||"{}");}catch{}
+          const source=String(details.source||"");
+          let group_url=null;
+          if(source==="group"&&String(row.chat_id||"").startsWith("-100")){
+            const internal=String(row.chat_id).slice(4);
+            const messageId=Number(row.group_message_id||0);
+            group_url="https://t.me/c/"+internal+(messageId>0?"/"+messageId:"");
+          }
+          return {id:row.id,subject:"Авторская работа",source,status:row.status,created_at:row.created_at,updated_at:row.updated_at,
+            estimated_stars:Number(row.estimated_stars||0),approved_stars:Number(row.approved_stars||0),
+            support_conversation_id:source==="miniapp_support_chat"?String(details.support_conversation_id||""):null,
+            group_url,can_cancel:["collecting","review"].includes(String(row.status))&&!row.order_id,
+            chat_deleted:details.chat_deleted===true};
+        }).filter(row=>!row.chat_deleted);
+        return json({ok:true,orders},200,origin);
+      }
+      if (path === "/api/my/ai-orders/cancel" && method === "POST") {
+        const body=await readJson(request),draftId=String(body.draft_id||"").slice(0,80);
+        if(!draftId)return json({error:"Не указан заказ."},400,origin);
+        const draft=await env.DB.prepare("SELECT id,chat_id,telegram_id,first_name,status,order_id,details_json FROM ai_order_drafts WHERE id=? AND telegram_id=?").bind(draftId,String(telegramId)).first();
+        if(!draft)return json({error:"Заказ не найден."},404,origin);
+        if(draft.order_id||!["collecting","review"].includes(String(draft.status)))return json({error:"Этот заказ уже передан на оформление или оплату. Для отмены обратитесь к владельцу."},409,origin);
+        let details={};try{details=JSON.parse(draft.details_json||"{}");}catch{}
+        if(details.chat_deleted===true)return json({ok:true,cancelled:true});
+        const source=String(details.source||"");
+        const displayName=String(draft.first_name||user.first_name||"Покупатель").replace(/[<>\n\r]/g," ").slice(0,80);
+        details.chat_deleted=true;details.ai_enabled=false;details.conversation=[];details.owner_messages=[];
+        details.chat_deleted_at=new Date().toISOString();details.terminal_at=new Date().toISOString();details.cancelled_by="buyer";
+        await env.DB.prepare("UPDATE ai_order_drafts SET details_json=?,status='cancelled',updated_at=CURRENT_TIMESTAMP,last_activity_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=? AND status IN ('collecting','review') AND order_id IS NULL")
+          .bind(JSON.stringify(details).slice(0,16000),draftId,String(telegramId)).run();
+        if(source==="miniapp_support_chat"&&details.support_conversation_id){
+          await env.DB.prepare("UPDATE support_conversations SET deleted_at=COALESCE(deleted_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?")
+            .bind(String(details.support_conversation_id),String(telegramId)).run();
+          await env.DB.prepare("DELETE FROM support_chat_messages WHERE telegram_id=? AND conversation_id=?")
+            .bind(String(telegramId),String(details.support_conversation_id)).run();
+        }
+        if(source==="group"&&draft.chat_id){
+          try{await telegram(env,"sendMessage",{chat_id:String(draft.chat_id),text:"Покупатель «"+displayName+"» отменил(а) заказ."});}
+          catch(error){console.error("AI group order cancellation notice failed:",String(error).slice(0,250));}
+        }
+        await notifyOwner(env,"❌ Покупатель отменил(а) авторскую работу\nЗаказ: "+draftId+"\nПокупатель: "+displayName+" · Telegram ID: "+telegramId+"\nИсточник: "+(source==="group"?"группа":source==="miniapp_support_chat"?"ИИ-помощник":"мастерская"));
+        try{await env.DB.prepare("INSERT INTO admin_action_log(actor_telegram_id,target_telegram_id,action_type,details) VALUES(?,?,?,?)").bind(telegramId,telegramId,"ai_order_cancelled_by_buyer",JSON.stringify({draft_id:draftId,source})).run();}catch{}
+        return json({ok:true,cancelled:true,source},200,origin);
+      }
+
       if (path === "/api/craft/create" && method === "POST") {
         const b=await readJson(request),messages=Array.isArray(b.messages)?b.messages.slice(-34):[];
         if(!messages.length||messages.length>34||messages.some(m=>!m||!["user","assistant","owner","system"].includes(m.role)||typeof m.content!=="string"||m.content.length>7000))return json({error:"Диалог пустой или содержит некорректные сообщения."},400,origin);
