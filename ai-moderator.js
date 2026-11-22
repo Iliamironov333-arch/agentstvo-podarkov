@@ -1070,7 +1070,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const recentOrderMessages=await env.DB.prepare("SELECT role,content FROM ai_group_messages WHERE chat_id=? AND telegram_id=? ORDER BY id DESC LIMIT 24").bind(chatId,String(user.id)).all();
     const orderHistory=(recentOrderMessages.results||[]).reverse();
     // Благодарность обрабатываем только как продолжение недавнего ответа ИИ этому участнику.
-    const gratitudeReply=aiIsThanks(text) && orderHistory.at(-1)?.role==="assistant";
+    const gratitudeReply=aiIsThanks(text) && orderHistory.length>=2 && orderHistory.at(-2)?.role==="assistant";
     const orderTopicsAsked=new Set();
     for(const item of orderHistory){
       if(item.role!=="assistant")continue;
