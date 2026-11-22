@@ -1162,12 +1162,36 @@ export default {
     ctx.waitUntil(releaseExpiredOrderReservations(env));
     ctx.waitUntil(releaseExpiredPromoReservations(env));
     ctx.waitUntil(handleAiScheduled(env).catch(error => console.error("AI moderator scheduled task failed:", String(error).slice(0,500))));
-    ctx.waitUntil(Promise.all([
-      env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run(),
-      env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run(),
-      env.DB.prepare("DELETE FROM admin_action_log WHERE created_at < datetime('now','-90 days')").run(),
-      env.DB.prepare("DELETE FROM ai_order_drafts WHERE json_valid(details_json)=1 AND json_extract(details_json,'$.source')='paid_surprise_pack' AND datetime(created_at)<=datetime('now','-30 days')").run()
-    ]).catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
+    ctx.waitUntil((async()=>{
+      const cleanup=[];
+      // Orders (including unfinished) and all linked conversations/details: 30-day retention.
+      if(await tableExists(env,"orders")){
+        const expiredOrders=await env.DB.prepare("SELECT id FROM orders WHERE datetime(created_at)<=datetime('now','-30 days')").all();
+        const ids=(expiredOrders.results||[]).map(x=>String(x.id));
+        for(const id of ids){
+          if(await tableExists(env,"order_chat_messages"))cleanup.push(env.DB.prepare("DELETE FROM order_chat_messages WHERE order_id=?").bind(id));
+          if(await tableExists(env,"order_change_requests"))cleanup.push(env.DB.prepare("DELETE FROM order_change_requests WHERE order_id=?").bind(id));
+          if(await tableExists(env,"order_cancellation_requests"))cleanup.push(env.DB.prepare("DELETE FROM order_cancellation_requests WHERE order_id=?").bind(id));
+          if(await tableExists(env,"order_revisions"))cleanup.push(env.DB.prepare("DELETE FROM order_revisions WHERE previous_order_id=? OR new_order_id=?").bind(id,id));
+          if(await tableExists(env,"order_items"))cleanup.push(env.DB.prepare("DELETE FROM order_items WHERE order_id=?").bind(id));
+          if(await tableExists(env,"order_delivery"))cleanup.push(env.DB.prepare("DELETE FROM order_delivery WHERE order_id=?").bind(id));
+          if(await tableExists(env,"ai_order_drafts"))cleanup.push(env.DB.prepare("DELETE FROM ai_order_drafts WHERE order_id=?").bind(id));
+          if(await tableExists(env,"gift_bundles"))cleanup.push(env.DB.prepare("DELETE FROM gift_bundles WHERE order_id=?").bind(id));
+        }
+        if(ids.length)cleanup.push(env.DB.prepare("DELETE FROM orders WHERE datetime(created_at)<=datetime('now','-30 days')"));
+      }
+      if(await tableExists(env,"custom_orders"))cleanup.push(env.DB.prepare("DELETE FROM custom_orders WHERE datetime(created_at)<=datetime('now','-30 days')"));
+      if(await tableExists(env,"ai_order_drafts"))cleanup.push(env.DB.prepare("DELETE FROM ai_order_drafts WHERE datetime(created_at)<=datetime('now','-30 days')"));
+      // Assistant conversations without an order: remove messages and conversation records after 60 days of inactivity.
+      if(await tableExists(env,"support_chat_messages")){
+        cleanup.push(env.DB.prepare("DELETE FROM support_chat_messages WHERE datetime(created_at)<=datetime('now','-60 days') AND NOT EXISTS (SELECT 1 FROM support_chat_messages newer WHERE newer.telegram_id=support_chat_messages.telegram_id AND newer.conversation_id=support_chat_messages.conversation_id AND datetime(newer.created_at)>datetime(support_chat_messages.created_at,'-60 days'))"));
+      }
+      if(await tableExists(env,"support_conversations"))cleanup.push(env.DB.prepare("DELETE FROM support_conversations WHERE datetime(updated_at)<=datetime('now','-60 days')"));
+      if(await tableExists(env,"support_messages"))cleanup.push(env.DB.prepare("DELETE FROM support_messages WHERE datetime(created_at)<=datetime('now','-60 days')"));
+      cleanup.push(env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')"));
+      cleanup.push(env.DB.prepare("DELETE FROM admin_action_log WHERE created_at < datetime('now','-90 days')"));
+      if(cleanup.length)await env.DB.batch(cleanup);
+    })().catch(error=>console.error("Automatic order/chat retention cleanup failed:",String(error).slice(0,500))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
   },
