@@ -1674,6 +1674,17 @@ body.winter-season .owner-admin-pill:focus-visible{
    <label>Подтверждение<input id="adminBackupRestoreConfirm" maxlength="20" placeholder="Введите RESTORE D1"></label>
    <button class="secondary" type="button" id="adminBackupRestoreButton" onclick="restoreAdminBackup()">Восстановить базу</button>
   </div>
+  <div class="panel hidden" id="adminGroupInvitesPanel">
+   <div class="sectionhead"><h3>👥 Коды доступа в группу</h3><button class="secondary" type="button" onclick="loadAdminGroupInvites()">↻ Обновить</button></div>
+   <p class="muted">Создавай до 5 активных цифровых кодов. Одноразовый код становится недействительным после успешной проверки, многоразовый можно использовать повторно.</p>
+   <div class="admin-user-detail">
+    <label>Цифровой код<input id="adminGroupInviteCode" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="32" placeholder="Только цифры" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></label>
+    <label>Режим кода<select id="adminGroupInviteMode"><option value="one_time">Одноразовый</option><option value="reusable">Многоразовый</option></select></label>
+    <button class="primary" type="button" onclick="saveAdminGroupInvite()">＋ Создать код</button>
+   </div>
+   <p id="adminGroupInvitesStatus" class="notice" aria-live="polite">Список кодов загружается…</p>
+   <div id="adminGroupInvitesList"></div>
+  </div>
   <div class="panel" id="adminGiftCertificatesPanel">
    <div class="sectionhead"><h3>🎟️ Подарочные сертификаты</h3><button class="secondary" type="button" onclick="loadAdminGiftCertificates()">↻ Обновить</button></div>
    <p class="muted">Создавай одноразовые коды. Покупатель вводит код в чате помощника, а сервер начисляет указанные баллы на его внутренний баланс.</p>
@@ -2032,7 +2043,24 @@ body.winter-season .owner-admin-pill:focus-visible{
 </section>
 <section id="aboutView" class="hidden">
  <div class="sectionhead"><h2>ℹ️ О проекте</h2></div>
- <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span id="aboutSeasonDiscountLabel">Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="showView('privacyPolicyView')">🔐 Политика конфиденциальности</button><div class="panel" style="margin-top:14px"><h3>📌 Правила группы</h3><div id="publicGroupRulesStatus" class="notice" aria-live="polite">Загружаем правила группы…</div><div id="publicGroupRulesText" style="white-space:pre-wrap;line-height:1.6"></div></div><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+ <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span id="aboutSeasonDiscountLabel">Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="showView('privacyPolicyView')">🔐 Политика конфиденциальности</button><button class="secondary" style="width:100%;margin-top:10px" onclick="showView('groupInviteView')">👥 Наша группа</button><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+</section>
+<section id="groupInviteView" class="hidden">
+ <div class="sectionhead"><h2>👥 Наша группа</h2><button class="secondary" type="button" onclick="showView('aboutView')">← О проекте</button></div>
+ <div class="panel">
+  <h3>🔐 Код доступа</h3>
+  <p class="muted">Введите цифровой код приглашения, чтобы посмотреть актуальные правила группы.</p>
+  <div id="groupInviteCodeForm">
+   <label>Цифровой код<input id="groupInviteCodeInput" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="32" placeholder="Введите код" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></label>
+   <button class="primary" id="groupInviteSubmitButton" type="button" onclick="submitGroupInviteCode()">Проверить код</button>
+  </div>
+  <p id="groupInviteStatus" class="notice" aria-live="polite">Доступ откроется после успешной проверки на сервере.</p>
+  <div id="groupInviteRulesPanel" class="panel hidden" style="margin-top:14px">
+   <h3>📌 Правила группы</h3>
+   <div id="groupInviteRulesText" style="white-space:pre-wrap;line-height:1.65"></div>
+   <button class="primary hidden" id="groupInviteJoinButton" type="button" style="width:100%;margin-top:16px">➡️ Вступить в группу</button>
+  </div>
+ </div>
 </section>
 <section id="privacyPolicyView" class="hidden">
  <div class="sectionhead"><h2>🔐 Политика конфиденциальности</h2><button class="secondary" type="button" onclick="showView('aboutView')">← О проекте</button></div>
@@ -2480,17 +2508,44 @@ function updateSeasonalCopy(){
  set('dealsSeasonTitle',copy.icon+' '+copy.name+' скидка 10% на всё');
  set('aboutSeasonDiscountLabel',copy.name+' скидка');
 }
-async function loadPublicGroupRules(){
- const status=document.getElementById('publicGroupRulesStatus'),root=document.getElementById('publicGroupRulesText');
- if(!status||!root)return;
- status.textContent='Загружаем актуальные правила…';root.textContent='';
- try{
-  const data=await apiFetch('/api/public/group-rules');
-  if(!String(data.rules_text||'').trim()){status.textContent='В панели владельца пока не заполнен текст правил группы.';return;}
-  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Правила группы';
- }catch(error){status.textContent='Не удалось загрузить правила. Попробуйте обновить раздел.';}
+let groupInviteAccess = null;
+function renderGroupInviteAccess(){
+ const form=document.getElementById('groupInviteCodeForm');
+ const panel=document.getElementById('groupInviteRulesPanel');
+ const rules=document.getElementById('groupInviteRulesText');
+ const join=document.getElementById('groupInviteJoinButton');
+ const status=document.getElementById('groupInviteStatus');
+ if(!form||!panel||!rules||!join)return;
+ if(!groupInviteAccess){
+  form.classList.remove('hidden');panel.classList.add('hidden');join.classList.add('hidden');
+  return;
+ }
+ form.classList.add('hidden');panel.classList.remove('hidden');join.classList.remove('hidden');
+ rules.textContent=groupInviteAccess.rules_text;
+ status.textContent='Код подтверждён сервером. Доступ к правилам открыт.';
+ join.onclick=()=>{
+  if(tg?.openTelegramLink)tg.openTelegramLink(groupInviteAccess.group_url);
+  else window.open(groupInviteAccess.group_url,'_blank','noopener');
+ };
 }
-async function loadPublicDeals(){
+async function submitGroupInviteCode(){
+ const input=document.getElementById('groupInviteCodeInput');
+ const button=document.getElementById('groupInviteSubmitButton');
+ const status=document.getElementById('groupInviteStatus');
+ const code=String(input?.value||'').trim();
+ if(!/^\\d{4,32}$/.test(code)){status.textContent='Введите код длиной от 4 до 32 цифр.';return;}
+ button.disabled=true;status.textContent='Проверяем код на сервере…';
+ try{
+  const data=await apiFetch('/api/group-invites/validate',{method:'POST',body:JSON.stringify({code})});
+  if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/'))throw new Error('Сервер не подтвердил доступ к группе.');
+  groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url)};
+  if(input)input.value='';
+  renderGroupInviteAccess();
+ }catch(error){
+  status.textContent=error.status===403?'Код неверный, удалён или уже использован.':(error.message||'Не удалось проверить код. Попробуйте позже.');
+ }finally{button.disabled=false;}
+}
+async function loadPublicDeals(){async function loadPublicDeals(){
  const status=document.getElementById('publicPromosStatus'),root=document.getElementById('publicPromosList');
  if(!status||!root)return;
  status.textContent='Загружаем публичные промокоды…';root.replaceChildren();
@@ -2532,9 +2587,12 @@ function showView(id) {
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView' || id === 'vipPlansView') loadVip();
  if (id === 'leaderboardView') loadPublicLeaderboard();
- if (id === 'aboutView') loadPublicGroupRules();
+ if (id === 'groupInviteView') renderGroupInviteAccess();
  if (id === 'dealsView') loadPublicDeals();
- if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+ if (id === 'adminPanelView') {
+  document.getElementById('adminGroupInvitesPanel')?.classList.toggle('hidden',adminSession?.root_owner!==true);
+  if(adminSession?.root_owner===true)loadAdminGroupInvites();
+  initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'catalogView') loadSurprisePacks();
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
 }
@@ -3501,6 +3559,50 @@ async function saveAdminGiftCertificate(){
   document.getElementById('adminGiftCertificateCode').value='';document.getElementById('adminGiftCertificatePoints').value='';
   toast('Сертификат '+data.code+' создан на '+Number(data.points).toLocaleString('ru-RU')+' баллов.');await loadAdminGiftCertificates();
  }catch(e){toast(e.message||'Не удалось создать сертификат.');}
+ finally{if(button)button.disabled=false;}
+}
+async function loadAdminGroupInvites(){
+ const status=document.getElementById('adminGroupInvitesStatus'),root=document.getElementById('adminGroupInvitesList');
+ if(!status||!root)return;
+ status.textContent='Загружаем коды доступа…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/admin/group-invites');
+  if(data.migration_pending){status.textContent='Для системы кодов требуется миграция 0031_group_invite_codes.sql.';return;}
+  const rows=data.invites||[];
+  const active=rows.filter(item=>item.active).length;
+  status.textContent='Всего кодов: '+rows.length+' · Активных: '+active+' из 5';
+  if(!rows.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Коды ещё не созданы.';root.append(empty);return;}
+  rows.forEach(item=>{
+   const row=document.createElement('div');row.className='admin-user-row';
+   const info=document.createElement('div');
+   const title=document.createElement('strong');title.textContent=item.code+' · '+(item.mode==='one_time'?'Одноразовый':'Многоразовый');
+   const meta=document.createElement('small');
+   meta.textContent=(item.active?'Активен':'Использован')+' · Использований: '+Number(item.use_count||0)+' · Создан: '+(item.created_at||'—');
+   info.append(title,meta);row.append(info);
+   const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';
+   remove.addEventListener('click',async()=>{
+    if(!confirm('Удалить код '+item.code+'? Он сразу перестанет работать.'))return;
+    remove.disabled=true;
+    try{await apiFetch('/api/admin/group-invites/delete',{method:'POST',body:JSON.stringify({id:item.id})});await loadAdminGroupInvites();}
+    catch(error){toast(error.message||'Не удалось удалить код.');remove.disabled=false;}
+   });
+   row.append(remove);root.append(row);
+  });
+ }catch(error){status.textContent=error.message||'Не удалось загрузить коды доступа.';}
+}
+async function saveAdminGroupInvite(){
+ const input=document.getElementById('adminGroupInviteCode');
+ const mode=document.getElementById('adminGroupInviteMode')?.value||'one_time';
+ const code=String(input?.value||'').trim();
+ if(!/^\\d{4,32}$/.test(code)){toast('Введите цифровой код длиной от 4 до 32 цифр.');return;}
+ const button=document.querySelector('#adminGroupInvitesPanel button.primary');
+ if(button)button.disabled=true;
+ try{
+  const data=await apiFetch('/api/admin/group-invites',{method:'POST',body:JSON.stringify({code,mode})});
+  if(input)input.value='';
+  toast('Код доступа создан.');
+  await loadAdminGroupInvites();
+ }catch(error){toast(error.message||'Не удалось создать код.');}
  finally{if(button)button.disabled=false;}
 }
 async function loadAdminPromos(){
