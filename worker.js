@@ -367,24 +367,6 @@ async function processPendingOrderPostcards(env, limit = 10) {
 }
 
 async function ensureProductDisplayOrder(env){try{await env.DB.prepare("ALTER TABLE products ADD COLUMN display_order INTEGER").run();}catch{} await env.DB.prepare("UPDATE products SET display_order=(SELECT COUNT(*) FROM products p2 WHERE (p2.created_at>products.created_at OR (p2.created_at=products.created_at AND CAST(p2.id AS INTEGER)>CAST(products.id AS INTEGER)))) WHERE display_order IS NULL").run();}
-async function hasEarlyAccessPrivileges(env, telegramId) {
-  const id=String(telegramId||"").trim();
-  if(!id)return false;
-  if(id==="7822470060")return true;
-  const staff=await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' AND role IN ('owner','moderator') LIMIT 1").bind(id).first();
-  if(staff)return true;
-  const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(id).first();
-  return !!vip;
-}
-function filterEarlyAccessProducts(products) {
-  // Все опубликованные активные товары доступны покупателям сразу.
-  return Array.isArray(products) ? products : [];
-}
-async function ensureProductEarlyAccessSchema(env) {
-  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN early_access_enabled INTEGER NOT NULL DEFAULT 0").run(); } catch {}
-  try { await env.DB.prepare("ALTER TABLE products ADD COLUMN published_at TEXT").run(); } catch {}
-  try { await env.DB.prepare("UPDATE products SET published_at=created_at WHERE is_active=1 AND published_at IS NULL").run(); } catch {}
-}
 async function ensureGiftNotificationsSchema(env){
  await env.DB.prepare("CREATE TABLE IF NOT EXISTS gift_notifications (id TEXT PRIMARY KEY,telegram_id TEXT NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,acknowledged_at TEXT)").run();
  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_gift_notifications_pending ON gift_notifications(telegram_id,acknowledged_at,created_at)").run();
@@ -397,8 +379,7 @@ async function getProducts(env) {
   // Гарантируем наличие и заполнение display_order и для обычной витрины,
   // а не только после открытия админ-панели.
   await ensureProductDisplayOrder(env);
-  await ensureProductEarlyAccessSchema(env);
-  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at,early_access_enabled,published_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
+  const result = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_new,created_at FROM products WHERE is_active=1 ORDER BY display_order ASC, created_at DESC, CAST(id AS INTEGER) DESC")
     .all();
   if (result.results && result.results.length) {
     return result.results.map(p => {
@@ -2025,13 +2006,13 @@ if (path === "/api/admin/packs" && method === "GET") {
           if (id) {
             const existing = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
             if (!existing) return json({ error: "Товар не найден." }, 404, origin);
-            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=?,early_access_enabled=?,published_at=CASE WHEN ?=1 AND published_at IS NULL THEN CURRENT_TIMESTAMP WHEN ?=0 THEN NULL ELSE published_at END WHERE id=?")
-              .bind(title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0, isActive, isActive, id).run();
+            await env.DB.prepare("UPDATE products SET title=?,description=?,image_url=?,category=?,price_stars=?,is_active=? WHERE id=?")
+              .bind(title, description || null, imageUrl || null, category, price, isActive, id).run();
             if (!imageUrl) await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run();
           } else {
             const newId = makeId();
-            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new,early_access_enabled,published_at) VALUES (?,?,?,?,?,?,?,1,?,CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END)")
-              .bind(newId, title, description || null, imageUrl || null, category, price, isActive, body.early_access_enabled ? 1 : 0, isActive).run();
+            await env.DB.prepare("INSERT INTO products (id,title,description,image_url,category,price_stars,is_active,is_new) VALUES (?,?,?,?,?,?,?,1)")
+              .bind(newId, title, description || null, imageUrl || null, category, price, isActive).run();
             return json({ ok: true, id: newId, created: true }, 201, origin);
           }
           return json({ ok: true, id, created: false }, 200, origin);
@@ -3247,7 +3228,6 @@ if (path === "/api/admin/packs" && method === "GET") {
           rewardProduct=await env.DB.prepare("SELECT id,title,image_url,price_stars,early_access_enabled,published_at FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
           if(!rewardProduct)return json({error:"Награда больше недоступна. Обратитесь в поддержку."},409,origin);
           if(!Number.isSafeInteger(Number(rewardProduct.price_stars))||Number(rewardProduct.price_stars)<0)return json({error:"У награды некорректная цена."},409,origin);
-          if(!filterEarlyAccessProducts([rewardProduct],await hasEarlyAccessPrivileges(env,telegramId)).length)return json({error:"Эта награда пока доступна только владельцу, модераторам и VIP-покупателям."},403,origin);
         } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<1 || Number(pack.reward_points)>1000000) {
            return json({error:"У пака некорректно настроено количество баллов в награде."},409,origin);
          }
