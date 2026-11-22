@@ -1642,6 +1642,20 @@ body.winter-season .owner-admin-pill:focus-visible{
  <p class="notice" id="adminDashboardStatus" aria-live="polite"></p>
  <div class="panel">
   <h3>👥 Пользователи</h3>
+  <div class="admin-user-detail" id="adminGiftPackPanel">
+   <h4>🎁 Подарить пак покупателю</h4>
+   <p class="muted">Персональный подарок появится у выбранного покупателя с анимацией открытия. Пак не публикуется в магазине и ничего не стоит получателю.</p>
+   <label>Найти покупателя<input id="adminGiftUserSearch" type="search" maxlength="64" placeholder="Имя, @username или Telegram ID" oninput="filterAdminGiftUsers()"></label>
+   <label>Получатель<select id="adminGiftUser"><option value="">Загружаем покупателей…</option></select></label>
+   <label>Редкость<select id="adminGiftPackType"><option value="common">Обычный</option><option value="rare">Редкий</option><option value="epic">Эпический</option><option value="legendary">Легендарный</option><option value="secret">Секретный</option></select></label>
+   <label>Название пака<input id="adminGiftPackTitle" maxlength="100" placeholder="Например: Особенный подарок"></label>
+   <label>Что спрятано в паке?<select id="adminGiftRewardType" onchange="toggleAdminGiftRewardFields()"><option value="product">Работа из каталога</option><option value="points">Telegram Stars / баллы</option></select></label>
+   <label id="adminGiftProductField">Скрытая работа<select id="adminGiftProduct"><option value="">Загружаем работы…</option></select></label>
+   <label id="adminGiftPointsField" class="hidden">Количество Stars / баллов<input id="adminGiftRewardPoints" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="Например: 500"></label>
+   <label>Текст поздравления<textarea id="adminGiftMessage" rows="3" maxlength="600" placeholder="Поздравление при открытии пака…"></textarea></label>
+   <button class="primary" type="button" id="adminSendGiftPackButton" onclick="sendAdminGiftPack()">🎁 Отправить подарок</button>
+   <p id="adminGiftPackStatus" class="notice" aria-live="polite">Подарок будет доставлен в приложение покупателя.</p>
+  </div>
   <div class="admin-search"><input id="adminUserSearch" type="search" maxlength="64" placeholder="Telegram ID, имя или username"><button class="secondary" type="button" onclick="loadAdminUsers()">Найти</button></div>
   <div id="adminUsersStatus" class="notice" aria-live="polite">Загрузка списка пользователей…</div>
   <div id="adminUsersList"></div>
@@ -2660,7 +2674,7 @@ function showView(id) {
  if (id === 'adminPanelView') {
   document.getElementById('adminGroupInvitesPanel')?.classList.toggle('hidden',adminSession?.root_owner!==true);
   if(adminSession?.root_owner===true)loadAdminGroupInvites();
-  initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
+  initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminGiftUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'catalogView') loadSurprisePacks();
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
 }
@@ -3191,6 +3205,49 @@ async function loadPublicRanks(){
  }catch(e){status.textContent=e.message||'Не удалось загрузить ранги.';}
 }
 
+
+let adminGiftUsersCache=[];
+async function loadAdminGiftUsers(){
+ const select=document.getElementById('adminGiftUser');if(!select||!initData)return;
+ try{
+  const data=await apiFetch('/api/admin/users?limit=500');adminGiftUsersCache=Array.isArray(data.users)?data.users:[];
+  renderAdminGiftUsers();
+  const products=await apiFetch('/api/admin/packs'),productSelect=document.getElementById('adminGiftProduct');
+  if(productSelect){productSelect.replaceChildren(new Option('Выберите работу',''));(products.products||[]).forEach(p=>productSelect.add(new Option(p.title+' · '+Number(p.price_stars||0)+' ⭐',String(p.id))));}
+  const s=document.getElementById('adminGiftPackStatus');if(s)s.textContent='Покупателей в списке: '+adminGiftUsersCache.length+'.';
+ }catch(e){select.replaceChildren(new Option('Не удалось загрузить покупателей',''));const s=document.getElementById('adminGiftPackStatus');if(s)s.textContent=e.message||'Ошибка загрузки.';}
+}
+function renderAdminGiftUsers(){
+ const select=document.getElementById('adminGiftUser');if(!select)return;
+ const term=(document.getElementById('adminGiftUserSearch')?.value||'').trim().toLowerCase(),current=select.value;
+ select.replaceChildren(new Option('Выберите покупателя',''));
+ adminGiftUsersCache.filter(u=>[u.first_name,u.username,u.telegram_id].some(v=>String(v||'').toLowerCase().includes(term))).forEach(u=>select.add(new Option((u.first_name||'Пользователь')+(u.username?' · @'+u.username:'')+' · ID '+u.telegram_id+' · '+Number(u.balance_stars||0)+' баллов',String(u.telegram_id))));
+ if(current&&Array.from(select.options).some(o=>o.value===current))select.value=current;
+}
+function filterAdminGiftUsers(){renderAdminGiftUsers();}
+function toggleAdminGiftRewardFields(){
+ const points=document.getElementById('adminGiftRewardType')?.value==='points';
+ document.getElementById('adminGiftPointsField')?.classList.toggle('hidden',!points);
+ document.getElementById('adminGiftProductField')?.classList.toggle('hidden',points);
+}
+async function sendAdminGiftPack(){
+ const button=document.getElementById('adminSendGiftPackButton'),status=document.getElementById('adminGiftPackStatus');
+ const p={telegram_id:document.getElementById('adminGiftUser')?.value||'',pack_type:document.getElementById('adminGiftPackType')?.value||'common',title:document.getElementById('adminGiftPackTitle')?.value.trim()||'',reward_type:document.getElementById('adminGiftRewardType')?.value||'product',reward_product_id:document.getElementById('adminGiftProduct')?.value||'',reward_points:Number(document.getElementById('adminGiftRewardPoints')?.value||0),message:document.getElementById('adminGiftMessage')?.value.trim()||''};
+ if(!p.telegram_id)return toast('Выберите покупателя.');
+ if(p.title.length<2)return toast('Укажите название пака.');
+ if(p.reward_type==='product'&&!p.reward_product_id)return toast('Выберите работу.');
+ if(p.reward_type==='points'&&(!Number.isSafeInteger(p.reward_points)||p.reward_points<1||p.reward_points>1000000))return toast('Укажите количество от 1 до 1 000 000.');
+ if(!confirm('Отправить пак «'+p.title+'» пользователю '+p.telegram_id+'?'))return;
+ if(button)button.disabled=true;
+ try{
+  await apiFetch('/api/admin/gift-pack',{method:'POST',body:JSON.stringify(p)});
+  if(status)status.textContent='✓ Подарок отправлен! Анимация появится при следующем открытии приложения.';
+  toast('🎁 Подарочный пак отправлен!');
+  ['adminGiftPackTitle','adminGiftRewardPoints','adminGiftMessage'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const product=document.getElementById('adminGiftProduct');if(product)product.value='';
+ }catch(e){if(status)status.textContent=e.message||'Не удалось отправить подарок.';toast(e.message||'Ошибка отправки.');}
+ finally{if(button)button.disabled=false;}
+}
 async function loadAdminUsers() {
  const status=document.getElementById('adminUsersStatus'),root=document.getElementById('adminUsersList');
  if(!status||!root)return;
@@ -4826,6 +4883,37 @@ function closePackReveal(overlay){
  const target=overlay||document.querySelector('.pack-reveal-overlay');
  if(target)target.remove();
 }
+
+function showGiftPackReveal(item){
+ const p=item.payload||{},r=p.reward||{},overlay=document.createElement('div');overlay.className='pack-reveal-overlay';overlay.dataset.season=getActiveSeasonForEffects();
+ const panel=document.createElement('div');panel.className='pack-reveal-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+ const emblem=document.createElement('div');emblem.className='pack-reveal-envelope';emblem.textContent=({common:'🎁',rare:'💎',epic:'🔮',legendary:'👑',secret:'✨'})[p.pack_type]||'🎁';
+ const heading=document.createElement('h2');heading.textContent='Для Вас подарок!';
+ const title=document.createElement('p');title.textContent=p.title||'Подарочный пак';
+ const rarity=document.createElement('p');rarity.className='muted';rarity.textContent=({common:'Обычный пак',rare:'Редкий пак',epic:'Эпический пак',legendary:'Легендарный пак',secret:'Секретный пак'})[p.pack_type]||'Подарок';
+ const prize=document.createElement('div');prize.className='pack-reveal-prize';
+ if(r.type==='product'){if(r.image_url){const img=document.createElement('img');img.src=r.image_url;img.alt=r.title||'Работа';prize.append(img);}const name=document.createElement('b');name.textContent=r.title||'Работа из каталога';prize.append(name);const note=document.createElement('p');note.textContent='Работа добавлена в завершённые заказы.';prize.append(note);}
+ else{const name=document.createElement('b');name.textContent='+'+Number(r.points||0).toLocaleString('ru-RU')+' ⭐';prize.append(name);const note=document.createElement('p');note.textContent='Баллы уже начислены на баланс.';prize.append(note);}
+ const message=document.createElement('p');message.textContent=p.message||'Пусть подарок порадует Вас! 💛';
+ const close=document.createElement('button');close.className='primary pack-reveal-close';close.type='button';close.textContent='Спасибо!';close.onclick=()=>{closePackReveal(overlay);checkGiftNotifications();};
+ panel.append(emblem,heading,title,rarity,prize,message,close);overlay.append(panel);overlay.onclick=e=>{if(e.target===overlay){closePackReveal(overlay);checkGiftNotifications();}};
+ document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
+}
+async function checkGiftNotifications(){
+ if(!initData||window._giftNotificationCheckRunning)return;
+ window._giftNotificationCheckRunning=true;
+ try{
+  const data=await apiFetch('/api/gifts/pending'),item=(data.notifications||[])[0];if(!item)return;
+  await apiFetch('/api/gifts/ack',{method:'POST',body:JSON.stringify({id:item.id})});
+  if(item.event_type==='gift_pack')showGiftPackReveal(item);
+  else if(item.event_type==='balance_credit'){
+   const p=item.payload||{};showSeasonalSuccessReveal({icon:'⭐',title:'Баланс пополнен!',note:'+'+Number(p.amount||0).toLocaleString('ru-RU')+' баллов уже на Вашем счёте.',detail:p.reason?'Подарок от владельца. Причина: '+p.reason:'Подарок от владельца Агентства подарков 💛'});
+   const close=document.querySelector('.pack-reveal-overlay .pack-reveal-close');if(close)close.addEventListener('click',()=>checkGiftNotifications(),{once:true});
+  }
+  await loadMe();await loadBalance();
+ }catch(e){console.warn('Gift notification check failed:',e);}
+ finally{window._giftNotificationCheckRunning=false;}
+}
 function showPackReveal(result){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
  const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
@@ -5939,6 +6027,7 @@ drawProducts();
 drawCart();
 loadProducts();
 loadMe();
+checkGiftNotifications();
 if (typeof refreshVipHelpCard === 'function') refreshVipHelpCard();
 checkOwnerAccess();
 showView('menuView');
