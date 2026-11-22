@@ -3208,7 +3208,8 @@ async function loadPublicRanks(){
 
 let adminGiftUsersCache=[];
 async function loadAdminGiftUsers(){
- const select=document.getElementById('adminGiftUser');if(!select||!initData)return;
+ const panel=document.getElementById('adminGiftPackPanel');const canGift=adminSession?.root_owner===true||adminSession?.role==='owner'||adminSession?.permissions?.users_balance===true;if(panel)panel.classList.toggle('hidden',!canGift);
+ const select=document.getElementById('adminGiftUser');if(!select||!initData||!canGift)return;
  try{
   const data=await apiFetch('/api/admin/users?limit=500');adminGiftUsersCache=Array.isArray(data.users)?data.users:[];
   renderAdminGiftUsers();
@@ -4910,10 +4911,11 @@ async function checkGiftNotifications(){
    const p=item.payload||{};showSeasonalSuccessReveal({icon:'⭐',title:'Баланс пополнен!',note:'+'+Number(p.amount||0).toLocaleString('ru-RU')+' баллов уже на Вашем счёте.',detail:p.reason?'Подарок от владельца. Причина: '+p.reason:'Подарок от владельца Агентства подарков 💛'});
    const close=document.querySelector('.pack-reveal-overlay .pack-reveal-close');if(close)close.addEventListener('click',()=>checkGiftNotifications(),{once:true});
   }
-  await loadMe();await loadBalance();
+  loadMe();loadBalance();
  }catch(e){console.warn('Gift notification check failed:',e);}
  finally{window._giftNotificationCheckRunning=false;}
 }
+if(!window._giftNotificationVisibilityBound){window._giftNotificationVisibilityBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkGiftNotifications();});}
 function showPackReveal(result){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
  const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
