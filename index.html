@@ -1754,7 +1754,7 @@ body.winter-season .owner-admin-pill:focus-visible{
     <datalist id="adminProductCategories"></datalist>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
     <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
-    <label><input id="adminProductEarlyAccess" type="checkbox"> Ранний доступ для владельца, модераторов и VIP (3 дня)</label><small class="muted">Обычным покупателям товар откроется автоматически через 72 часа после публикации.</small>
+    
     <div class="admin-product-actions"><button class="primary" type="button" id="adminProductSaveBtn" onclick="saveAdminProduct()">Сохранить</button><button class="secondary" type="button" onclick="closeAdminProductEditor()">Отмена</button></div>
    </div>
    <div class="panel" id="adminPacksPanel">
@@ -2245,7 +2245,7 @@ async function loadProducts() {
  try {
   const data = await apiFetch('/api/products');
   if (!Array.isArray(data.products) || !data.products.length) throw new Error('Сервер не вернул каталог.');
-  products = data.products.map(p => [String(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null,Number(p.early_access_enabled)===1]);
+  products = data.products.map(p => [String(p.id),String(p.title),Number(p.price_stars),p.emoji || '🎁',p.category || 'art',p.image_url || null,p.description || '',Number(p.is_new)===1,p.published_at || null]);
   // IDs in D1 are TEXT (often UUIDs). Never coerce them to Number: UUIDs become NaN and collide as one cart key.
   const validProductIds=new Set(products.map(product=>String(product[0])));
   const cleanCart={};
@@ -2661,7 +2661,7 @@ function showView(id) {
  document.querySelectorAll('.bottom button').forEach(b => b.classList.toggle('active',b.dataset.view === id));
  document.getElementById('filters').style.display = id === 'catalogView' ? 'flex' : 'none';
  if (['ordersView','profileView','balanceView','cartView'].includes(id)) {
-  if (id === 'cartView') { vipStatusVerified = false; updateDeliveryMethodUI(); }
+  if (id === 'cartView') { loadVip(); updateDeliveryMethodUI(); }
   loadMe();
  }
  if (id === 'supportView') { if(activeOrderChatId)refreshOrderChat(); else if(craftModeActive)loadCraftConversation(); else loadSupportHistory(); }
@@ -4972,7 +4972,7 @@ function editAdminProduct(product){
  document.getElementById('adminProductCategory').value=product.category||'';
  document.getElementById('adminProductPrice').value=String(product.price_stars??0);
  document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
- document.getElementById('adminProductEarlyAccess').checked=Number(product.early_access_enabled)===1;
+
  editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function closeAdminProductEditor(){document.getElementById('adminProductEditor')?.classList.add('hidden');}
@@ -5001,7 +5001,7 @@ async function saveAdminProduct(){
   category:document.getElementById('adminProductCategory').value.trim(),
   price_stars:Number(document.getElementById('adminProductPrice').value),
   is_active:document.getElementById('adminProductActive').value==='1',
-  early_access_enabled:document.getElementById('adminProductEarlyAccess').checked
+
  };
  try{
   const saved=await apiFetch('/api/admin/product-save',{method:'POST',body:JSON.stringify(payload)});
