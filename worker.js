@@ -1165,7 +1165,8 @@ export default {
     ctx.waitUntil(Promise.all([
       env.DB.prepare("DELETE FROM admin_notifications WHERE created_at < datetime('now','-7 days')").run(),
       env.DB.prepare("DELETE FROM ai_order_drafts WHERE status='collecting' AND last_activity_at < datetime('now','-7 days')").run(),
-      env.DB.prepare("DELETE FROM admin_action_log WHERE created_at < datetime('now','-90 days')").run()
+      env.DB.prepare("DELETE FROM admin_action_log WHERE created_at < datetime('now','-90 days')").run(),
+      env.DB.prepare("DELETE FROM ai_order_drafts WHERE json_valid(details_json)=1 AND json_extract(details_json,'$.source')='paid_surprise_pack' AND datetime(created_at)<=datetime('now','-30 days')").run()
     ]).catch(error => console.error("AI message retention cleanup failed:", String(error).slice(0,250))));
     ctx.waitUntil(syncTelegramWebhook(env).catch(error => console.error("Telegram webhook auto-sync failed:", String(error).slice(0,500))));
     // Automatic postcard retries are disabled. Paid orders are confirmed by text; artwork is delivered manually.
@@ -2999,6 +3000,10 @@ if (path === "/api/admin/packs" && method === "GET") {
           const current=await env.DB.prepare("SELECT balance_stars FROM users WHERE telegram_id=?").bind(telegramId).first();
           return json({error:Number(current?.balance_stars||0)<price?"Недостаточно баллов для покупки.":"Пак уже успел купить другой покупатель."},409,origin);
         }
+        // Record every successful pack purchase in AI orders for 30 days.
+        const packOrderDetails={source:"paid_surprise_pack",pack_id:packId,pack_title:String(pack.title||"").slice(0,120),pack_type:String(pack.pack_type||"common"),price_points:price,reward_type:String(pack.reward_type||""),reward_product_id:rewardProduct?.id||null,reward_product_title:rewardProduct?.title||null,reward_points:rewardProduct?0:Number(pack.reward_points||0),retention_days:30};
+        await env.DB.prepare("INSERT OR IGNORE INTO ai_order_drafts (id,chat_id,telegram_id,subject,details_json,estimated_stars,approved_stars,status,last_activity_at,created_at,updated_at) SELECT ?,?,?,?, ?,0,0,'paid',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP WHERE EXISTS (SELECT 1 FROM balance_transactions WHERE idempotency_key=?)")
+          .bind("pack-order:"+packId+":"+telegramId,String(telegramId),String(telegramId),"🎁 Покупка пака «"+String(pack.title||"").slice(0,120)+"»",JSON.stringify(packOrderDetails),purchaseKey).run();
         if(rewardProduct){
           await notifyOwner(env,"🎁 НОВЫЙ ЗАКАЗ ИЗ ПОДАРОЧНОГО ПАКА\nID заказа: "+orderId+"\nПокупатель Telegram ID: "+telegramId+"\nПак: "+String(pack.title||"").slice(0,120)+"\nНаграда: "+String(rewardProduct.title||"").slice(0,180)+"\nСтоимость пака: "+price+" баллов\nСтатус: добавлен в завершённые заказы.");
         }
