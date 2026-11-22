@@ -1252,7 +1252,7 @@ export default {
         if (!(await tableExists(env,"ai_moderator_settings"))) return json({ok:true,rules_enabled:false,rules_text:""},200,origin);
         const row=await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
         let settings={};try{settings=JSON.parse(row?.settings_json||"{}");}catch{}
-        return json({ok:true,rules_enabled:settings.rules_enabled===true,rules_text:settings.rules_enabled===true?String(settings.rules_text||"").slice(0,3000):""},200,origin);
+        return json({ok:true,rules_enabled:settings.rules_enabled===true,rules_text:String(settings.rules_text||"").slice(0,3000)},200,origin);
       }
 
       const user = await validateTelegram(request.headers.get("X-Telegram-Init-Data"), env.BOT_TOKEN);
