@@ -4473,7 +4473,7 @@ function showVipPurchaseReveal(planType){
  const sparkles=document.createElement('div');sparkles.className='seasonal-vip-sparkles';sparkles.textContent=({autumn:'🍂 ✨ 🍁',winter:'❄️ ✨ 🎄',spring:'🌷 ✨ 🐣',summer:'🌊 ✨ ☀️'})[season];
  const heading=document.createElement('h2');heading.id='vipPurchaseRevealTitle';heading.textContent='Добро пожаловать в VIP!';
  const note=document.createElement('p');note.textContent=planType==='lifetime'?'VIP навсегда успешно оформлен!':'VIP-подписка на 30 дней успешно оформлена!';
- const detail=document.createElement('p');detail.textContent='Тебе открыты особые возможности Агентства подарков. Спасибо за поддержку! 💛';
+ const detail=document.createElement('p');detail.textContent='Вам открыты особые возможности Агентства подарков. Спасибо за поддержку! 💛';
  const close=document.createElement('button');close.type='button';close.className='primary';close.textContent='Отлично!';close.addEventListener('click',()=>overlay.remove());
  panel.append(crown,sparkles,heading,note,detail,close);overlay.append(panel);overlay.addEventListener('click',event=>{if(event.target===overlay)overlay.remove()});document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
@@ -4495,10 +4495,24 @@ function showCartAddAnimation(product){
  if(product?.[5]){const image=document.createElement('img');image.src=product[5];image.alt=product[1]||'Добавленная работа';card.append(image);}
  const copy=document.createElement('div');copy.className='cart-add-copy';
  const title=document.createElement('strong');title.textContent=(product?.[1]||'Работа')+' добавлена в корзину';
- const subtitle=document.createElement('span');subtitle.textContent=scene.title+' · можно продолжить покупки';
+ const subtitle=document.createElement('span');subtitle.textContent=scene.title+' · Вы можете продолжить покупки';
  copy.append(title,subtitle);card.append(copy);
  sceneBox.append(icon,card);overlay.append(waves,sceneBox);document.body.append(overlay);
  window.setTimeout(()=>{if(overlay.isConnected)overlay.remove();},1750);
+}
+function showSeasonalSuccessReveal({icon='✨',title='Операция успешно завершена!',note='Изменения сохранены.',detail='Спасибо, что выбираете Агентство подарков.'}={}){
+ document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
+ const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
+ const panel=document.createElement('div');panel.className='pack-reveal-panel';
+ panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+ const emblem=document.createElement('div');emblem.className='pack-reveal-envelope';emblem.textContent=icon;
+ const heading=document.createElement('h2');heading.textContent=title;
+ const message=document.createElement('p');message.textContent=note;
+ const extra=document.createElement('p');extra.textContent=detail;extra.className='muted';
+ const close=document.createElement('button');close.type='button';close.className='primary pack-reveal-close';close.textContent='Закрыть';close.addEventListener('click',()=>closePackReveal(overlay));
+ panel.append(emblem,heading,message,extra,close);overlay.append(panel);
+ overlay.addEventListener('click',event=>{if(event.target===overlay)closePackReveal(overlay);});
+ document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
 function showCartPurchaseReveal(items){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
@@ -4508,7 +4522,7 @@ function showCartPurchaseReveal(items){
  panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','cartPurchaseRevealHeading');
  const envelope=document.createElement('div');envelope.className='pack-reveal-envelope';envelope.textContent='🎁';
  const heading=document.createElement('h2');heading.id='cartPurchaseRevealHeading';heading.textContent='Покупка успешна!';
- const note=document.createElement('p');note.textContent='Твои картины успешно приобретены!';
+ const note=document.createElement('p');note.textContent='Ваши картины успешно приобретены!';
  const prizes=document.createElement('div');prizes.className='cart-purchase-prizes';
  (items||[]).forEach(item=>{
   const card=document.createElement('div');card.className='cart-purchase-item';
@@ -4885,7 +4899,16 @@ async function topUp(amount) {
  try {
   const data = await apiFetch('/api/balance/topup',{method:'POST',body:JSON.stringify({amount_stars:amount})});
   if (!data.invoice_url) throw new Error('Сервер не вернул счёт на оплату.');
-  openInvoice(data.invoice_url,status => { if(status==='paid'){  toast('Пополнение подтверждено!'); loadBalance(); loadMe(); } else if(status==='pending') toast('Платёж обрабатывается. Баланс обновится после подтверждения.'); else if(status==='failed') toast('Не удалось провести оплату.'); });
+  openInvoice(data.invoice_url,status => {
+   if(status==='paid'){
+    const creditedPoints=Number(amount)+(Number(amount)>500?50:0);
+    const season=getActiveSeasonForEffects();
+    const icons={autumn:'🍁',winter:'🎄',spring:'🐣',summer:'🌊'};
+    showSeasonalSuccessReveal({icon:icons[season]||'✨',title:'Баланс успешно пополнен!',note:'+'+creditedPoints.toLocaleString('ru-RU')+' баллов зачислено на Ваш баланс.',detail:'Спасибо за пополнение! Приятных покупок в Агентстве подарков.'});
+    toast('Пополнение подтверждено!');loadBalance();loadMe();
+   }else if(status==='pending')toast('Платёж обрабатывается. Баланс обновится после подтверждения.');
+   else if(status==='failed')toast('Не удалось провести оплату.');
+  });
  } catch(e) { toast(e.message || 'Не удалось создать счёт.'); }
 }
 
@@ -5323,7 +5346,7 @@ async function checkout() {
  }
 }
 
-async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
+async function payExistingOrder(id){try{const d=await apiFetch('/api/orders/pay',{method:'POST',body:JSON.stringify({order_id:id})});if(d.paid){showSeasonalSuccessReveal({icon:'🎁',title:'Заказ успешно оплачен!',note:'Оплата полностью внесена с Вашего баланса.',detail:'Спасибо за покупку! Информация о заказе обновлена.'});toast('Заказ полностью оплачен с баланса!');loadMe();loadBalance();return;}if(!d.invoice_url)throw new Error('Счёт не создан.');openInvoice(d.invoice_url,s=>{if(s==='paid'){showSeasonalSuccessReveal({icon:'🎁',title:'Заказ успешно оплачен!',note:'Платёж подтверждён.',detail:'Спасибо за покупку! Информация о заказе обновлена.'});toast('Заказ оплачен!');loadMe();loadBalance();}else if(s==='pending'){toast('Платёж обрабатывается. Статус обновится после подтверждения.');loadMe();}else{toast('Оплата не завершена. Заказ можно оплатить повторно или отменить.');loadMe();}});}catch(e){toast(e.message||'Не удалось создать счёт.');}finally{loadMe();}}
 async function cancelExistingOrder(id){if(!confirm('Отправить отмену заказа? Неоплаченный заказ отменится сразу. Для уже оплаченного заказа запрос будет передан владельцу на проверку возврата. Кнопка доступна в первые 3 дня после оформления.'))return;try{const result=await apiFetch('/api/orders/cancel',{method:'POST',body:JSON.stringify({order_id:id})});toast(result.requested?'Запрос на отмену отправлен владельцу.':'Заказ отменён.');}catch(e){toast(e.message||'Не удалось отменить заказ.');}finally{loadMe();loadBalance();}}
 let activeOrderChatId='',activeOrderChatType='product';
 function setUnifiedChatContext(isOrder){
