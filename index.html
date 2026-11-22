@@ -1649,9 +1649,9 @@ body.winter-season .owner-admin-pill:focus-visible{
    <label>Получатель<select id="adminGiftUser"><option value="">Загружаем покупателей…</option></select></label>
    <label>Редкость<select id="adminGiftPackType"><option value="common">Обычный</option><option value="rare">Редкий</option><option value="epic">Эпический</option><option value="legendary">Легендарный</option><option value="secret">Секретный</option></select></label>
    <label>Название пака<input id="adminGiftPackTitle" maxlength="100" placeholder="Например: Особенный подарок"></label>
-   <label>Что спрятано в паке?<select id="adminGiftRewardType" onchange="toggleAdminGiftRewardFields()"><option value="product">Работа из каталога</option><option value="points">Telegram Stars / баллы</option></select></label>
+   <label>Что спрятано в паке?<select id="adminGiftRewardType" onchange="toggleAdminGiftRewardFields()"><option value="product">Работа из каталога</option><option value="points">Баллы на внутренний баланс (⭐)</option></select></label>
    <label id="adminGiftProductField">Скрытая работа<select id="adminGiftProduct"><option value="">Загружаем работы…</option></select></label>
-   <label id="adminGiftPointsField" class="hidden">Количество Stars / баллов<input id="adminGiftRewardPoints" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="Например: 500"></label>
+   <label id="adminGiftPointsField" class="hidden">Количество баллов<input id="adminGiftRewardPoints" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="Например: 500"></label>
    <label>Текст поздравления<textarea id="adminGiftMessage" rows="3" maxlength="600" placeholder="Поздравление при открытии пака…"></textarea></label>
    <button class="primary" type="button" id="adminSendGiftPackButton" onclick="sendAdminGiftPack()">🎁 Отправить подарок</button>
    <p id="adminGiftPackStatus" class="notice" aria-live="polite">Подарок будет доставлен в приложение покупателя.</p>
