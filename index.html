@@ -2560,7 +2560,8 @@ function renderGroupInviteAccess(){
  const warningThreshold=Math.max(1,Number(moderation.warnings_before_restriction||2));
  const activeWarnings=Math.max(0,Number(moderation.active_warnings||0));
  const escalation=moderation.warning_escalation_action==='mute'?'временное ограничение сообщений':moderation.warning_escalation_action==='warning'?'дополнительное предупреждение':'ограничение участия в группе';
- if(warningNote)warningNote.textContent=(activeWarnings===0?'У вас нет активных предупреждений.':'У вас активных предупреждений: '+activeWarnings+'.')+' Порог — '+warningThreshold+' активных предупреждения(й); после него может применяться '+escalation+'. Предупреждение действует '+Number(moderation.warning_active_days||20)+' дней, история хранится '+Number(moderation.warning_history_days||60)+' дней.';
+ const escalationDuration=moderation.warning_escalation_action==='mute'?' на '+Number(moderation.mute_duration_minutes||60)+' мин.':moderation.warning_escalation_action==='restriction'?' на '+Number(moderation.restriction_duration_hours||24)+' ч.':'';
+ if(warningNote)warningNote.textContent=(activeWarnings===0?'У вас нет активных предупреждений.':'У вас активных предупреждений: '+activeWarnings+'.')+' Порог — '+warningThreshold+' активных предупреждения(й); после него может применяться '+escalation+escalationDuration+'. Предупреждение действует '+Number(moderation.warning_active_days||20)+' дней, история хранится '+Number(moderation.warning_history_days||60)+' дней.';
  const nightStatus=document.getElementById('groupNightModerationStatus');
  const nightNote=document.getElementById('groupNightModerationNote');
  if(nightStatus)nightStatus.textContent=moderation.night_mode===false?'Выключен':'Включён';
