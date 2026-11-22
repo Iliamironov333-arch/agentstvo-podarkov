@@ -1977,6 +1977,30 @@ body.winter-season .owner-admin-pill:focus-visible{
 <section id="profileView" class="hidden">
  <div class="sectionhead"><h2>👤 Профиль</h2><span>Telegram</span></div>
  <div class="panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 id="profileName">Пользователь Telegram</h3><span id="profileVipBadge" class="pill profile-vip-pill hidden" aria-label="VIP-участник">👑 VIP-УЧАСТНИК</span></div><div style="display:grid;gap:8px;margin:10px 0"><label class="muted" for="profileDisplayName">Имя в Агентстве подарков (настройка VIP)</label><input id="profileDisplayName" maxlength="32" placeholder="Ваше отображаемое имя" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);color:var(--text);font:inherit"><button class="secondary" id="saveProfileDisplayName" type="button" onclick="saveProfileDisplayName()">Сохранить имя</button><small class="muted" id="profileDisplayNameHint">Изменение имени доступно при активном VIP. Имя Telegram не меняется.</small></div><div class="lineitem"><span>Баланс</span><b id="profilePoints">— баллов</b></div><div class="lineitem"><span>Баллы репутации</span><b id="profileReputation" style="display:inline-flex;align-items:center;gap:7px"><span style="display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:linear-gradient(145deg,#9b5cff,#5925b7);color:#fff;font-size:15px;box-shadow:0 2px 9px #7838d855">ϟ</span><span>—</span></b></div><div class="lineitem"><span>Ранг клиента</span><b id="profileRank">Обычный клиент · скидка 0%</b></div><div class="lineitem"><span>Количество заказов</span><b id="profileOrderCount">—</b></div><p class="muted">За каждую оплаченную Telegram Star начисляется 1 балл репутации. Пополнения внутреннего баланса учитываются; повторное списание внутреннего баланса баллы не добавляет.</p><p class="muted">Данные загружаются с сервера после проверки Telegram.</p></div>
+ <div class="panel" id="profileAnalyticsPanel">
+  <div class="sectionhead"><h3>📊 Моя аналитика</h3><button class="secondary" type="button" onclick="loadMe()">↻ Обновить</button></div>
+  <div class="admin-metrics">
+   <div class="admin-metric"><span>Все заказы</span><strong id="profileAllOrders">—</strong></div>
+   <div class="admin-metric"><span>Оплачено заказов</span><strong id="profilePaidOrders">—</strong></div>
+   <div class="admin-metric"><span>Всего потрачено</span><strong id="profileSpent">—</strong></div>
+   <div class="admin-metric"><span>Избранные работы</span><strong id="profileFavorites">—</strong></div>
+   <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="profileCustomOrders">—</strong></div>
+   <div class="admin-metric"><span>С нами с</span><strong id="profileMemberSince" style="font-size:16px">—</strong></div>
+  </div>
+  <p class="notice" id="profileAnalyticsHint">Здесь отображается только Ваша личная статистика.</p>
+ </div>
+ <div class="panel" id="profileWarningsPanel">
+  <h3>⚠️ Мои предупреждения</h3>
+  <div id="profileWarningsList" class="muted">Загружаем сведения…</div>
+ </div>
+ <div class="panel">
+  <h3>⚙️ Управление аккаунтом</h3>
+  <div style="display:grid;gap:9px">
+   <button class="secondary" type="button" onclick="showView('ordersView')">📦 Мои заказы и статусы</button>
+   <button class="secondary" type="button" onclick="showView('favoritesView')">❤️ Избранные работы</button>
+   <button class="secondary" type="button" onclick="showView('supportView')">💬 Связаться с поддержкой</button>
+  </div>
+ </div>
  <div class="panel"><div class="sectionhead"><h3>🎁 Мои бонусы</h3><span>обмен на Stars</span></div><p class="muted">Бонусы выдаются владельцем Агентства. При продаже бонусов активный VIP получает дополнительно +20% Stars к сумме обмена.</p><div id="bonusInventory"><p class="muted">Загружаем бонусы…</p></div></div>
 </section>
 <section id="vipView" class="hidden">
@@ -2059,22 +2083,10 @@ body.winter-season .owner-admin-pill:focus-visible{
    <h3>📌 Правила группы</h3>
    <div id="groupInviteRulesText" style="white-space:pre-wrap;line-height:1.65"></div>
    <button class="primary hidden" id="groupInviteJoinButton" type="button" style="width:100%;margin-top:16px">➡️ Вступить в группу</button>
-   <div id="groupBuyerActivity" class="panel hidden" style="margin-top:14px">
-    <h3>📊 Ваша активность</h3>
-    <div class="admin-metrics" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-     <div class="admin-metric"><span>Оплаченные заказы</span><strong id="groupStatOrders">—</strong></div>
-     <div class="admin-metric"><span>Потрачено Stars</span><strong id="groupStatSpent">—</strong></div>
-     <div class="admin-metric"><span>Избранные работы</span><strong id="groupStatFavorites">—</strong></div>
-     <div class="admin-metric"><span>Индивидуальные заказы</span><strong id="groupStatCustom">—</strong></div>
-    </div>
-    <p class="notice" id="groupStatSince">Статистика загружается из вашего профиля.</p>
-   </div>
    <div id="groupMemberSettings" class="panel hidden" style="margin-top:14px">
-    <h3>⚙️ Настройки участника</h3>
-    <p class="muted">Настройки оформления и уведомлений. Доступ к группе сохраняется на этом устройстве.</p>
-    <button class="secondary" id="groupThemeToggle" type="button" style="width:100%;margin-top:8px" onclick="toggleTheme();updateGroupThemeLabel()">🌙 Включить ночной режим</button>
-    <p class="notice">Переключатель выше меняет только оформление мини-приложения и сохраняет выбор на этом устройстве.</p>
-    <div class="lineitem"><span>🌙 Ночной режим группы</span><b id="groupNightModerationStatus">Загрузка…</b></div>
+    <h3>🌙 Ночной режим группы</h3>
+    <p class="muted">Это информационное сообщение о правилах работы группы. Оно не меняет тему оформления Вашего приложения.</p>
+    <div class="lineitem"><span>Статус</span><b id="groupNightModerationStatus">Загрузка…</b></div>
     <p class="notice" id="groupNightModerationNote">Расписание ночного режима загрузится после проверки доступа.</p>
     <p class="notice" id="groupWarningSettingsNote">Сведения о ваших предупреждениях загрузятся после проверки доступа.</p>
    </div>
@@ -2570,7 +2582,6 @@ function renderGroupInviteAccess(){
   if(tg?.openTelegramLink)tg.openTelegramLink(groupInviteAccess.group_url);
   else window.open(groupInviteAccess.group_url,'_blank','noopener');
  };
- loadGroupBuyerActivity();
 }
 async function loadGroupBuyerActivity(){
  const root=document.getElementById('groupBuyerActivity');if(!root||!groupInviteAccess)return;
@@ -5758,6 +5769,19 @@ async function loadMe() {
   const pp=document.getElementById('profilePoints');if(pp)pp.textContent=formatted+' баллов';
   const reputation=document.getElementById('profileReputation');if(reputation){const value=Number(me.reputation_points||0).toLocaleString('ru-RU');reputation.lastElementChild.textContent=value;}
   const rank=document.getElementById('profileRank');if(rank)rank.textContent=(me.rank_label||'Обычный клиент')+' · скидка '+Number(me.rank_discount_percent||0)+'%';
+  const activity=me.activity||{},fmt=value=>Number(value||0).toLocaleString('ru-RU');
+  const setProfile=(id,value)=>{const node=document.getElementById(id);if(node)node.textContent=String(value)};
+  setProfile('profileAllOrders',fmt(activity.all_orders));
+  setProfile('profilePaidOrders',fmt(activity.paid_orders));
+  setProfile('profileSpent',fmt(activity.total_spent_stars)+' ⭐');
+  setProfile('profileFavorites',fmt(activity.favorites_count));
+  setProfile('profileCustomOrders',fmt(activity.custom_orders));
+  setProfile('profileMemberSince',activity.member_since?new Date(String(activity.member_since).replace(' ','T')+'Z').toLocaleDateString('ru-RU'):'—');
+  const warningRoot=document.getElementById('profileWarningsList');
+  if(warningRoot){warningRoot.replaceChildren();const warnings=Array.isArray(me.warnings)?me.warnings:[];
+   if(!warnings.length){warningRoot.textContent='Активных предупреждений и недавних записей нет.';}
+   else warnings.forEach(w=>{const item=document.createElement('div');item.className='admin-detail-line';const active=!w.cancelled_at&&new Date(String(w.active_until||'').replace(' ','T')+'Z').getTime()>Date.now();item.textContent=(active?'🟠 Активно':'✓ Неактивно')+' · '+String(w.reason||'Предупреждение')+' · выдано '+(w.issued_at?new Date(String(w.issued_at).replace(' ','T')+'Z').toLocaleDateString('ru-RU'):'—')+(active?' · действует до '+new Date(String(w.active_until).replace(' ','T')+'Z').toLocaleDateString('ru-RU'):'');warningRoot.append(item);});
+  }
   const pn=document.getElementById('profileName');if(pn)pn.textContent=me.display_name||me.first_name||(me.username?'@'+me.username:'Пользователь Telegram');const displayInput=document.getElementById('profileDisplayName');if(displayInput&&document.activeElement!==displayInput)displayInput.value=me.display_name||'';const displayButton=document.getElementById('saveProfileDisplayName');if(displayButton)displayButton.disabled=!me.vip;const displayHint=document.getElementById('profileDisplayNameHint');if(displayHint)displayHint.textContent=me.vip?'Вы можете изменить отображаемое имя. Имя Telegram останется прежним.':'Изменение отображаемого имени доступно при активном VIP.';
   const vipBadge=document.getElementById('profileVipBadge');if(vipBadge)vipBadge.classList.toggle('hidden',!me.vip);
   setVipUi(!!me.vip,true);
