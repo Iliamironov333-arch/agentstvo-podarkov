@@ -1891,7 +1891,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           return json({ok:true,id,created:false},200,origin);
         }
         if (path === "/api/admin/products" && method === "GET") {
-          await ensureProductDisplayOrder(env); await ensureProductEarlyAccessSchema(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at,early_access_enabled,published_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
+          await ensureProductDisplayOrder(env); const rows = await env.DB.prepare("SELECT id,title,description,image_url,category,price_stars,is_active,created_at FROM products ORDER BY display_order ASC,created_at DESC,CAST(id AS INTEGER) DESC").all();
           const categories = await env.DB.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category)<>'' ORDER BY category").all();
           return json({ ok: true, products: rows.results || [], categories: (categories.results || []).map(row => row.category) }, 200, origin);
         }
@@ -3225,7 +3225,7 @@ if (path === "/api/admin/packs" && method === "GET") {
         if(!Number.isSafeInteger(price)||price<1)return json({error:"У пака некорректная цена."},409,origin);
         let rewardProduct=null;
         if(pack.reward_type==="product"){
-          rewardProduct=await env.DB.prepare("SELECT id,title,image_url,price_stars,early_access_enabled,published_at FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
+          rewardProduct=await env.DB.prepare("SELECT id,title,image_url,price_stars FROM products WHERE id=?").bind(String(pack.reward_product_id||"")).first();
           if(!rewardProduct)return json({error:"Награда больше недоступна. Обратитесь в поддержку."},409,origin);
           if(!Number.isSafeInteger(Number(rewardProduct.price_stars))||Number(rewardProduct.price_stars)<0)return json({error:"У награды некорректная цена."},409,origin);
         } else if(pack.reward_type!=="points" || !Number.isSafeInteger(Number(pack.reward_points)) || Number(pack.reward_points)<1 || Number(pack.reward_points)>1000000) {
