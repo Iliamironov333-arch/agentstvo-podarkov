@@ -3337,16 +3337,30 @@ if (path === "/api/admin/packs" && method === "GET") {
           : null;
         const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
         const activityRow = await env.DB.prepare(
-          "SELECT (SELECT COUNT(*) FROM orders WHERE telegram_id=? AND payment_status='paid') AS paid_orders,(SELECT COALESCE(SUM(total_stars),0) FROM orders WHERE telegram_id=? AND payment_status='paid') AS total_spent_stars,(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded')) AS custom_orders,(SELECT COUNT(*) FROM favorites WHERE telegram_id=?) AS favorites_count"
-        ).bind(telegramId,telegramId,telegramId,telegramId).first().catch(()=>null);
+          "SELECT (SELECT COUNT(*) FROM orders WHERE telegram_id=?) AS all_orders,(SELECT COUNT(*) FROM orders WHERE telegram_id=? AND payment_status='paid') AS paid_orders,(SELECT COALESCE(SUM(total_stars),0) FROM orders WHERE telegram_id=? AND payment_status='paid') AS total_spent_stars,(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded')) AS custom_orders,(SELECT COUNT(*) FROM favorites WHERE telegram_id=?) AS favorites_count"
+        ).bind(telegramId,telegramId,telegramId,telegramId,telegramId).first().catch(()=>null);
+        let warnings = [];
+        if (await tableExists(env,"ai_warnings") && await tableExists(env,"ai_moderator_settings")) {
+          const moderatorSettings = await env.DB.prepare("SELECT group_chat_id,settings_json FROM ai_moderator_settings WHERE id=1").first();
+          const groupChatId = String(moderatorSettings?.group_chat_id || "").trim();
+          let warningHistoryDays = 60;
+          try { warningHistoryDays = Math.max(1,Math.min(365,Number(JSON.parse(moderatorSettings?.settings_json || "{}").warning_history_days || 60))); } catch {}
+          if (groupChatId) {
+            const warningRows = await env.DB.prepare("SELECT id,reason,issued_at,active_until,cancelled_at FROM ai_warnings WHERE telegram_id=? AND chat_id=? AND issued_at>=datetime('now',?) ORDER BY issued_at DESC LIMIT 30")
+              .bind(telegramId,groupChatId,"-"+warningHistoryDays+" days").all().catch(()=>({results:[]}));
+            warnings = warningRows.results || [];
+          }
+        }
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
           activity: {
+            all_orders: Number(activityRow?.all_orders || 0),
             paid_orders: Number(activityRow?.paid_orders || 0),
             total_spent_stars: Number(activityRow?.total_spent_stars || 0),
             custom_orders: Number(activityRow?.custom_orders || 0),
             favorites_count: Number(activityRow?.favorites_count || 0),
             member_since: me?.created_at || null
           },
+          warnings,
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", display_name: me?.display_name || "", username: me?.username || user.username || "",
           orders: orders.results || [], vip: vip || null, bonuses, rank_code: customerRank.code, rank_label: customerRank.label, rank_discount_percent: customerRank.discount }, 200, origin);
