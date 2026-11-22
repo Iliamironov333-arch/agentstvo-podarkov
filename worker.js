@@ -71,7 +71,7 @@ const PRODUCT_META = [
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Telegram-Bot-Api-Secret-Token",
+    "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Telegram-Bot-Api-Secret-Token, X-Group-Access-Token",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Vary": "Origin"
   };
@@ -183,6 +183,18 @@ async function hmac(keyBytes, data) {
 function toHex(bytes) {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
+async function sha256Hex(value) {
+  return toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)))));
+}
+function makeGroupInviteSessionToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+async function groupInviteSessionHash(env, token) {
+  return groupInviteCodeHash(env, "session:v1:" + token);
+}
 async function groupInviteCodeHash(env, code) {
   if (!env.GROUP_INVITE_SECRET) throw new Error("GROUP_INVITE_SECRET не настроен.");
   return toHex(await hmac(new TextEncoder().encode(env.GROUP_INVITE_SECRET), "agentstvo-group-invite:v1:" + code));
@@ -211,6 +223,42 @@ async function decryptGroupInviteCode(env, packedBase64) {
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
   return new TextDecoder().decode(plain);
 }
+async function buildGroupInviteMemberPayload(env, telegramId, groupUrl) {
+  if (!(await tableExists(env, "ai_moderator_settings"))) return null;
+  const settingsRow = await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
+  let settings = {};
+  try { settings = JSON.parse(settingsRow?.settings_json || "{}"); } catch {}
+  const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
+  if (settings.rules_enabled !== true || !rulesText) return null;
+  const chatId = String(settings.group_chat_id || "").trim();
+  let activeWarnings = 0;
+  if (chatId && await tableExists(env, "ai_warnings")) {
+    const warningRow = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM ai_warnings WHERE telegram_id=? AND chat_id=? AND cancelled_at IS NULL AND active_until>CURRENT_TIMESTAMP"
+    ).bind(telegramId, chatId).first();
+    activeWarnings = Number(warningRow?.total || 0);
+  }
+  return {
+    ok: true,
+    access: true,
+    rules_text: rulesText,
+    group_url: groupUrl,
+    moderation: {
+      night_mode: settings.night_mode !== false,
+      night_start: String(settings.night_start || "23:00"),
+      night_end: String(settings.night_end || "07:00"),
+      warnings_before_restriction: Math.max(1, Number(settings.warnings_before_restriction || 2)),
+      warning_active_days: Math.max(1, Number(settings.warning_active_days || 20)),
+      warning_history_days: Math.max(1, Number(settings.warning_history_days || 60)),
+      warning_escalation_action: String(settings.warning_escalation_action || "restriction"),
+      mute_duration_minutes: Math.max(1, Number(settings.mute_duration_minutes || 60)),
+      restriction_duration_hours: Math.max(1, Number(settings.restriction_duration_hours || 24)),
+      active_warnings: activeWarnings,
+      timezone: "Asia/Yekaterinburg"
+    }
+  };
+}
+
 async function validateTelegram(initData, botToken) {
   if (!initData || !botToken) return null;
   try {
@@ -1286,39 +1334,54 @@ export default {
       await ensureUser(env, user);
 
       if (path === "/api/group-invites/validate" && method === "POST") {
-        if (!(await tableExists(env, "group_invite_codes"))) return json({ error: "Система приглашений пока не настроена." }, 503, origin);
+        if (!(await tableExists(env, "group_invite_codes")) || !(await tableExists(env, "group_invite_sessions"))) {
+          return json({ error: "Система приглашений пока не обновлена." }, 503, origin);
+        }
         const body = await readJson(request);
         const code = String(body.code || "").trim();
         if (!/^\d{4,32}$/.test(code)) return json({ error: "Введите цифровой код длиной от 4 до 32 цифр." }, 400, origin);
-        if (!(await tableExists(env, "ai_moderator_settings"))) return json({ error: "Правила группы пока недоступны." }, 503, origin);
-        const settingsRow = await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
-        let settings = {};
-        try { settings = JSON.parse(settingsRow?.settings_json || "{}"); } catch {}
-        const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
-        if (settings.rules_enabled !== true || !rulesText) return json({ error: "Правила группы временно недоступны. Код не был использован." }, 503, origin);
         const groupUrl = String(env.GROUP_INVITE_URL || "").trim();
         if (!/^https:\/\/t\.me\/\+/.test(groupUrl)) return json({ error: "Ссылка на группу временно недоступна. Код не был использован." }, 503, origin);
         const codeHash = await groupInviteCodeHash(env, code);
         const invite = await env.DB.prepare(
-          "SELECT id,mode,used_at FROM group_invite_codes WHERE code_hash=? AND deleted_at IS NULL LIMIT 1"
+          "SELECT id,mode,used_at,used_by FROM group_invite_codes WHERE code_hash=? AND deleted_at IS NULL LIMIT 1"
         ).bind(codeHash).first();
-        if (!invite || (invite.mode === "one_time" && invite.used_at)) {
+        if (!invite || (invite.mode === "one_time" && invite.used_at && String(invite.used_by || "") !== telegramId)) {
           return json({ error: "Код неверный, удалён или уже использован." }, 403, origin);
         }
         const redeemed = await env.DB.prepare(
-          "UPDATE group_invite_codes SET use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP,used_at=CASE WHEN mode='one_time' THEN CURRENT_TIMESTAMP ELSE used_at END,used_by=CASE WHEN mode='one_time' THEN ? ELSE used_by END WHERE id=? AND deleted_at IS NULL AND (mode='reusable' OR used_at IS NULL)"
-        ).bind(telegramId, invite.id).run();
+          "UPDATE group_invite_codes SET use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP,used_at=CASE WHEN mode='one_time' THEN COALESCE(used_at,CURRENT_TIMESTAMP) ELSE used_at END,used_by=CASE WHEN mode='one_time' THEN COALESCE(used_by,?) ELSE used_by END WHERE id=? AND deleted_at IS NULL AND (mode='reusable' OR used_at IS NULL OR used_by=?)"
+        ).bind(telegramId, invite.id, telegramId).run();
         if (Number(redeemed.meta?.changes || 0) !== 1) {
           return json({ error: "Код неверный, удалён или уже использован." }, 403, origin);
         }
-        return json({
-          ok: true,
-          access: true,
-          rules_text: rulesText,
-          group_url: groupUrl,
-          code_mode: invite.mode
-        }, 200, origin);
+        const sessionToken = makeGroupInviteSessionToken();
+        const sessionHash = await groupInviteSessionHash(env, sessionToken);
+        await env.DB.prepare(
+          "INSERT INTO group_invite_sessions(id,invite_id,telegram_id,token_hash,expires_at) VALUES(?,?,?,?,datetime('now','+90 days'))"
+        ).bind(makeId(), invite.id, telegramId, sessionHash).run();
+        const payload = await buildGroupInviteMemberPayload(env, telegramId, groupUrl);
+        if (!payload) return json({ error: "Правила группы временно недоступны." }, 503, origin);
+        return json({ ...payload, session_token: sessionToken, session_expires_days: 90, code_mode: invite.mode }, 200, origin);
       }
+
+      if (path === "/api/group-invites/access" && method === "GET") {
+        if (!(await tableExists(env, "group_invite_sessions"))) return json({ error: "Система сохранённого доступа пока не настроена." }, 503, origin);
+        const token = String(request.headers.get("X-Group-Access-Token") || "").trim();
+        if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return json({ error: "Сохранённый доступ не найден." }, 401, origin);
+        const tokenHash = await groupInviteSessionHash(env, token);
+        const session = await env.DB.prepare(
+          "SELECT s.id,s.invite_id FROM group_invite_sessions s JOIN group_invite_codes c ON c.id=s.invite_id WHERE s.token_hash=? AND s.telegram_id=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND c.deleted_at IS NULL LIMIT 1"
+        ).bind(tokenHash, telegramId).first();
+        if (!session) return json({ error: "Сохранённый доступ истёк или был отозван." }, 401, origin);
+        await env.DB.prepare("UPDATE group_invite_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?").bind(session.id).run();
+        const groupUrl = String(env.GROUP_INVITE_URL || "").trim();
+        if (!/^https:\/\/t\.me\/\+/.test(groupUrl)) return json({ error: "Ссылка на группу временно недоступна." }, 503, origin);
+        const payload = await buildGroupInviteMemberPayload(env, telegramId, groupUrl);
+        if (!payload) return json({ error: "Правила группы временно недоступны." }, 503, origin);
+        return json(payload, 200, origin);
+      }
+
 
       if (path === "/api/ui-motion" && method === "GET") {
         const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
@@ -3176,31 +3239,49 @@ if (path === "/api/admin/packs" && method === "GET") {
 
       if (path === "/api/catalog-semantic-search" && method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const query = String(body.query || "").trim().slice(0, 140);
+        const query = String(body.query || "").toLocaleLowerCase("ru-RU").replace(/\s+/g, " ").trim().slice(0, 140);
         if (query.length < 3) return json({ product_ids: [] }, 200, origin);
         if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
-        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
-        const catalog = filterEarlyAccessProducts(await getProducts(env),privileged).slice(0, 60).map(item => ({
-          id: String(item.id), title: String(item.title || "").slice(0, 120),
-          description: String(item.description || "").slice(0, 360),
-          category: String(item.category || "").slice(0, 45)
-        }));
-        const instructions = [
-          "Ты — поисковый помощник каталога Агентства подарков.",
-          "Подбирай товары по смыслу, настроению, сезону, цветам, тематике и описанию, а не только по совпадению слов.",
-          "Например, запрос «что-то осеннее и тёплое» может подходить к уютным осенним, домашним, природным или сезонным работам, даже если слова запроса отсутствуют в описании.",
-          "Используй только переданный каталог. Не выдумывай товары и не меняй их ID.",
-          "Верни только JSON без Markdown в формате: {\"product_ids\":[\"id1\",\"id2\"]}.",
-          "Порядок ID — от наиболее подходящего к менее подходящему. Если подходящих работ нет, верни пустой массив.",
-          "Ответ должен быть валидным JSON. Не добавляй пояснений, вступлений или Markdown.",
-          "Не включай товары, связь которых с запросом слабая. Максимум 20 ID."
-        ].join("\n");
         try {
+          const [allProducts, privileged] = await Promise.all([getProducts(env), hasEarlyAccessPrivileges(env,telegramId)]);
+          const catalog = filterEarlyAccessProducts(allProducts,privileged).slice(0,60).map(item => ({
+            id: String(item.id), title: String(item.title || "").slice(0,120),
+            description: String(item.description || "").slice(0,300),
+            category: String(item.category || "").slice(0,45)
+          }));
+          if (!catalog.length) return json({ product_ids: [], semantic: true }, 200, origin);
+          const catalogFingerprint = await sha256Hex(JSON.stringify(catalog.map(item => [item.id,item.title,item.description,item.category])));
+          const cacheKey = await sha256Hex("catalog-search-v2:" + query + ":" + (privileged ? "vip" : "public") + ":" + catalogFingerprint);
+          try {
+            const cached = await env.DB.prepare("SELECT product_ids FROM catalog_search_cache WHERE query_hash=? AND expires_at>CURRENT_TIMESTAMP").bind(cacheKey).first();
+            if (cached?.product_ids) {
+              const allowed = new Set(catalog.map(item => item.id));
+              const product_ids = JSON.parse(cached.product_ids).map(String).filter(id => allowed.has(id)).slice(0,20);
+              return json({ product_ids, semantic: true, cached: true }, 200, origin);
+            }
+          } catch (cacheError) {
+            if (!isMissingTableError(cacheError,"catalog_search_cache")) throw cacheError;
+          }
+
+          const terms = query.split(/[^a-zа-яё0-9]+/i).filter(term => term.length > 1);
+          const ranked = catalog.map(item => {
+            const title = item.title.toLocaleLowerCase("ru-RU");
+            const description = item.description.toLocaleLowerCase("ru-RU");
+            const category = item.category.toLocaleLowerCase("ru-RU");
+            const score = terms.reduce((sum,term) => sum + (title.includes(term) ? 4 : category.includes(term) ? 2 : description.includes(term) ? 1 : 0),0);
+            return { item, score };
+          }).sort((a,b) => b.score-a.score);
+          const matches = ranked.filter(row => row.score > 0);
+          const limit = matches.length ? 18 : 24;
+          const compactCatalog = ranked.slice(0,limit).map(row => ({
+            id: row.item.id, title: row.item.title, description: row.item.description.slice(0,170), category: row.item.category
+          }));
+          const instructions = "Ты — семантический поисковик каталога Агентства подарков. Сопоставь запрос с работами по смыслу, настроению, сезону, цветам и теме. Используй только переданный список и его ID. Верни только JSON вида {\"product_ids\":[\"id1\"]}; ID упорядочи по релевантности, максимум 12. Не включай слабые совпадения.";
           const response = await workersAiFetch(env, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
-              input: [{ role: "user", content: "Запрос покупателя: " + query + "\nКаталог: " + JSON.stringify(catalog) }],
-              max_output_tokens: 2000, temperature: 0.1 })
+              input: [{ role: "user", content: "Запрос: " + query + "\nРаботы: " + JSON.stringify(compactCatalog) }],
+              max_output_tokens: 256, temperature: 0.1 })
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
@@ -3210,7 +3291,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           let output = typeof data.output_text === "string" ? data.output_text : "";
           if (!output && Array.isArray(data.output)) output = data.output.flatMap(part => Array.isArray(part.content) ? part.content : [])
             .filter(part => (part.type === "output_text" || part.type === "text") && typeof part.text === "string")
-            .map(part => part.text).join("\\n");
+            .map(part => part.text).join("\n");
           if (!output && typeof data.choices?.[0]?.message?.content === "string") output = data.choices[0].message.content;
           const match = output.match(/\{[\s\S]*\}/);
           if (!match) throw new Error("Некорректный ответ ИИ-поиска: " + output.slice(0, 300));
@@ -3218,12 +3299,19 @@ if (path === "/api/admin/packs" && method === "GET") {
           const allowed = new Set(catalog.map(item => item.id));
           const product_ids = Array.isArray(parsed.product_ids)
             ? [...new Set(parsed.product_ids.map(String).filter(id => allowed.has(id)))].slice(0,20) : [];
-          return json({ product_ids, semantic: true }, 200, origin);
+          try {
+            await env.DB.prepare("INSERT INTO catalog_search_cache(query_hash,product_ids,expires_at) VALUES(?,?,datetime('now','+7 days')) ON CONFLICT(query_hash) DO UPDATE SET product_ids=excluded.product_ids,created_at=CURRENT_TIMESTAMP,expires_at=excluded.expires_at")
+              .bind(cacheKey,JSON.stringify(product_ids)).run();
+          } catch (cacheError) {
+            if (!isMissingTableError(cacheError,"catalog_search_cache")) console.warn("Semantic search cache write failed:",String(cacheError).slice(0,200));
+          }
+          return json({ product_ids, semantic: true, cached: false }, 200, origin);
         } catch (error) {
           console.error("Semantic catalog search failed:", String(error).slice(0,300));
           return json({ error: "Не удалось выполнить поиск по смыслу." }, 503, origin);
         }
       }
+
 
       if (path === "/api/me" && method === "GET") {
         const me = await env.DB.prepare("SELECT telegram_id,username,first_name,display_name,balance_stars,created_at FROM users WHERE telegram_id=?")
@@ -3239,7 +3327,17 @@ if (path === "/api/admin/packs" && method === "GET") {
           ? await env.DB.prepare("SELECT priority_order_coupons,vip_days,campaign_priority,extra_attempts FROM user_bonus_balances WHERE telegram_id=?").bind(telegramId).first()
           : null;
         const bonuses = bonusRow || {priority_order_coupons:0,vip_days:0,campaign_priority:0,extra_attempts:0};
+        const activityRow = await env.DB.prepare(
+          "SELECT (SELECT COUNT(*) FROM orders WHERE telegram_id=? AND payment_status='paid') AS paid_orders,(SELECT COALESCE(SUM(total_stars),0) FROM orders WHERE telegram_id=? AND payment_status='paid') AS total_spent_stars,(SELECT COUNT(*) FROM custom_orders WHERE telegram_id=? AND status NOT IN ('cancelled','superseded')) AS custom_orders,(SELECT COUNT(*) FROM favorites WHERE telegram_id=?) AS favorites_count"
+        ).bind(telegramId,telegramId,telegramId,telegramId).first().catch(()=>null);
         return json({ points: Number(me?.balance_stars || 0), balance_stars: Number(me?.balance_stars || 0),
+          activity: {
+            paid_orders: Number(activityRow?.paid_orders || 0),
+            total_spent_stars: Number(activityRow?.total_spent_stars || 0),
+            custom_orders: Number(activityRow?.custom_orders || 0),
+            favorites_count: Number(activityRow?.favorites_count || 0),
+            member_since: me?.created_at || null
+          },
           reputation_points: Number(reputation?.total || 0),
           first_name: me?.first_name || user.first_name || "", display_name: me?.display_name || "", username: me?.username || user.username || "",
           orders: orders.results || [], vip: vip || null, bonuses, rank_code: customerRank.code, rank_label: customerRank.label, rank_discount_percent: customerRank.discount }, 200, origin);
