@@ -1242,7 +1242,10 @@ export default {
       if (path === "/api/public/promos" && method === "GET") {
         if (!(await tableExists(env,"promo_codes"))) return json({ok:true,promos:[]},200,origin);
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS promo_publicity (code TEXT PRIMARY KEY,is_public INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-        const rows=await env.DB.prepare("SELECT p.code,p.discount_percent,p.starts_at,p.ends_at,p.max_uses,p.product_ids,p.category_ids FROM promo_codes p INNER JOIN promo_publicity v ON v.code=p.code AND v.is_public=1 WHERE p.is_active=1 AND (p.starts_at IS NULL OR p.starts_at='' OR datetime(p.starts_at)<=datetime('now')) AND (p.ends_at IS NULL OR p.ends_at='' OR datetime(p.ends_at)>=datetime('now')) AND (p.max_uses IS NULL OR p.redeemed_count<p.max_uses) ORDER BY p.created_at DESC LIMIT 100").all();
+        const scopeReady=await columnExists(env,"promo_codes","product_ids")&&await columnExists(env,"promo_codes","category_ids");
+        const rows=await env.DB.prepare(scopeReady
+          ? "SELECT p.code,p.discount_percent,p.starts_at,p.ends_at,p.max_uses,p.product_ids,p.category_ids FROM promo_codes p INNER JOIN promo_publicity v ON v.code=p.code AND v.is_public=1 WHERE p.is_active=1 AND (p.starts_at IS NULL OR p.starts_at='' OR datetime(p.starts_at)<=datetime('now')) AND (p.ends_at IS NULL OR p.ends_at='' OR datetime(p.ends_at)>=datetime('now')) AND (p.max_uses IS NULL OR p.redeemed_count<p.max_uses) ORDER BY p.created_at DESC LIMIT 100"
+          : "SELECT p.code,p.discount_percent,p.starts_at,p.ends_at,p.max_uses,'[]' AS product_ids,'[]' AS category_ids FROM promo_codes p INNER JOIN promo_publicity v ON v.code=p.code AND v.is_public=1 WHERE p.is_active=1 AND (p.starts_at IS NULL OR p.starts_at='' OR datetime(p.starts_at)<=datetime('now')) AND (p.ends_at IS NULL OR p.ends_at='' OR datetime(p.ends_at)>=datetime('now')) AND (p.max_uses IS NULL OR p.redeemed_count<p.max_uses) ORDER BY p.created_at DESC LIMIT 100").all();
         return json({ok:true,promos:rows.results||[]},200,origin);
       }
       if (path === "/api/public/group-rules" && method === "GET") {
