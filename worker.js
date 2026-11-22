@@ -3272,16 +3272,16 @@ if (path === "/api/admin/packs" && method === "GET") {
             return { item, score };
           }).sort((a,b) => b.score-a.score);
           const matches = ranked.filter(row => row.score > 0);
-          const limit = matches.length ? 18 : 24;
+          const limit = matches.length ? 12 : 14;
           const compactCatalog = ranked.slice(0,limit).map(row => ({
-            id: row.item.id, title: row.item.title, description: row.item.description.slice(0,170), category: row.item.category
+            id: row.item.id, title: row.item.title, description: row.item.description.slice(0,100), category: row.item.category
           }));
           const instructions = "Ты — семантический поисковик каталога Агентства подарков. Сопоставь запрос с работами по смыслу, настроению, сезону, цветам и теме. Используй только переданный список и его ID. Верни только JSON вида {\"product_ids\":[\"id1\"]}; ID упорядочи по релевантности, максимум 12. Не включай слабые совпадения.";
           const response = await workersAiFetch(env, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model: AGENCY_TEXT_MODEL, instructions,
               input: [{ role: "user", content: "Запрос: " + query + "\nРаботы: " + JSON.stringify(compactCatalog) }],
-              max_output_tokens: 256, temperature: 0.1 })
+              max_output_tokens: 160, temperature: 0.1 })
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
@@ -3300,7 +3300,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           const product_ids = Array.isArray(parsed.product_ids)
             ? [...new Set(parsed.product_ids.map(String).filter(id => allowed.has(id)))].slice(0,20) : [];
           try {
-            await env.DB.prepare("INSERT INTO catalog_search_cache(query_hash,product_ids,expires_at) VALUES(?,?,datetime('now','+7 days')) ON CONFLICT(query_hash) DO UPDATE SET product_ids=excluded.product_ids,created_at=CURRENT_TIMESTAMP,expires_at=excluded.expires_at")
+            await env.DB.prepare("INSERT INTO catalog_search_cache(query_hash,product_ids,expires_at) VALUES(?,?,datetime('now','+30 days')) ON CONFLICT(query_hash) DO UPDATE SET product_ids=excluded.product_ids,created_at=CURRENT_TIMESTAMP,expires_at=excluded.expires_at")
               .bind(cacheKey,JSON.stringify(product_ids)).run();
           } catch (cacheError) {
             if (!isMissingTableError(cacheError,"catalog_search_cache")) console.warn("Semantic search cache write failed:",String(cacheError).slice(0,200));
