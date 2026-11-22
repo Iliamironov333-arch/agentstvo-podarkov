@@ -376,15 +376,9 @@ async function hasEarlyAccessPrivileges(env, telegramId) {
   const vip=await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1").bind(id).first();
   return !!vip;
 }
-function filterEarlyAccessProducts(products, privileged) {
-  const now=Date.now();
-  return (products||[]).filter(product=>{
-    if(Number(product.early_access_enabled)!==1 || privileged)return true;
-    const raw=String(product.published_at||"").trim();
-    const normalized=/[zZ]|[+-]\d\d:\d\d$/.test(raw) ? raw : raw.replace(" ","T")+"Z";
-    const published=Date.parse(normalized);
-    return Number.isFinite(published) && now-published>=72*60*60*1000;
-  });
+function filterEarlyAccessProducts(products) {
+  // Все опубликованные активные товары доступны покупателям сразу.
+  return Array.isArray(products) ? products : [];
 }
 async function ensureProductEarlyAccessSchema(env) {
   try { await env.DB.prepare("ALTER TABLE products ADD COLUMN early_access_enabled INTEGER NOT NULL DEFAULT 0").run(); } catch {}
@@ -2013,7 +2007,6 @@ if (path === "/api/admin/packs" && method === "GET") {
           return json({ok:true,image_url:imageUrl,size_bytes:Number(cloudResult.bytes||file.size),storage:"cloudinary"},200,origin);
         }
         if (path === "/api/admin/product-save" && method === "POST") {
-          await ensureProductEarlyAccessSchema(env);
           const body = await readJson(request);
           const id = typeof body.id === "string" ? body.id.trim().slice(0,100) : "";
           const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
@@ -3292,8 +3285,7 @@ if (path === "/api/admin/packs" && method === "GET") {
       }
 
       if (path === "/api/products" && method === "GET") {
-        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
-        return json({ products: filterEarlyAccessProducts(await getProducts(env),privileged) }, 200, origin);
+        return json({ products: await getProducts(env) }, 200, origin);
       }
 
       if (path === "/api/catalog-semantic-search" && method === "POST") {
@@ -3302,8 +3294,8 @@ if (path === "/api/admin/packs" && method === "GET") {
         if (query.length < 3) return json({ product_ids: [] }, 200, origin);
         if (!env.AI) return json({ error: "ИИ-поиск временно недоступен." }, 503, origin);
         try {
-          const [allProducts, privileged] = await Promise.all([getProducts(env), hasEarlyAccessPrivileges(env,telegramId)]);
-          const catalog = filterEarlyAccessProducts(allProducts,privileged).slice(0,60).map(item => ({
+          const allProducts = await getProducts(env);
+          const catalog = allProducts.slice(0,60).map(item => ({
             id: String(item.id), title: String(item.title || "").slice(0,120),
             description: String(item.description || "").slice(0,300),
             category: String(item.category || "").slice(0,45)
@@ -3694,8 +3686,7 @@ if (path === "/api/admin/packs" && method === "GET") {
         if ((priorityDelivery || priorityOrder) && !activeVipForOrder) return json({error:"Приоритетная доставка и приоритетная обработка доступны только с действующей VIP-подпиской."},403,origin);
         if (deliveryMethod === "courier" && deliveryAddress.length < 8) return json({error:"Перед оформлением укажите адрес доставки в Екатеринбурге."},400,origin);
         const catalog = await getProducts(env);
-        const privileged=await hasEarlyAccessPrivileges(env,telegramId);
-        const visibleCatalog=filterEarlyAccessProducts(catalog,privileged);
+        const visibleCatalog=catalog;
         const quantities = new Map();
         for (const item of body.items) {
           const id = String(item.id ?? "");
