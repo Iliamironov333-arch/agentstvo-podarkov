@@ -1997,7 +1997,7 @@ body.winter-season .owner-admin-pill:focus-visible{
   <h3>⚙️ Управление аккаунтом</h3>
   <div style="display:grid;gap:9px">
    <button class="secondary" type="button" onclick="showView('ordersView')">📦 Мои заказы и статусы</button>
-   <button class="secondary" type="button" onclick="showView('favoritesView')">❤️ Избранные работы</button>
+   <button class="secondary" type="button" onclick="showView('balanceView')">⭐ Баланс и платежи</button>
    <button class="secondary" type="button" onclick="showView('supportView')">💬 Связаться с поддержкой</button>
   </div>
  </div>
@@ -2543,11 +2543,6 @@ let groupInviteAccess = null;
 const GROUP_ACCESS_STORAGE_KEY='gift-group-access-token';
 function getSavedGroupAccessToken(){try{return localStorage.getItem(GROUP_ACCESS_STORAGE_KEY)||''}catch{return''}}
 function saveGroupAccessToken(token){try{if(token)localStorage.setItem(GROUP_ACCESS_STORAGE_KEY,String(token));else localStorage.removeItem(GROUP_ACCESS_STORAGE_KEY)}catch{}}
-function updateGroupThemeLabel(){
- const button=document.getElementById('groupThemeToggle');if(!button)return;
- const dark=document.body.classList.contains('dark-theme');
- button.textContent=dark?'☀️ Выключить ночной режим':'🌙 Включить ночной режим';
-}
 function renderGroupInviteAccess(){
  const form=document.getElementById('groupInviteCodeForm');
  const panel=document.getElementById('groupInviteRulesPanel');
@@ -2566,7 +2561,6 @@ function renderGroupInviteAccess(){
  activity?.classList.remove('hidden');settings?.classList.remove('hidden');
  rules.textContent=groupInviteAccess.rules_text;
  if(status)status.textContent='Доступ подтверждён сервером и сохранён для этого Telegram-аккаунта на этом устройстве.';
- updateGroupThemeLabel();
  const moderation=groupInviteAccess.moderation||{};
  const warningNote=document.getElementById('groupWarningSettingsNote');
  const warningThreshold=Math.max(1,Number(moderation.warnings_before_restriction||2));
@@ -2582,19 +2576,6 @@ function renderGroupInviteAccess(){
   if(tg?.openTelegramLink)tg.openTelegramLink(groupInviteAccess.group_url);
   else window.open(groupInviteAccess.group_url,'_blank','noopener');
  };
-}
-async function loadGroupBuyerActivity(){
- const root=document.getElementById('groupBuyerActivity');if(!root||!groupInviteAccess)return;
- try{
-  const me=await apiFetch('/api/me');const a=me.activity||{};
-  const set=(id,value)=>{const node=document.getElementById(id);if(node)node.textContent=String(value)};
-  set('groupStatOrders',Number(a.paid_orders||0).toLocaleString('ru-RU'));
-  set('groupStatSpent',Number(a.total_spent_stars||0).toLocaleString('ru-RU')+' ⭐');
-  set('groupStatFavorites',Number(a.favorites_count||0).toLocaleString('ru-RU'));
-  set('groupStatCustom',Number(a.custom_orders||0).toLocaleString('ru-RU'));
-  const since=document.getElementById('groupStatSince');
-  if(since)since.textContent=a.member_since?'В Агентстве подарков с '+new Date(String(a.member_since).replace(' ','T')+'Z').toLocaleDateString('ru-RU')+'.':'Статистика вашего профиля обновлена.';
- }catch(error){const since=document.getElementById('groupStatSince');if(since)since.textContent='Не удалось загрузить статистику. Откройте раздел позже.';}
 }
 async function loadSavedGroupInviteAccess(){
  if(groupInviteAccess){renderGroupInviteAccess();return}
@@ -5771,6 +5752,7 @@ async function loadMe() {
   const rank=document.getElementById('profileRank');if(rank)rank.textContent=(me.rank_label||'Обычный клиент')+' · скидка '+Number(me.rank_discount_percent||0)+'%';
   const activity=me.activity||{},fmt=value=>Number(value||0).toLocaleString('ru-RU');
   const setProfile=(id,value)=>{const node=document.getElementById(id);if(node)node.textContent=String(value)};
+  setProfile('profileOrderCount',fmt(activity.all_orders));
   setProfile('profileAllOrders',fmt(activity.all_orders));
   setProfile('profilePaidOrders',fmt(activity.paid_orders));
   setProfile('profileSpent',fmt(activity.total_spent_stars)+' ⭐');
@@ -5811,7 +5793,7 @@ async function loadMe() {
   }).join("");
   
   orders.forEach(observeOrderMotionStatus);
-  const pc=document.getElementById('profileOrderCount');if(pc)pc.textContent=orders.length;
+  const pc=document.getElementById('profileOrderCount');if(pc&&pc.textContent==='—')pc.textContent=orders.length;
   const root=document.getElementById('ordersList');
   if(root){
    const paidWasOpen=root.querySelector('[data-orders-group="paid"]')?.open===true;
