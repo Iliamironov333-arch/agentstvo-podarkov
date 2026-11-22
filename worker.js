@@ -1297,7 +1297,7 @@ export default {
         const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
         if (settings.rules_enabled !== true || !rulesText) return json({ error: "Правила группы временно недоступны. Код не был использован." }, 503, origin);
         const groupUrl = String(env.GROUP_INVITE_URL || "").trim();
-        if (!/^https:\/\/t\\.me\/\\+/.test(groupUrl)) return json({ error: "Ссылка на группу временно недоступна. Код не был использован." }, 503, origin);
+        if (!/^https:\/\/t\.me\/\+/.test(groupUrl)) return json({ error: "Ссылка на группу временно недоступна. Код не был использован." }, 503, origin);
         const codeHash = await groupInviteCodeHash(env, code);
         const invite = await env.DB.prepare(
           "SELECT id,mode,used_at FROM group_invite_codes WHERE code_hash=? AND deleted_at IS NULL LIMIT 1"
