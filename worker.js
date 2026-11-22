@@ -184,10 +184,12 @@ function toHex(bytes) {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 async function groupInviteCodeHash(env, code) {
-  return toHex(await hmac(new TextEncoder().encode(env.BOT_TOKEN), "agentstvo-group-invite:v1:" + code));
+  if (!env.GROUP_INVITE_SECRET) throw new Error("GROUP_INVITE_SECRET не настроен.");
+  return toHex(await hmac(new TextEncoder().encode(env.GROUP_INVITE_SECRET), "agentstvo-group-invite:v1:" + code));
 }
 async function groupInviteCipherKey(env) {
-  const material = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("agentstvo-group-invite-encryption:v1:" + env.BOT_TOKEN));
+  if (!env.GROUP_INVITE_SECRET) throw new Error("GROUP_INVITE_SECRET не настроен.");
+  const material = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("agentstvo-group-invite-encryption:v1:" + env.GROUP_INVITE_SECRET));
   return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 async function encryptGroupInviteCode(env, code) {
@@ -1294,6 +1296,8 @@ export default {
         try { settings = JSON.parse(settingsRow?.settings_json || "{}"); } catch {}
         const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
         if (settings.rules_enabled !== true || !rulesText) return json({ error: "Правила группы временно недоступны. Код не был использован." }, 503, origin);
+        const groupUrl = String(env.GROUP_INVITE_URL || "").trim();
+        if (!/^https:\/\/t\\.me\/\\+/.test(groupUrl)) return json({ error: "Ссылка на группу временно недоступна. Код не был использован." }, 503, origin);
         const codeHash = await groupInviteCodeHash(env, code);
         const invite = await env.DB.prepare(
           "SELECT id,mode,used_at FROM group_invite_codes WHERE code_hash=? AND deleted_at IS NULL LIMIT 1"
@@ -1311,7 +1315,7 @@ export default {
           ok: true,
           access: true,
           rules_text: rulesText,
-          group_url: "https://t.me/+K0Ea1mzQuXYxNDVi",
+          group_url: groupUrl,
           code_mode: invite.mode
         }, 200, origin);
       }
