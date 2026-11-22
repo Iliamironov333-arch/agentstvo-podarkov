@@ -1569,7 +1569,7 @@ body.winter-season .owner-admin-pill:focus-visible{
    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Переключить тему">🌙</button>
   </div>
  </div>
- <div class="promo-line">Скидка 10% на всё — сервер применяет её при создании счёта</div>
+ <div class="promo-line" id="seasonalPromoLine">Скидка 10% на всё — сервер применяет её при создании счёта</div>
 </header>
 <nav id="filters">
  <button class="active" data-filter="all">Все работы</button>
@@ -1585,7 +1585,7 @@ body.winter-season .owner-admin-pill:focus-visible{
 </nav>
 <main>
 <section id="menuView">
- <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p>Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p><div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div></div>
+ <div class="hero"><small>Добро пожаловать</small><h2>Агентство подарков 🎁</h2><p id="menuSeasonalIntro">Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.</p><div id="customerAnnouncements" class="announcement-stack" aria-live="polite"></div></div>
  <div class="sectionhead"><h2>Главное меню</h2><span>Выберите раздел</span></div>
  <div class="menu-grid">
   <button id="mainShopButton" class="menu-card" onclick="showView('catalogView')"><strong>🛍️ Магазин</strong><span>Каталог в мини-приложении</span></button>
@@ -1597,7 +1597,7 @@ body.winter-season .owner-admin-pill:focus-visible{
   <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и авторские работы в одном месте</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('leaderboardView')"><strong>🏆 Таблица лидеров</strong><span>Репутация за текущий месяц</span></button>
-  <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong>🍂 Скидки и акции</strong><span>Осенняя скидка 10%</span></button>
+  <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong id="dealsCardTitle">🍂 Скидки и акции</strong><span id="dealsCardSubtitle">Осенняя скидка 10%</span></button>
   
   <button class="owner-admin-pill hidden" id="ownerAdminCard" onclick="showView('adminPanelView')" aria-label="Панель владельца"><span>Панель владельца</span></button>
  </div>
@@ -1698,6 +1698,7 @@ body.winter-season .owner-admin-pill:focus-visible{
     <label>Начало действия<input id="adminPromoStarts" type="datetime-local"></label>
     <label>Окончание действия<input id="adminPromoEnds" type="datetime-local"></label>
     <label>Состояние<select id="adminPromoActive"><option value="1">Активен</option><option value="0">Отключён</option></select></label>
+    <label>Показывать покупателям в разделе «Скидки и акции»<select id="adminPromoPublic"><option value="0">Нет, скрытый промокод</option><option value="1">Да, публичный промокод</option></select></label>
     <button class="primary" type="button" onclick="saveAdminPromo()">Сохранить промокод</button>
    </div>
    <p id="adminPromosStatus" class="notice" aria-live="polite">Список промокодов загружается…</p><div id="adminPromosList"></div>
@@ -2026,11 +2027,73 @@ body.winter-season .owner-admin-pill:focus-visible{
  <div class="panel"><h3>История операций</h3><div id="balanceHistory"><p class="muted">Загружаем операции…</p></div></div>
 </section>
 <section id="dealsView" class="hidden">
- <div class="hero"><small>Осенняя акция</small><h2>🍂 Скидка 10% на всё</h2><p>Выбирай авторские подарки из каталога. Скидка будет подтверждена при оформлении заказа в боте.</p><button class="primary" onclick="showView('catalogView')">Перейти в магазин</button></div>
+ <div class="hero"><small id="dealsSeasonLabel">Осенняя акция</small><h2 id="dealsSeasonTitle">🍂 Скидка 10% на всё</h2><p id="dealsSeasonDescription">Выбирайте авторские подарки из каталога. Скидка 10% сохраняется; цены в каталоге не изменяются.</p><button class="primary" onclick="showView('catalogView')">Перейти в магазин</button></div>
+ <div class="panel"><div class="sectionhead"><h3>🏷️ Публичные промокоды</h3><button class="secondary" type="button" onclick="loadPublicDeals()">↻ Обновить</button></div><p class="muted">Здесь отображаются только активные промокоды, которые владелец отметил публичными в панели управления.</p><div id="publicPromosStatus" class="notice" aria-live="polite">Загружаем публичные промокоды…</div><div id="publicPromosList"></div></div>
 </section>
 <section id="aboutView" class="hidden">
  <div class="sectionhead"><h2>ℹ️ О проекте</h2></div>
- <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span>Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="openBot('about')">Подробнее и правила в боте</button><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+ <div class="panel"><h3>Агентство подарков 🎁</h3><p class="muted">Авторские поделки, рисунки на бумаге, открытки и индивидуальные заказы. Можно выбрать готовую работу или описать собственную идею.</p><div class="lineitem"><span id="aboutSeasonDiscountLabel">Осенняя скидка</span><b>10%</b></div><button class="primary" onclick="showView('privacyPolicyView')">🔐 Политика конфиденциальности</button><div class="panel" style="margin-top:14px"><h3>📌 Правила группы</h3><p class="muted">Правила синхронизируются с настройками ИИ-бота в панели владельца.</p><div id="publicGroupRulesStatus" class="notice" aria-live="polite">Загружаем правила группы…</div><div id="publicGroupRulesText" style="white-space:pre-wrap;line-height:1.6"></div></div><button class="secondary" style="width:100%;margin-top:8px" onclick="window.open('https://t.me/Iliya_Mironov_33','_blank')">Связаться с владельцем</button></div>
+</section>
+<section id="privacyPolicyView" class="hidden">
+ <div class="sectionhead"><h2>🔐 Политика конфиденциальности</h2><button class="secondary" type="button" onclick="showView('aboutView')">← О проекте</button></div>
+ <div class="panel privacy-policy">
+  <p><b>Редакция от 22 ноября 2026 года.</b></p>
+  <p>Настоящая Политика описывает, какие сведения обрабатываются при использовании мини-приложения «Агентство подарков», Telegram-бота и связанных функций, для чего они используются, как защищаются и какие обращения может направить пользователь.</p>
+  <h3>1. Кто отвечает за обработку</h3>
+  <p>Сервис администрируется проектом «Агентство подарков». По вопросам персональных данных, доступа, исправления или удаления сведений можно обратиться через Telegram: <a href="https://t.me/Iliya_Mironov_33" target="_blank" rel="noopener">@Iliya_Mironov_33</a>. Владелец проекта рассматривает обращения и при необходимости уточняет сведения, позволяющие найти учётную запись.</p>
+  <p><b>Важно:</b> для юридически завершённой публикации оператор должен дополнительно указать своё полное имя или наименование, адрес и официальный контакт для обращений. Эти реквизиты не подменяются вымышленными данными.</p>
+  <h3>2. Какие сведения могут обрабатываться</h3>
+  <ul>
+   <li><b>Данные Telegram:</b> Telegram ID, имя, фамилия, username, язык и сведения профиля, которые Telegram передаёт мини-приложению или боту.</li>
+   <li><b>Данные аккаунта:</b> отображаемое имя, дата регистрации, настройки интерфейса, выбранная тема и состояние доступных функций.</li>
+   <li><b>Заказы и обращения:</b> состав заказа, товары, количество, цена, пожелания, способ получения, сообщения с ИИ-помощником, переписка с поддержкой и сведения о статусе заказа.</li>
+   <li><b>Баланс и операции:</b> текущий внутренний баланс, начисления, списания, возвраты, бонусы, промокоды и история операций.</li>
+   <li><b>Платежи:</b> сумма и валюта платежа, статус, дата, идентификатор платежа Telegram и технические сведения, необходимые для подтверждения оплаты и предотвращения повторного зачисления.</li>
+   <li><b>VIP и программы лояльности:</b> выбранный тариф, срок действия, бонусы, скидки, кэшбэк, участие в рейтингах и история начисления репутации.</li>
+   <li><b>Сообщения в группе:</b> если пользователь взаимодействует с ботом в группе, могут обрабатываться Telegram ID, имя, сообщения и контекст, необходимый для ответа бота и работы включённых правил модерации.</li>
+   <li><b>Технические сведения:</b> подписанные данные запуска Telegram Mini App, события ошибок и безопасности, а также локальные настройки приложения. Секретные ключи и платёжные реквизиты банковских карт в мини-приложении не запрашиваются.</li>
+  </ul>
+  <h3>3. Для чего используются сведения</h3>
+  <ul>
+   <li>создание и защита учётной записи, проверка подлинности запуска через Telegram;</li>
+   <li>показ каталога, корзины, заказов, баланса, VIP-функций и персональных настроек;</li>
+   <li>оформление и исполнение заказов, связь с покупателем, обработка возвратов и спорных ситуаций;</li>
+   <li>создание счёта, подтверждение платежа, начисление баланса и ведение истории операций;</li>
+   <li>применение скидок, промокодов, бонусов и правил программ лояльности;</li>
+   <li>ответы ИИ-помощника, обработка обращений и передача сложных вопросов владельцу;</li>
+   <li>защита сервиса, предотвращение мошенничества, спама и злоупотреблений, а также работа групповой модерации при её включении;</li>
+   <li>выполнение обязанностей, предусмотренных применимым законодательством.</li>
+  </ul>
+  <h3>4. Баланс, Telegram Stars и платежи</h3>
+  <p>Оплата цифровых функций и пополнение выполняются через платёжный механизм Telegram Stars (XTR). Telegram обрабатывает платёж на своей стороне. Сервис получает подтверждение и технические сведения о платеже, необходимые для исполнения операции; данные банковской карты в базе мини-приложения не хранятся.</p>
+  <p>Баланс, отображаемый в приложении знаком ⭐ и словами «баллы» или «баланс», является внутренней учётной единицей сервиса. При пополнении на сумму от 1 до 10&nbsp;000 Telegram Stars после подтверждения платежа зачисляется соответствующее количество баллов; при пополнении более чем на 500 Stars дополнительно начисляется бонус 50 баллов. Внутренние баллы не являются банковским счётом, электронными деньгами или самостоятельной валютой, не подлежат выводу в деньги и передаче другому пользователю. Их можно использовать только в пределах функций, доступных в сервисе.</p>
+  <p>Сервис хранит сведения о начислениях и списаниях, чтобы показывать баланс, исполнять покупки, предоставлять бонусы и выполнять возвраты в случаях, предусмотренных правилами заказа. Подтверждённые платежи и записи о заказах могут сохраняться столько, сколько необходимо для учёта, разрешения претензий и выполнения требований закона.</p>
+  <h3>5. ИИ-помощник и автоматизированная обработка</h3>
+  <p>Текст сообщений, переданный ИИ-помощнику, может обрабатываться автоматизированными средствами для подготовки ответа, уточнения заказа и передачи обращения владельцу. ИИ не является платёжной системой и не может самостоятельно подтверждать оплату, менять баланс или гарантировать принятие заказа. Не отправляйте в чат пароли, коды входа, платёжные секреты и другие сведения, которые не нужны для заказа.</p>
+  <h3>6. Кому могут передаваться сведения</h3>
+  <ul>
+   <li><b>Telegram:</b> для работы бота и мини-приложения, идентификации пользователя, сообщений и обработки платежей Stars.</li>
+   <li><b>Cloudflare:</b> для размещения серверной части, базы данных, защиты и технической обработки запросов; отдельные запросы могут обрабатываться средствами ИИ, подключёнными к инфраструктуре.</li>
+   <li><b>Поставщики хранения изображений и технических сервисов:</b> когда это необходимо для показа фотографий, работы интерфейса или диагностики.</li>
+   <li><b>Владелец и уполномоченные сотрудники:</b> только в пределах задач обслуживания заказов, поддержки, безопасности и управления сервисом.</li>
+   <li><b>Государственные органы:</b> если раскрытие требуется законом или обязательным законным запросом.</li>
+  </ul>
+  <p>Персональные данные не продаются и не передаются для самостоятельной рекламной рассылки сторонних компаний. Инфраструктурные поставщики могут обрабатывать технические данные в соответствии со своими условиями и настройками размещения. Точные места обработки зависят от используемых сервисов и их инфраструктуры.</p>
+  <h3>7. Сроки хранения и удаление</h3>
+  <p>Данные хранятся не дольше, чем это необходимо для целей обработки, поддержки заказов, защиты от злоупотреблений, ведения истории платежей и выполнения требований закона. Переписки и черновики могут удаляться или закрываться средствами приложения; удаление переписки не всегда означает удаление записей о платеже, заказе или операции баланса, которые необходимы для учёта и разрешения претензий.</p>
+  <p>Пользователь может запросить удаление данных через канал связи, указанный в разделе 1. В запросе следует указать Telegram username или иные сведения, позволяющие найти аккаунт, но не отправлять пароль или код подтверждения. Перед удалением может потребоваться проверка принадлежности аккаунта. Часть сведений может быть сохранена, если это требуется законом или необходимо для защиты прав сторон.</p>
+  <h3>8. Права пользователя</h3>
+  <p>В пределах применимого законодательства пользователь вправе запросить подтверждение обработки, получить сведения об обрабатываемых данных, потребовать исправления неточных сведений, уточнить цели и основания обработки, отозвать согласие там, где обработка основана на согласии, потребовать прекращения обработки или удаления данных при наличии законных оснований, а также направить жалобу в компетентный орган по защите персональных данных.</p>
+  <p>Для реализации прав обратитесь к администрации через <a href="https://t.me/Iliya_Mironov_33" target="_blank" rel="noopener">@Iliya_Mironov_33</a>. В обращении укажите суть запроса и идентификатор аккаунта Telegram. Ответ предоставляется в сроки, предусмотренные применимым законодательством.</p>
+  <h3>9. Защита информации</h3>
+  <p>Для защиты применяются проверка подписанных данных Telegram, разграничение административных прав, серверная проверка операций с балансом и заказами, контроль повторных платежей, ограничение доступа к базе и техническое журналирование событий безопасности. Передача данных между приложением и сервером осуществляется по защищённому HTTPS-соединению. Пользователю также следует защищать свой Telegram-аккаунт и не передавать коды входа третьим лицам.</p>
+  <h3>10. Локальные настройки и ссылки</h3>
+  <p>Приложение может сохранять в локальном хранилище браузера настройки темы, сезонного оформления и интерфейса, чтобы не сбрасывать их при повторном открытии. Переход по внешним ссылкам, включая Telegram, регулируется также политиками соответствующих сторонних сервисов.</p>
+  <h3>11. Изменения политики</h3>
+  <p>Политика может обновляться при изменении функций, способов обработки данных или требований законодательства. Актуальная редакция публикуется в разделе «О проекте» мини-приложения. Продолжение использования сервиса после публикации новой редакции означает ознакомление с обновлённым текстом; если требуется отдельное согласие, оно запрашивается отдельно.</p>
+  <h3>12. Контакты</h3>
+  <p>Вопросы о конфиденциальности и обработке данных: <a href="https://t.me/Iliya_Mironov_33" target="_blank" rel="noopener">Telegram @Iliya_Mironov_33</a>.</p>
+ </div>
 </section>
 </main>
 <div class="bottom">
@@ -2139,7 +2202,7 @@ let giftBuilderDraftId=null;
 let giftBuilderChatMessages=[];
 try{window.pendingGiftBundleId=localStorage.getItem('gift-pending-bundle-id')||null;window.pendingGiftBundleExtraStars=Math.max(0,Number(localStorage.getItem('gift-pending-bundle-extras')||0));window.pendingGiftBundlePriority=localStorage.getItem('gift-pending-bundle-priority')==='1';}catch{window.pendingGiftBundleId=null;window.pendingGiftBundleExtraStars=0;window.pendingGiftBundlePriority=false;}
 
-const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','vipPlansView','supportView','balanceView','profileView','dealsView','aboutView','leaderboardView'];
+const allViews = ['menuView','adminPanelView','catalogView','giftBuilderView','cartView','ordersView','customWizardView','vipView','vipPlansView','supportView','balanceView','profileView','dealsView','aboutView','privacyPolicyView','leaderboardView'];
 
 // Навигация подключается сразу после объявления экранов, до любых загрузок инициализации.
 document.addEventListener('click', event => {
@@ -2397,6 +2460,53 @@ function resetUiMotionSettings(){
  uiMotionSettings={...UI_MOTION_DEFAULTS};applyUiMotionSettings(uiMotionSettings);syncUiMotionControls();scheduleUiMotionSave();
 }
 
+function updateSeasonalCopy(){
+ const season=(()=>{try{return localStorage.getItem('gift-season-theme')||'autumn'}catch(e){return 'autumn'}})();
+ const copy={
+  autumn:{name:'Осенняя',icon:'🍂',deal:'Осенняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.'},
+  winter:{name:'Зимняя',icon:'❄️',deal:'Зимняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Зимняя скидка 10% на всё.'},
+  spring:{name:'Весенняя',icon:'🌸',deal:'Весенняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Весенняя скидка 10% на всё.'},
+  summer:{name:'Летняя',icon:'☀️',deal:'Летняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Летняя скидка 10% на всё.'}
+ }[season]||{name:'Осенняя',icon:'🍂',deal:'Осенняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.'};
+ const set=(id,value)=>{const node=document.getElementById(id);if(node)node.textContent=value;};
+ set('seasonalPromoLine',copy.icon+' '+copy.name+' скидка 10% на всё — цены в каталоге не меняются');
+ set('menuSeasonalIntro',copy.intro);
+ set('dealsCardTitle',copy.icon+' Скидки и акции');
+ set('dealsCardSubtitle',copy.name+' скидка 10%');
+ set('dealsSeasonLabel',copy.deal);
+ set('dealsSeasonTitle',copy.icon+' '+copy.name+' скидка 10% на всё');
+ set('aboutSeasonDiscountLabel',copy.name+' скидка');
+}
+async function loadPublicGroupRules(){
+ const status=document.getElementById('publicGroupRulesStatus'),root=document.getElementById('publicGroupRulesText');
+ if(!status||!root)return;
+ status.textContent='Загружаем актуальные правила…';root.textContent='';
+ try{
+  const data=await apiFetch('/api/public/group-rules');
+  if(!data.rules_enabled||!String(data.rules_text||'').trim()){status.textContent='Правила группы сейчас не опубликованы.';return;}
+  root.textContent=String(data.rules_text).slice(0,3000);status.textContent='Актуальная версия из панели владельца.';
+ }catch(error){status.textContent='Не удалось загрузить правила. Попробуйте обновить раздел.';}
+}
+async function loadPublicDeals(){
+ const status=document.getElementById('publicPromosStatus'),root=document.getElementById('publicPromosList');
+ if(!status||!root)return;
+ status.textContent='Загружаем публичные промокоды…';root.replaceChildren();
+ try{
+  const data=await apiFetch('/api/public/promos');const rows=Array.isArray(data.promos)?data.promos:[];
+  if(!rows.length){status.textContent='Сейчас нет действующих публичных промокодов.';return;}
+  status.textContent='Действующие публичные промокоды: '+rows.length;
+  const parseList=value=>{try{const x=Array.isArray(value)?value:JSON.parse(value||'[]');return Array.isArray(x)?x:[]}catch{return[]}};
+  rows.forEach(p=>{
+   const card=document.createElement('div');card.className='admin-user-row';
+   const info=document.createElement('div');const title=document.createElement('strong');title.textContent=String(p.code||'Промокод')+' · скидка '+Number(p.discount_percent||0)+'%';
+   const scope=document.createElement('small');const ids=parseList(p.product_ids),cats=parseList(p.category_ids);
+   scope.textContent=ids.length||cats.length?'Действует на выбранные товары или категории':'Действует на весь каталог';
+   const dates=document.createElement('small');dates.textContent=(p.starts_at?'С '+formatDate(p.starts_at):'Уже действует')+' · '+(p.ends_at?'до '+formatDate(p.ends_at):'без даты окончания');
+   const limit=document.createElement('small');limit.textContent=p.max_uses?'Ограниченное количество применений':'Без общего лимита применений';
+   info.append(title,scope,dates,limit);card.append(info);root.append(card);
+  });
+ }catch(error){status.textContent='Не удалось загрузить промокоды. Попробуйте позже.';}
+}
 function showView(id) {
  if(id==='adminPanelView' && adminSession?.admin_access !== true) {
   toast('Административная панель недоступна: нет активных разрешений.');
@@ -2419,6 +2529,8 @@ function showView(id) {
  if (id === 'balanceView') loadBalance();
  if (id === 'vipView' || id === 'vipPlansView') loadVip();
  if (id === 'leaderboardView') loadPublicLeaderboard();
+ if (id === 'aboutView') loadPublicGroupRules();
+ if (id === 'dealsView') loadPublicDeals();
  if (id === 'adminPanelView') { initAdminCategories(); loadAdminReputation(); loadAdminDashboard(); loadAdminUsers(); loadAdminOrders(); loadAdminProducts(); loadAdminPacks(); loadAdminSupport(); loadAdminSystemControls(); loadAdminTechnicalCenter(); loadAdminServerDiagnostics(); loadAdminAnnouncements(); loadAdminCampaigns(); loadAiBotAdmin(); loadAiOrders(); loadAiReports(); }
  if (id === 'catalogView') loadSurprisePacks();
  if (id === 'menuView' || id === 'catalogView') loadAnnouncements();
@@ -2526,6 +2638,7 @@ function applySeasonTheme(season){
  else if(previous&&previousSeason===season){document.body.classList.add('event-'+previous);renderSeasonDecorations(previous);}
  document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});
  const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};
+ updateSeasonalCopy();
  const status=document.getElementById('adminSeasonThemeStatus');if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
  updateThemeMeta();
 }
@@ -3393,14 +3506,14 @@ async function loadAdminPromos(){
  try{const data=await apiFetch('/api/admin/promos');if(data.migration_pending){status.textContent='Для промокодов требуется миграция 0013_promo_codes.sql.';return;}
  const rows=data.promos||[];status.textContent='Промокодов: '+rows.length+(data.scope_migration_pending?' · ограничения по товарам и категориям ждут миграцию 0014':'');
  const parseList=value=>{try{const parsed=JSON.parse(value||'[]');return Array.isArray(parsed)?parsed:[];}catch(e){return[];}};
- rows.forEach(p=>{const productIds=parseList(p.product_ids),categories=parseList(p.category_ids);const item=document.createElement('div');item.className='admin-user-row';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=p.code+' · '+p.discount_percent+'%';const meta=document.createElement('small');meta.textContent=(p.is_active?'Активен':'Отключён')+' · оплачено '+Number(p.redeemed_count||0)+' · резерв '+Number(p.reserved_count||0)+' · лимит '+(p.max_uses??'без лимита');const dates=document.createElement('small');dates.textContent=(p.starts_at||'Сразу')+' — '+(p.ends_at||'Без окончания');const scope=document.createElement('small');scope.textContent=productIds.length||categories.length?'Товары: '+(productIds.join(', ')||'любые')+' · Категории: '+(categories.join(', ')||'любые'):'Действует на весь каталог';info.append(title,meta,dates,scope);const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>{document.getElementById('adminPromoCode').value=p.code;document.getElementById('adminPromoPercent').value=p.discount_percent;document.getElementById('adminPromoMaxUses').value=p.max_uses??'';document.getElementById('adminPromoStarts').value=p.starts_at?String(p.starts_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoEnds').value=p.ends_at?String(p.ends_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoActive').value=String(p.is_active);document.getElementById('adminPromoProductIds').value=productIds.join(', ');document.getElementById('adminPromoCategories').value=categories.join(', ');});item.append(info,edit);root.append(item);});
+ rows.forEach(p=>{const productIds=parseList(p.product_ids),categories=parseList(p.category_ids);const item=document.createElement('div');item.className='admin-user-row';const info=document.createElement('div');const title=document.createElement('strong');title.textContent=p.code+' · '+p.discount_percent+'%';const meta=document.createElement('small');meta.textContent=(p.is_active?'Активен':'Отключён')+' · '+(Number(p.is_public)===1?'ПУБЛИЧНЫЙ':'скрытый')+' · оплачено '+Number(p.redeemed_count||0)+' · резерв '+Number(p.reserved_count||0)+' · лимит '+(p.max_uses??'без лимита');const dates=document.createElement('small');dates.textContent=(p.starts_at||'Сразу')+' — '+(p.ends_at||'Без окончания');const scope=document.createElement('small');scope.textContent=productIds.length||categories.length?'Товары: '+(productIds.join(', ')||'любые')+' · Категории: '+(categories.join(', ')||'любые'):'Действует на весь каталог';info.append(title,meta,dates,scope);const edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent='Изменить';edit.addEventListener('click',()=>{document.getElementById('adminPromoCode').value=p.code;document.getElementById('adminPromoPercent').value=p.discount_percent;document.getElementById('adminPromoMaxUses').value=p.max_uses??'';document.getElementById('adminPromoStarts').value=p.starts_at?String(p.starts_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoEnds').value=p.ends_at?String(p.ends_at).replace(' ','T').slice(0,16):'';document.getElementById('adminPromoActive').value=String(p.is_active);document.getElementById('adminPromoPublic').value=String(Number(p.is_public)||0);document.getElementById('adminPromoProductIds').value=productIds.join(', ');document.getElementById('adminPromoCategories').value=categories.join(', ');});item.append(info,edit);root.append(item);});
  }catch(e){status.textContent=e.message||'Не удалось загрузить промокоды.';}
 }
 async function saveAdminPromo(){
  const button=document.querySelector('#adminPromosPanel button.primary');if(button)button.disabled=true;
  const value=id=>document.getElementById(id)?.value||'';
  const parseInput=id=>value(id).split(',').map(item=>item.trim()).filter(Boolean);
- try{await apiFetch('/api/admin/promo-save',{method:'POST',body:JSON.stringify({code:value('adminPromoCode'),discount_percent:Number(value('adminPromoPercent')),max_uses:value('adminPromoMaxUses'),starts_at:value('adminPromoStarts'),ends_at:value('adminPromoEnds'),is_active:value('adminPromoActive')==='1',product_ids:parseInput('adminPromoProductIds'),category_ids:parseInput('adminPromoCategories')})});toast('Промокод сохранён.');await loadAdminPromos();}
+ try{await apiFetch('/api/admin/promo-save',{method:'POST',body:JSON.stringify({code:value('adminPromoCode'),discount_percent:Number(value('adminPromoPercent')),max_uses:value('adminPromoMaxUses'),starts_at:value('adminPromoStarts'),ends_at:value('adminPromoEnds'),is_active:value('adminPromoActive')==='1',is_public:value('adminPromoPublic')==='1',product_ids:parseInput('adminPromoProductIds'),category_ids:parseInput('adminPromoCategories')})});toast('Промокод сохранён.');await loadAdminPromos();}
  catch(e){toast(e.message||'Не удалось сохранить промокод.');}finally{if(button)button.disabled=false;}
 }
 async function loadAdminAnalytics(){
@@ -5478,7 +5591,8 @@ async function loadMe() {
  try{
   const od=await apiFetch('/api/orders');
   const orders=Array.isArray(od.orders)?od.orders:[];
-  const aiDraftData=await apiFetch('/api/my/ai-orders').catch(()=>({orders:[]}));
+  let aiDraftLoadFailed=false;
+  const aiDraftData=await apiFetch('/api/my/ai-orders').catch(()=>{aiDraftLoadFailed=true;return {orders:[]};});
   const aiDrafts=Array.isArray(aiDraftData.orders)?aiDraftData.orders:[];
   const unfinishedAi=aiDrafts.filter(x=>["collecting","review","approved"].includes(String(x.status))&&!x.chat_deleted);
   const aiDraftCards=unfinishedAi.map(x=>{
@@ -5524,10 +5638,11 @@ async function loadMe() {
    const paidOrders=orders.filter(o=>!cancelledOrders.includes(o)&&(String(o.status||'').toLowerCase()==='paid'||String(o.payment_status||'').toLowerCase()==='paid'));
    const activeOrders=orders.filter(o=>!paidOrders.includes(o)&&!cancelledOrders.includes(o));
    const collapsedGroup=(key,title,items)=>items.length?'<details class="orders-collapsible" data-orders-group="'+key+'"><summary><span>'+title+'</span><small>'+items.length+'</small></summary>'+items.map(renderOrder).join('')+'</details>':'';
-   const aiFolder=unfinishedAi.length?'<details class="orders-collapsible" data-ai-drafts-folder open><summary><span>🎨 Незавершённые</span><small>'+unfinishedAi.length+'</small></summary>'+aiDraftCards+'</details>':'';
+   const aiFolderEmpty=aiDraftLoadFailed?'<p class="muted">Не удалось загрузить список. Обновите раздел позже.</p>':'<p class="muted">Пока нет незавершённых заказов.</p>';
+   const aiFolder='<details class="orders-collapsible" data-ai-drafts-folder open><summary><span>🎨 Незавершённые</span><small>'+unfinishedAi.length+'</small></summary>'+(aiDraftCards||aiFolderEmpty)+'</details>';
    root.innerHTML=aiFolder+(orders.length
     ?activeOrders.map(renderOrder).join('')+collapsedGroup('paid','Оплаченные заказы',paidOrders)+collapsedGroup('cancelled','Отменённые заказы',cancelledOrders)
-    :'<p class="muted">Пока заказов нет.</p>');
+    :'<p class="muted">Пока обычных заказов нет.</p>');
    const paidDisclosure=root.querySelector('[data-orders-group="paid"]');if(paidDisclosure)paidDisclosure.open=paidWasOpen;
    const cancelledDisclosure=root.querySelector('[data-orders-group="cancelled"]');if(cancelledDisclosure)cancelledDisclosure.open=cancelledWasOpen;
   }
