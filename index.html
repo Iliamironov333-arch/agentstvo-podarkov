@@ -4901,7 +4901,7 @@ function showGiftPackReveal(item){
  document.body.append(overlay);requestAnimationFrame(()=>overlay.classList.add('shown'));
 }
 async function checkGiftNotifications(){
- if(!initData||window._giftNotificationCheckRunning)return;
+ if(!initData||window._giftNotificationCheckRunning||document.querySelector('.pack-reveal-overlay'))return;
  window._giftNotificationCheckRunning=true;
  try{
   const data=await apiFetch('/api/gifts/pending'),item=(data.notifications||[])[0];if(!item)return;
@@ -4915,7 +4915,7 @@ async function checkGiftNotifications(){
  }catch(e){console.warn('Gift notification check failed:',e);}
  finally{window._giftNotificationCheckRunning=false;}
 }
-if(!window._giftNotificationVisibilityBound){window._giftNotificationVisibilityBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkGiftNotifications();});}
+if(!window._giftNotificationVisibilityBound){window._giftNotificationVisibilityBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkGiftNotifications();});window.setInterval(()=>{if(!document.hidden)checkGiftNotifications();},30000);}
 function showPackReveal(result){
  document.querySelectorAll('.pack-reveal-overlay').forEach(node=>node.remove());
  const overlay=document.createElement('div');overlay.className='pack-reveal-overlay';
