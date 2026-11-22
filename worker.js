@@ -183,6 +183,32 @@ async function hmac(keyBytes, data) {
 function toHex(bytes) {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
+async function groupInviteCodeHash(env, code) {
+  return toHex(await hmac(new TextEncoder().encode(env.BOT_TOKEN), "agentstvo-group-invite:v1:" + code));
+}
+async function groupInviteCipherKey(env) {
+  const material = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("agentstvo-group-invite-encryption:v1:" + env.BOT_TOKEN));
+  return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+async function encryptGroupInviteCode(env, code) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await groupInviteCipherKey(env);
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(code)));
+  const packed = new Uint8Array(iv.length + encrypted.length);
+  packed.set(iv, 0); packed.set(encrypted, iv.length);
+  let binary = "";
+  for (const byte of packed) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+async function decryptGroupInviteCode(env, packedBase64) {
+  const binary = atob(String(packedBase64 || ""));
+  const packed = Uint8Array.from(binary, char => char.charCodeAt(0));
+  if (packed.length < 29) throw new Error("Некорректный зашифрованный код приглашения.");
+  const iv = packed.slice(0, 12), ciphertext = packed.slice(12);
+  const key = await groupInviteCipherKey(env);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return new TextDecoder().decode(plain);
+}
 async function validateTelegram(initData, botToken) {
   if (!initData || !botToken) return null;
   try {
@@ -1249,16 +1275,46 @@ export default {
         return json({ok:true,promos:rows.results||[]},200,origin);
       }
       if (path === "/api/public/group-rules" && method === "GET") {
-        if (!(await tableExists(env,"ai_moderator_settings"))) return json({ok:true,rules_enabled:false,rules_text:""},200,origin);
-        const row=await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
-        let settings={};try{settings=JSON.parse(row?.settings_json||"{}");}catch{}
-        return json({ok:true,rules_enabled:settings.rules_enabled===true,rules_text:String(settings.rules_text||"").slice(0,3000)},200,origin);
+        return json({ error: "Для просмотра правил требуется действительный код приглашения." }, 403, origin);
       }
 
       const user = await validateTelegram(request.headers.get("X-Telegram-Init-Data"), env.BOT_TOKEN);
       if (!user) return json({ error: "Telegram authentication failed. Откройте Mini App через Telegram." }, 401, origin);
       const telegramId = String(user.id).trim();
       await ensureUser(env, user);
+
+      if (path === "/api/group-invites/validate" && method === "POST") {
+        if (!(await tableExists(env, "group_invite_codes"))) return json({ error: "Система приглашений пока не настроена." }, 503, origin);
+        const body = await readJson(request);
+        const code = String(body.code || "").trim();
+        if (!/^\\d{4,32}$/.test(code)) return json({ error: "Введите цифровой код длиной от 4 до 32 цифр." }, 400, origin);
+        if (!(await tableExists(env, "ai_moderator_settings"))) return json({ error: "Правила группы пока недоступны." }, 503, origin);
+        const settingsRow = await env.DB.prepare("SELECT settings_json FROM ai_moderator_settings WHERE id=1").first();
+        let settings = {};
+        try { settings = JSON.parse(settingsRow?.settings_json || "{}"); } catch {}
+        const rulesText = String(settings.rules_text || "").trim().slice(0, 3000);
+        if (settings.rules_enabled !== true || !rulesText) return json({ error: "Правила группы временно недоступны. Код не был использован." }, 503, origin);
+        const codeHash = await groupInviteCodeHash(env, code);
+        const invite = await env.DB.prepare(
+          "SELECT id,mode,used_at FROM group_invite_codes WHERE code_hash=? AND deleted_at IS NULL LIMIT 1"
+        ).bind(codeHash).first();
+        if (!invite || (invite.mode === "one_time" && invite.used_at)) {
+          return json({ error: "Код неверный, удалён или уже использован." }, 403, origin);
+        }
+        const redeemed = await env.DB.prepare(
+          "UPDATE group_invite_codes SET use_count=use_count+1,last_used_at=CURRENT_TIMESTAMP,used_at=CASE WHEN mode='one_time' THEN CURRENT_TIMESTAMP ELSE used_at END,used_by=CASE WHEN mode='one_time' THEN ? ELSE used_by END WHERE id=? AND deleted_at IS NULL AND (mode='reusable' OR used_at IS NULL)"
+        ).bind(telegramId, invite.id).run();
+        if (Number(redeemed.meta?.changes || 0) !== 1) {
+          return json({ error: "Код неверный, удалён или уже использован." }, 403, origin);
+        }
+        return json({
+          ok: true,
+          access: true,
+          rules_text: rulesText,
+          group_url: "https://t.me/+K0Ea1mzQuXYxNDVi",
+          code_mode: invite.mode
+        }, 200, origin);
+      }
 
       if (path === "/api/ui-motion" && method === "GET") {
         const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
@@ -1390,6 +1446,61 @@ export default {
         }
         if (!rootOwner && requiredPermission === "staff_manage") {
           return json({ error: "Управление должностями доступно только основному владельцу." }, 403, origin);
+        }
+
+        if (path === "/api/admin/group-invites" && method === "GET") {
+          if (!(await tableExists(env, "group_invite_codes"))) return json({ ok: true, migration_pending: true, invites: [] }, 200, origin);
+          const rows = await env.DB.prepare(
+            "SELECT id,code_cipher,mode,created_at,used_at,use_count,last_used_at FROM group_invite_codes WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 20"
+          ).all();
+          const invites = await Promise.all((rows.results || []).map(async row => ({
+            id: row.id,
+            code: await decryptGroupInviteCode(env, row.code_cipher),
+            mode: row.mode,
+            created_at: row.created_at,
+            used_at: row.used_at,
+            use_count: Number(row.use_count || 0),
+            last_used_at: row.last_used_at,
+            active: row.mode === "reusable" || !row.used_at
+          })));
+          return json({ ok: true, invites }, 200, origin);
+        }
+        if (path === "/api/admin/group-invites" && method === "POST") {
+          if (!(await tableExists(env, "group_invite_codes"))) return json({ error: "Сначала требуется миграция 0031_group_invite_codes.sql." }, 503, origin);
+          const body = await readJson(request);
+          const code = String(body.code || "").trim();
+          const mode = String(body.mode || "");
+          if (!/^\\d{4,32}$/.test(code)) return json({ error: "Код должен содержать от 4 до 32 цифр." }, 400, origin);
+          if (!["one_time", "reusable"].includes(mode)) return json({ error: "Выберите корректный режим кода." }, 400, origin);
+          const activeCount = await env.DB.prepare(
+            "SELECT COUNT(*) AS total FROM group_invite_codes WHERE deleted_at IS NULL AND (mode='reusable' OR used_at IS NULL)"
+          ).first();
+          if (Number(activeCount?.total || 0) >= 5) return json({ error: "Можно иметь не более 5 активных кодов одновременно. Удалите лишний или дождитесь использования одноразового." }, 409, origin);
+          const codeHash = await groupInviteCodeHash(env, code);
+          const duplicate = await env.DB.prepare("SELECT id FROM group_invite_codes WHERE code_hash=? LIMIT 1").bind(codeHash).first();
+          if (duplicate) return json({ error: "Такой код уже создавался. Введите другой цифровой код." }, 409, origin);
+          const codeCipher = await encryptGroupInviteCode(env, code);
+          const id = makeId();
+          try {
+            await env.DB.prepare(
+              "INSERT INTO group_invite_codes(id,code_hash,code_cipher,mode,created_by) VALUES(?,?,?,?,?)"
+            ).bind(id, codeHash, codeCipher, mode, telegramId).run();
+          } catch (error) {
+            if (/MAX_ACTIVE_GROUP_INVITES/.test(String(error))) return json({ error: "Достигнут лимит: не более 5 активных кодов." }, 409, origin);
+            throw error;
+          }
+          return json({ ok: true, id, code, mode }, 201, origin);
+        }
+        if (path === "/api/admin/group-invites/delete" && method === "POST") {
+          if (!(await tableExists(env, "group_invite_codes"))) return json({ error: "Система приглашений пока не настроена." }, 503, origin);
+          const body = await readJson(request);
+          const id = String(body.id || "").trim();
+          if (!id || id.length > 64) return json({ error: "Не указан код для удаления." }, 400, origin);
+          const result = await env.DB.prepare(
+            "UPDATE group_invite_codes SET deleted_at=CURRENT_TIMESTAMP WHERE id=? AND deleted_at IS NULL"
+          ).bind(id).run();
+          if (Number(result.meta?.changes || 0) !== 1) return json({ error: "Код уже удалён или не найден." }, 404, origin);
+          return json({ ok: true }, 200, origin);
         }
 
         if (path === "/api/admin/server-diagnostics" && method === "GET") {
