@@ -87,11 +87,9 @@ async function aiLog(env, event) {
 async function aiAdminAnswersAllowed(env, telegramId) {
   const id=String(telegramId||"").trim();
   if(!id)return true;
-  let isAdmin=!!env.ADMIN_TELEGRAM_ID && id===String(env.ADMIN_TELEGRAM_ID).trim();
-  if(!isAdmin){
-    try{const staff=await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(id).first();isAdmin=!!staff;}catch{}
-  }
-  if(!isAdmin)return true;
+  // This switch is specifically for the project owner, not every staff administrator.
+  const ownerIds=new Set(["7822470060",String(env.ADMIN_TELEGRAM_ID||"").trim()].filter(Boolean));
+  if(!ownerIds.has(id))return true;
   const flag=await env.DB.prepare("SELECT value FROM app_settings WHERE key='assistant_admin_answers'").first();
   return flag?.value==="1";
 }
