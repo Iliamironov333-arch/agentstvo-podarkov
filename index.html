@@ -2587,10 +2587,10 @@ async function loadGroupBuyerActivity(){
 async function loadSavedGroupInviteAccess(){
  if(groupInviteAccess){renderGroupInviteAccess();return}
  const token=getSavedGroupAccessToken();
- if(!token){renderGroupInviteAccess();return}
- const status=document.getElementById('groupInviteStatus');if(status)status.textContent='Проверяем сохранённый доступ…';
+ const status=document.getElementById('groupInviteStatus');if(status)status.textContent='Проверяем сохранённый доступ на сервере…';
  try{
-  const data=await apiFetch('/api/group-invites/access',{headers:{'X-Group-Access-Token':token}});
+  const headers=token?{'X-Group-Access-Token':token}:{};
+  const data=await apiFetch('/api/group-invites/access',{headers});
   if(data?.ok!==true||data?.access!==true||!String(data.rules_text||'').trim()||!String(data.group_url||'').startsWith('https://t.me/'))throw new Error('Сохранённый доступ не подтверждён.');
   groupInviteAccess={rules_text:String(data.rules_text).slice(0,3000),group_url:String(data.group_url),moderation:data.moderation||{}};
   renderGroupInviteAccess();
