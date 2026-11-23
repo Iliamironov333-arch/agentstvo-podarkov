@@ -2343,13 +2343,6 @@ function initAdminCategories(){
  <h3>🤖 Центр управления ИИ-модератором</h3>
  <p class="muted">Каждая функция включается отдельно. Переключатель расположен рядом с названием, а подробные параметры открываются своей кнопкой «Настроить».</p>
  <div id="aiBotStatus" class="notice">Загрузка настроек…</div>
- <div class="ai-feature-card" id="aiAdminAnswersCard">
-  <div class="ai-feature-head">
-   <div class="ai-feature-info"><strong>💬 Ответы ИИ администратору</strong><small>Разрешить ИИ отвечать владельцу и активным администраторам</small></div>
-   <label class="ai-switch" aria-label="Ответы ИИ администратору"><input type="checkbox" id="aiAdminAnswersToggle" disabled><span></span></label><button class="secondary" type="button" onclick="toggleAiSettings('aiAdminReplyStyleSettings')">Настроить</button>
-  </div>
-  <div id="aiAdminReplyStyleSettings" class="ai-feature-settings hidden"><label>Стиль ответов<select id="aiAdminReplyStyle"><option value="friendly">Дружелюбный</option><option value="official">Официальный</option><option value="neutral">Нейтральный</option><option value="business">Деловой</option><option value="free">Свободный</option></select></label><button class="secondary" type="button" onclick="saveAdminAiReplyStyle()">Сохранить стиль</button></div>
- </div>
  <div class="ai-control-grid">
   <div class="ai-feature-card"><div class="ai-feature-head"><div class="ai-feature-info"><strong>🤖 ИИ-бот</strong><small>Главный выключатель ИИ-помощника и заказов</small></div><label class="ai-switch"><input type="checkbox" id="aiEnabled"><span></span></label><button class="secondary" type="button" onclick="toggleAiSettings('aiGlobalSettings')">Настроить</button></div><div id="aiGlobalSettings" class="ai-feature-settings hidden"><p class="muted">Если выключить, бот перестанет обрабатывать новые сообщения группы. Уже созданные заказы и платежи не затрагиваются.</p></div></div>
   <div class="ai-feature-card"><div class="ai-feature-head"><div class="ai-feature-info"><strong>🛡️ Модерация</strong><small>Проверка сообщений и применение правил</small></div><label class="ai-switch"><input type="checkbox" id="aiModerationEnabled"><span></span></label><button class="secondary" type="button" onclick="toggleAiSettings('aiModerationSettings')">Настроить</button></div><div id="aiModerationSettings" class="ai-feature-settings hidden"><p class="muted">Нарушение удаляется, участнику отправляется предупреждение. При сомнении — только ручная проверка.</p><label>Интервал ответа ИИ, секунд<input id="aiAnswerInterval" type="number" min="5" max="60" value="5"></label></div></div>
@@ -2402,7 +2395,6 @@ function initAdminCategories(){
  root.dataset.categoriesReady='1';showAdminCategory('operations');applyAdminPermissionVisibility();
 }
 function showAdminCategory(key){
- if(key==='ai')loadAdminAiAdminAnswersSetting();
 
  const root=document.getElementById('adminPanelView');if(!root)return;
  root.querySelectorAll('.admin-category-section').forEach(section=>section.classList.toggle('hidden',section.dataset.category!==key));
@@ -3552,43 +3544,6 @@ async function loadAdminTechnicalCenter(){
  }catch(e){status.textContent=e.message||'Не удалось выполнить проверку системы.';}
 }
 
-let adminAiAnswersEnabled=false;
-let adminAiAnswersToggleBound=false;
-const adminReplyStyles={friendly:'Отвечай тепло, естественно, уважительно и по-человечески, без излишней официальности.',official:'Отвечай официально, строго и по существу, без лишних эмоций.',neutral:'Используй спокойный, нейтральный и понятный тон.',business:'Пиши кратко, структурированно и ориентируйся на решение вопроса.',free:'Общайся свободно и легко, допускается ненавязчивый юмор.'};
-function getAdminAiReplyStyle(){try{return localStorage.getItem('agency_admin_ai_reply_style')||'friendly';}catch{return 'friendly';}}
-function saveAdminAiReplyStyle(){const select=document.getElementById('aiAdminReplyStyle');if(!select)return;const value=select.value;if(!adminReplyStyles[value])return;try{localStorage.setItem('agency_admin_ai_reply_style',value);}catch{}toast('Стиль ответов сохранён.');}
-async function loadAdminAiAdminAnswersSetting(){
- const styleSelect=document.getElementById('aiAdminReplyStyle');if(styleSelect)styleSelect.value=getAdminAiReplyStyle();
- const toggle=document.getElementById('aiAdminAnswersToggle');
- const status=document.getElementById('aiAdminAnswersStatus');
- if(!toggle)return;
- toggle.disabled=true;
- try{
-  const data=await apiFetch('/api/admin/feature-flags');
-  adminAiAnswersEnabled=data.flags?.assistant_admin_answers===true;
-  toggle.checked=adminAiAnswersEnabled;
-  if(status)status.textContent='';
-  if(!adminAiAnswersToggleBound){
-   toggle.addEventListener('change',async()=>{
-    const next=toggle.checked;
-    toggle.disabled=true;
-    try{
-     await apiFetch('/api/admin/feature-flags',{method:'POST',body:JSON.stringify({key:'assistant_admin_answers',enabled:next})});
-     adminAiAnswersEnabled=next;
-     if(status)status.textContent='';
-     toast(next?'Ответы ИИ администраторам включены.':'Ответы ИИ администраторам отключены.');
-    }catch(e){
-     toggle.checked=!next;
-     if(status)status.textContent='';
-     toast(e.message||'Не удалось изменить настройку.');
-    }finally{toggle.disabled=false;}
-   });
-   adminAiAnswersToggleBound=true;
-  }
- }catch(e){
-  if(status)status.textContent='';
- }finally{toggle.disabled=false;}
-}
 async function loadAdminFeatureFlags(){
  const root=document.getElementById('adminFeatureFlags');if(!root)return;root.replaceChildren();
  try{const d=await apiFetch('/api/admin/feature-flags');adminFeatureDefinitions.forEach(item=>{const row=document.createElement('div');row.className='lineitem';const info=document.createElement('span');const title=document.createElement('b');title.textContent=item.title;const desc=document.createElement('small');desc.textContent=item.description;info.append(title,document.createElement('br'),desc);const button=document.createElement('button');button.type='button';const enabled=d.flags[item.key]!==false;button.className=enabled?'primary':'secondary';button.textContent=enabled?'Включено':'Отключено';button.addEventListener('click',async()=>{const next=!enabled;if(!confirm((next?'Включить':'Отключить')+' функцию «'+item.title+'»?'))return;button.disabled=true;try{await apiFetch('/api/admin/feature-flags',{method:'POST',body:JSON.stringify({key:item.key,enabled:next})});toast(next?'Функция включена.':'Функция отключена.');await loadAdminFeatureFlags();}catch(e){toast(e.message||'Не удалось изменить функцию.');button.disabled=false;}});row.append(info,button);root.append(row);});}catch(e){root.textContent=e.message||'Не удалось загрузить переключатели.';}
