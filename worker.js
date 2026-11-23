@@ -4158,9 +4158,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
       }
       if (path === "/api/vip/support" && method === "POST") {
         // Backward compatibility for already-open Mini App clients; the current UI uses the unified assistant.
-        if(!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"AI_DISABLED"},403,origin);
-        }
+        // Owner reply preference is group-only; Mini App support remains available.
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
         if (!vip) return json({ error: "VIP-помощь доступна только при действующей подписке." }, 403, origin);
@@ -4227,9 +4225,7 @@ const aiEnabled=!existing||previous.ai_enabled!==false;
       if (path === "/api/support/chat" && method === "POST") {
         const body = await readJson(request);
         const action = body.action === "create" ? "create" : "send";
-        if(action!=="create"&&!(await adminAiAnswersAllowed(env,telegramId))){
-          return json({error:"AI_DISABLED"},403,origin);
-        }
+        // Owner reply preference is group-only; Mini App support remains available.
         const vip = await env.DB.prepare("SELECT 1 AS active FROM vip_subscriptions WHERE telegram_id=? AND status='active' AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) LIMIT 1")
           .bind(telegramId).first();
         // VIP-модель выбирается автоматически по активной подписке; ручного переключателя нет.
