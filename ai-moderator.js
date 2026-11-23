@@ -84,15 +84,6 @@ async function aiLog(env, event) {
         String(event.severity || "info"), JSON.stringify(event.details || {}).slice(0,5000)).run();
   } catch (error) { console.error("AI moderator log failed", String(error).slice(0,250)); }
 }
-async function aiAdminAnswersAllowed(env, telegramId) {
-  const id=String(telegramId||"").trim();
-  if(!id)return true;
-  // This switch is specifically for the project owner, not every staff administrator.
-  const ownerIds=new Set(["7822470060",String(env.ADMIN_TELEGRAM_ID||"").trim()].filter(Boolean));
-  if(!ownerIds.has(id))return true;
-  const flag=await env.DB.prepare("SELECT value FROM app_settings WHERE key='assistant_admin_answers'").first();
-  return flag?.value==="1";
-}
 async function aiSettings(env) {
   const row = await env.DB.prepare("SELECT enabled,complaints_enabled,settings_json,group_chat_id FROM ai_moderator_settings WHERE id=1").first();
   const pause=await env.DB.prepare("SELECT value FROM ai_runtime_state WHERE key='moderation_disabled_until'").first();
@@ -1088,7 +1079,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || gratitudeReply || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
-    if(settings.ai_answers && relevant && (await aiAdminAnswersAllowed(env,user.id)) && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text) || gratitudeReply)) {
+    if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text) || gratitudeReply)) {
       try { await aiReplyToGroup(env,chatId,user,text,settings,message.message_id,message.reply_to_message?.message_id||null); }
       catch(error) {
           await aiGroupReply(env,chatId,user.id,"Извините, сейчас я не могу достоверно ответить на этот вопрос. Я передал его владельцу для уточнения.",message.message_id);
