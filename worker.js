@@ -301,11 +301,6 @@ async function isAdminAccount(env, telegramId) {
   if(!(await tableExists(env,"admin_staff")))return false;
   return !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(id).first());
 }
-async function adminAiAnswersAllowed(env, telegramId) {
-  if(!(await isAdminAccount(env,telegramId)))return true;
-  const setting=await env.DB.prepare("SELECT value FROM app_settings WHERE key='assistant_admin_answers'").first();
-  return setting?.value==="1";
-}
 async function notifyOwner(env, message) {
   const textMessage=String(message||"").slice(0,3900);
   try{
@@ -3104,14 +3099,14 @@ if (path === "/api/admin/packs" && method === "GET") {
           return json({ok:true,settings,updated_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "GET") {
-          const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip","assistant_admin_answers"];
-          const rows=await env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key IN ('feature_product_orders','feature_custom_orders','feature_points_topup','feature_support','feature_vip','assistant_admin_answers')").all();
+          const keys=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
+          const rows=await env.DB.prepare("SELECT key,value,updated_at FROM app_settings WHERE key IN ('feature_product_orders','feature_custom_orders','feature_points_topup','feature_support','feature_vip')").all();
           const found=new Map((rows.results||[]).map(row=>[row.key,row]));
-          const flags={};for(const key of keys)flags[key]=found.has(key)?found.get(key).value==="1":key==="assistant_admin_answers"?false:true;
+          const flags={};for(const key of keys)flags[key]=found.has(key)?found.get(key).value==="1":true;
           return json({ok:true,flags,updated_at:Object.fromEntries([...found.entries()].map(([k,v])=>[k,v.updated_at]))},200,origin);
         }
         if (path === "/api/admin/feature-flags" && method === "POST") {
-          const body=await readJson(request),allowed=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip","assistant_admin_answers"];
+          const body=await readJson(request),allowed=["feature_product_orders","feature_custom_orders","feature_points_topup","feature_support","feature_vip"];
           if(!allowed.includes(body.key)||typeof body.enabled!=="boolean")return json({error:"Укажите известный переключатель и его состояние."},400,origin);
           await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(body.key,body.enabled?"1":"0").run();
           if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"feature_flag_changed",JSON.stringify({key:body.key,enabled:body.enabled})).run();
