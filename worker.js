@@ -1926,6 +1926,25 @@ if (path === "/api/admin/packs" && method === "GET") {
           if (!cloudResponse.ok || !cloudData.deleted || cloudData.deleted[publicId]!=="deleted") return json({error:"Cloudinary не подтвердил удаление: "+String(cloudData.error?.message||"файл не удалён").slice(0,200)},502,origin);
           return json({ok:true,public_id:publicId},200,origin);
         }
+        if (path === "/api/admin/campaign-image-upload" && method === "POST") {
+          const form=await request.formData(),file=form.get("image");
+          if(!file||typeof file.arrayBuffer!=="function")return json({error:"Выберите файл изображения."},400,origin);
+          if(!["image/jpeg","image/png","image/webp"].includes(file.type))return json({error:"Поддерживаются только JPG, PNG и WEBP."},400,origin);
+          if(file.size<1||file.size>5*1024*1024)return json({error:"Размер изображения должен быть от 1 байта до 5 МБ."},413,origin);
+          if(!env.CLOUDINARY_API_KEY||!env.CLOUDINARY_API_SECRET)return json({error:"Cloudinary не настроен."},503,origin);
+          const cloudName="dzdxfmsn",timestamp=Math.floor(Date.now()/1000),publicId="campaign-"+crypto.randomUUID();
+          const signatureParams={folder:"agentstvo-podarkov",public_id:publicId,timestamp:String(timestamp)};
+          const signatureText=Object.keys(signatureParams).sort().map(key=>key+"="+signatureParams[key]).join("&")+env.CLOUDINARY_API_SECRET;
+          const signatureBytes=await crypto.subtle.digest("SHA-1",new TextEncoder().encode(signatureText));
+          const signature=Array.from(new Uint8Array(signatureBytes)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+          const uploadForm=new FormData();uploadForm.append("file",new Blob([await file.arrayBuffer()],{type:file.type}),file.name||"campaign-image");
+          uploadForm.append("api_key",env.CLOUDINARY_API_KEY);uploadForm.append("timestamp",String(timestamp));uploadForm.append("public_id",publicId);uploadForm.append("folder","agentstvo-podarkov");uploadForm.append("signature",signature);
+          const response=await fetch("https://api.cloudinary.com/v1_1/"+cloudName+"/image/upload",{method:"POST",body:uploadForm});
+          const result=await response.json().catch(()=>({}));
+          if(!response.ok||!result.secure_url)return json({error:"Ошибка загрузки: "+String(result.error?.message||"Cloudinary не принял изображение").slice(0,180)},502,origin);
+          const imageUrl=String(result.secure_url).replace("/image/upload/","/image/upload/f_auto,q_auto/");
+          return json({ok:true,image_url:imageUrl,size_bytes:Number(result.bytes||file.size)},200,origin);
+        }
         if (path === "/api/admin/announcement-image-upload" && method === "POST") {
           const form=await request.formData();
           const id=typeof form.get("announcement_id")==="string"?String(form.get("announcement_id")).trim().slice(0,100):"";
