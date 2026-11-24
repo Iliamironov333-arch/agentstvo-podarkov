@@ -1612,6 +1612,10 @@ body.dark-theme.event-newyear #seasonDecorations .festive-firework{
   }
 }
 
+
+/* REMOVED FESTIVE MODES — keep only the four seasonal themes. */
+.season-settings,.season-event-overlay,#seasonDecorations{display:none!important}
+body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!important}
 </style>
 </head>
 <body>
@@ -1873,10 +1877,10 @@ body.dark-theme.event-newyear #seasonDecorations .festive-firework{
    <div class="row-actions"><button class="secondary" type="button" onclick="resetUiMotionSettings()">↺ Вернуть стандартную плавность</button></div>
   </div>
   <div class="panel" id="adminSeasonThemesPanel"><div class="sectionhead"><h3>🎨 Сезонное оформление</h3><span>Выберите тему для приложения</span></div><p class="muted">Осень оставлена без изменений. Выберите сезонную тему:</p><div class="season-theme-grid">
-  <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий осени" onclick="event.stopPropagation();openSeasonEventSettings('autumn')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('autumn')}">⚙️</span></button>
-  <button type="button" class="season-theme-card season-winter" data-season="winter" onclick="setSeasonTheme('winter')"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий зимы" onclick="event.stopPropagation();openSeasonEventSettings('winter')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('winter')}">⚙️</span></button>
-  <button type="button" class="season-theme-card season-spring" data-season="spring" onclick="setSeasonTheme('spring')"><span class="season-theme-art">🌷</span><b>Весна</b><small>Свежие пастельные тона</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий весны" onclick="event.stopPropagation();openSeasonEventSettings('spring')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('spring')}">⚙️</span></button>
-  <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small><span class="season-settings" role="button" tabindex="0" aria-label="Настройки событий лета" onclick="event.stopPropagation();openSeasonEventSettings('summer')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openSeasonEventSettings('summer')}">⚙️</span></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на этом устройстве.</p></div>
+  <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small></button>
+  <button type="button" class="season-theme-card season-winter" data-season="winter" onclick="setSeasonTheme('winter')"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small></button>
+  <button type="button" class="season-theme-card season-spring" data-season="spring" onclick="setSeasonTheme('spring')"><span class="season-theme-art">🌷</span><b>Весна</b><small>Свежие пастельные тона</small></button>
+  <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на этом устройстве.</p></div>
   <div class="panel" id="adminSystemControlsPanel">
    <h3>🚦 Экстренное управление</h3>
    <p class="muted">Остановка запрещает новые покупки и оформление заказов. Каталог остаётся доступным, уже оплаченные заказы не затрагиваются.</p>
@@ -2732,103 +2736,39 @@ function money(n) {
 }
 
 function updateThemeMeta(){const m=document.querySelector('meta[name="theme-color"]');if(!m)return;if(document.body.classList.contains('event-newyear')){m.content='#071b2b';return}const dark=document.body.classList.contains('dark-theme');const season=['winter','spring','summer'].find(x=>document.body.classList.contains('season-'+x))||'autumn';const colors={autumn:dark?'#211810':'#fff8ed',winter:dark?'#101f2b':'#edf7ff',spring:dark?'#172319':'#f4f8ee',summer:dark?'#2b2111':'#fff9e9'};m.content=colors[season]}
-const SEASON_EVENTS={autumn:{id:'halloween',label:'Хэллоуин',icon:'🎃',description:'Мягкий листопад, тёплые огни фонарей, редкие мерцающие искры и плавные силуэты летучих мышей.'},winter:{id:'newyear',label:'Новый год',icon:'🎄',description:'Зимняя ночь, объёмный снегопад, деликатная гирлянда, стеклянные шары и отдельные световые салюты.'},spring:{id:'easter',label:'Пасха',icon:'🐣',description:'Лёгкие лепестки, весеннее мерцание и аккуратные праздничные яйца в пастельной гамме.'},summer:null};
-function getSeasonEvent(){try{return localStorage.getItem('gift-season-event')||''}catch(e){return ''}}
-function eventSeason(eventId){return Object.keys(SEASON_EVENTS).find(k=>SEASON_EVENTS[k]?.id===eventId)||''}
-function renderSeasonDecorations(eventId){
- let root=document.getElementById('seasonDecorations');
- if(!eventId){root?.remove();return;}
- if(!root){root=document.createElement('div');root.id='seasonDecorations';root.setAttribute('aria-hidden','true');document.body.appendChild(root);}
- root.replaceChildren();
- const make=(cls,char,count,options={})=>{
-  for(let i=0;i<count;i++){
-   const el=document.createElement('span');el.className=cls;el.textContent=char||'';
-   const left=(options.leftRange?options.leftRange[0]+Math.random()*(options.leftRange[1]-options.leftRange[0]):Math.random()*100).toFixed(2)+'%';el.style.left=left;
-   el.style.animationDelay=(-Math.random()*(options.delay||22)).toFixed(2)+'s';
-   el.style.animationDuration=(options.durationMin||12+Math.random()*18)+'s';
-   if(!options.durationMin)el.style.animationDuration=(12+Math.random()*18).toFixed(2)+'s';
-   el.style.fontSize=(12+Math.random()*16).toFixed(0)+'px';
-   if(options.topRange){const top=(options.topRange[0]+Math.random()*(options.topRange[1]-options.topRange[0])).toFixed(2)+'vh';el.style.top=top;if(cls==='festive-firework'){el.style.setProperty('--burst-x',left);el.style.setProperty('--burst-y',top);}}
-   if(options.size){el.style.width=options.size+'px';el.style.height=options.size+'px';}
-   root.appendChild(el);
-  }
- };
- if(eventId==='newyear'){
-  make('festive-fall','❄',16,{durationMin:20,delay:24});
-  // Убираем декоративную «пыль»: оставляем только отдельные снежинки.
-  make('festive-bauble','',5,{durationMin:24,delay:26,size:12});
-  make('festive-firework','',2,{durationMin:26,delay:32,topRange:[12,48],leftRange:[10,90],size:5});
- }
- if(eventId==='halloween'){
-  make('festive-fall','🍂',16,{durationMin:20,delay:24});
-  make('festive-twinkle','✦',9,{durationMin:15,delay:18});
-  make('festive-bat','🦇',3,{durationMin:19,delay:18});
- }
- if(eventId==='easter'){
-  make('festive-fall','🌸',16,{durationMin:19,delay:22});
-  make('festive-twinkle','✿',10,{durationMin:17,delay:20});
-  make('festive-egg','🥚',4,{durationMin:23,delay:22,size:25});
- }
-}
-function applySeasonEvent(eventId,notify=false){
- const season=eventId?eventSeason(eventId):'';
- if(eventId&&!season)return;
- const currentSeason=(()=>{try{return localStorage.getItem('gift-season-theme')||'autumn'}catch(e){return 'autumn'}})();
- if(eventId&&season!==currentSeason){if(notify)toast('Это событие доступно только в теме «'+({autumn:'Осень',winter:'Зима',spring:'Весна'}[season])+'».');return;}
- if(eventId==='newyear'&&!document.body.classList.contains('dark-theme')){if(notify)toast('Новый год доступен только в тёмной теме.');return;}
+/* Праздничные режимы удалены. Сезонные темы работают независимо. */
+function getSeasonEvent(){return ''}
+function applySeasonEvent(){
  document.body.classList.remove('event-newyear','event-easter','event-halloween');
- if(eventId)document.body.classList.add('event-'+eventId);
- renderSeasonDecorations(eventId);
- try{if(eventId)localStorage.setItem('gift-season-event',eventId);else localStorage.removeItem('gift-season-event')}catch(e){}
+ document.getElementById('seasonDecorations')?.remove();
+ try{localStorage.removeItem('gift-season-event')}catch(e){}
  updateThemeMeta();
- if(notify)toast(eventId?'Праздничное оформление включено!':'Праздничное оформление выключено.');
 }
-function openSeasonEventSettings(season){
- const config=SEASON_EVENTS[season],name={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'}[season];
- let overlay=document.getElementById('seasonEventSettings');
- if(!overlay){
-  overlay=document.createElement('div');overlay.id='seasonEventSettings';overlay.className='season-event-overlay';
-  overlay.innerHTML='<div class="season-event-dialog" role="dialog" aria-modal="true" aria-labelledby="seasonEventTitle"><button type="button" class="season-event-close" aria-label="Закрыть" onclick="closeSeasonEventSettings()">×</button><div id="seasonEventContent"></div></div>';
-  overlay.addEventListener('click',e=>{if(e.target===overlay)closeSeasonEventSettings()});
-  document.body.appendChild(overlay);
- }
- const content=overlay.querySelector('#seasonEventContent'),active=getSeasonEvent(),activeSeason=eventSeason(active);
- content.replaceChildren();
- const title=document.createElement('h3');title.id='seasonEventTitle';title.textContent='⚙️ События: '+name;content.append(title);
- const desc=document.createElement('p');desc.className='muted';desc.textContent='Можно включить только одно праздничное событие во всём приложении.';content.append(desc);
- if(!config){
-  const empty=document.createElement('div');empty.className='season-event-empty';empty.textContent='☀️ Для лета праздничное событие пока не добавлено. Настройки появятся здесь, когда мы подготовим летний праздник.';content.append(empty);
- }else{
-  const card=document.createElement('div');card.className='season-event-option';
-  const icon=document.createElement('span');icon.className='season-event-icon';icon.textContent=config.icon;
-  const textWrap=document.createElement('div');const strong=document.createElement('strong');strong.textContent=config.label;const small=document.createElement('small');small.textContent=config.description;textWrap.append(strong,small);
-  const toggle=document.createElement('button');toggle.type='button';toggle.className='season-event-toggle';toggle.textContent=active===config.id?'Выключить':'Включить';
-  if(active&&active!==config.id){const note=document.createElement('p');note.className='season-event-note';note.textContent='Сейчас включено другое событие: '+(SEASON_EVENTS[activeSeason]?.label||'праздник')+'. При включении оно автоматически выключится.';content.append(note);}
-  toggle.addEventListener('click',()=>{applySeasonEvent(active===config.id?'':config.id,true);closeSeasonEventSettings();});
-  card.append(icon,textWrap,toggle);content.append(card);
- }
- const activeLine=document.createElement('p');activeLine.className='season-event-current';activeLine.textContent=active?'Сейчас активно: '+(SEASON_EVENTS[activeSeason]?.label||'праздник'):'Сейчас праздничные события выключены.';content.append(activeLine);
- overlay.classList.add('open');
-}
-function closeSeasonEventSettings(){document.getElementById('seasonEventSettings')?.classList.remove('open')}
+function openSeasonEventSettings(){}
+function closeSeasonEventSettings(){document.getElementById('seasonEventSettings')?.remove()}
 function applySeasonTheme(season){
  if(!['autumn','winter','spring','summer'].includes(season))season='autumn';
- const previous=getSeasonEvent(),previousSeason=eventSeason(previous);
+ document.body.classList.remove('event-newyear','event-easter','event-halloween');
+ document.getElementById('seasonDecorations')?.remove();
+ try{localStorage.removeItem('gift-season-event');localStorage.setItem('gift-season-theme',season)}catch(e){}
  document.body.classList.remove('winter-season','spring-season','summer-season','season-autumn','season-winter','season-spring','season-summer');
- document.body.classList.add('season-'+season);if(season!=='autumn')document.body.classList.add(season+'-season');
- try{localStorage.setItem('gift-season-theme',season)}catch(e){}
- if(previous&&previousSeason!==season)applySeasonEvent('',false);
- else if(previous&&previousSeason===season){document.body.classList.add('event-'+previous);renderSeasonDecorations(previous);}
- document.querySelectorAll('.season-theme-card').forEach(c=>{const on=c.dataset.season===season;c.classList.toggle('active',on);c.setAttribute('aria-pressed',String(on))});
+ document.body.classList.add('season-'+season);
+ if(season!=='autumn')document.body.classList.add(season+'-season');
+ document.querySelectorAll('.season-theme-card').forEach(card=>{
+  const active=card.dataset.season===season;
+  card.classList.toggle('active',active);
+  card.setAttribute('aria-pressed',String(active));
+ });
  const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};
  updateSeasonalCopy();
- const status=document.getElementById('adminSeasonThemeStatus');if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
+ const status=document.getElementById('adminSeasonThemeStatus');
+ if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
  updateThemeMeta();
 }
 function setSeasonTheme(season){applySeasonTheme(season);toast('Сезонная тема изменена.')}
 
-function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';if(!dark&&getSeasonEvent()==='newyear')applySeasonEvent('',false);updateThemeMeta()}
-(function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonTheme(season)})();
+function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonEvent();updateThemeMeta()}
+(function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonEvent();applySeasonTheme(season)})();
 
 function toast(s) {
  const t = document.getElementById('toast');
