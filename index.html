@@ -1618,7 +1618,7 @@ body.dark-theme.event-newyear #seasonDecorations .festive-firework{
 body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!important}
 
 /* WINTER NEW YEAR — isolated festive layer, independent from the four base themes */
-.season-theme-card.season-winter{position:relative}
+.season-theme-card.season-winter{position:relative;cursor:pointer;color:inherit;font:inherit}.season-theme-card.season-winter:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
 .season-settings-gear{position:absolute;top:9px;right:9px;width:31px;height:31px;display:grid;place-items:center;border:1px solid #ffffffa8;border-radius:10px;background:#ffffffd9;color:#254b5b;font-size:17px;line-height:1;box-shadow:0 2px 8px #17394a22;z-index:3;cursor:pointer;transition:transform .18s ease,background .18s ease}
 .season-settings-gear:active{transform:scale(.92)}
 .season-settings-gear:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
@@ -1920,7 +1920,7 @@ body.winter-newyear-active .price,body.winter-newyear-active .bottom button.acti
   </div>
   <div class="panel" id="adminSeasonThemesPanel"><div class="sectionhead"><h3>🎨 Сезонное оформление</h3><span>Выберите тему для приложения</span></div><p class="muted">Осень оставлена без изменений. Выберите сезонную тему:</p><div class="season-theme-grid">
   <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small></button>
-  <button type="button" class="season-theme-card season-winter" data-season="winter" onclick="setSeasonTheme('winter')"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings-gear" role="button" tabindex="0" aria-label="Настройки новогоднего оформления" title="Настройки зимнего оформления" onclick="event.stopPropagation();openWinterNewYearSettings()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openWinterNewYearSettings()}">⚙</span></button>
+  <div class="season-theme-card season-winter" role="button" tabindex="0" aria-pressed="false" data-season="winter" onclick="setSeasonTheme('winter')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setSeasonTheme('winter')}"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings-gear" role="button" tabindex="0" aria-label="Настройки новогоднего оформления" title="Настройки зимнего оформления" onclick="event.stopPropagation();openWinterNewYearSettings()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openWinterNewYearSettings()}">⚙</span></div>
   <button type="button" class="season-theme-card season-spring" data-season="spring" onclick="setSeasonTheme('spring')"><span class="season-theme-art">🌷</span><b>Весна</b><small>Свежие пастельные тона</small></button>
   <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на этом устройстве.</p></div>
   <div class="panel" id="adminSystemControlsPanel">
