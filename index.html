@@ -1616,6 +1616,48 @@ body.dark-theme.event-newyear #seasonDecorations .festive-firework{
 /* REMOVED FESTIVE MODES — keep only the four seasonal themes. */
 .season-settings,.season-event-overlay,#seasonDecorations{display:none!important}
 body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!important}
+
+/* WINTER NEW YEAR — isolated festive layer, independent from the four base themes */
+.season-theme-card.season-winter{position:relative;cursor:pointer;color:inherit;font:inherit}.season-theme-card.season-winter:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+.season-settings-gear{position:absolute;top:9px;right:9px;width:31px;height:31px;display:grid;place-items:center;border:1px solid #ffffffa8;border-radius:10px;background:#ffffffd9;color:#254b5b;font-size:17px;line-height:1;box-shadow:0 2px 8px #17394a22;z-index:3;cursor:pointer;transition:transform .18s ease,background .18s ease}
+.season-settings-gear:active{transform:scale(.92)}
+.season-settings-gear:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.winter-newyear-overlay{position:fixed;inset:0;z-index:10070;display:none;align-items:center;justify-content:center;padding:18px;background:#061725a8;backdrop-filter:blur(9px)}
+.winter-newyear-overlay.open{display:flex}
+.winter-newyear-dialog{position:relative;width:min(100%,430px);max-height:min(88dvh,680px);overflow:auto;padding:22px;border:1px solid #c9a85f;border-radius:24px;background:linear-gradient(155deg,#183d35,#102b2c 68%,#152b35);color:#fff8e9;box-shadow:0 24px 80px #020b12a8}
+.winter-newyear-dialog h3{margin:0 34px 7px 0;font-size:20px;color:#f6dfaa}
+.winter-newyear-dialog p{margin:0;color:#d7e4d9;font-size:13px;line-height:1.5}
+.winter-newyear-close{position:absolute;top:13px;right:13px;width:34px;height:34px;border:1px solid #ffffff35;border-radius:11px;background:#ffffff12;color:#fff8e9;font-size:20px}
+.winter-newyear-preview{position:relative;overflow:hidden;min-height:112px;margin:16px 0;padding:17px;border:1px solid #c9a85f55;border-radius:17px;background:radial-gradient(circle at 80% 12%,#f2d48a22,transparent 30%),linear-gradient(120deg,#0c302b,#16433a 55%,#203c37)}
+.winter-newyear-preview:before{content:"";position:absolute;left:0;right:0;top:0;height:18px;background:radial-gradient(circle,#f5d58a 0 3px,transparent 4px) 0 0/31px 16px repeat-x;opacity:.9}
+.winter-newyear-preview strong{position:relative;display:block;margin-top:12px;color:#f7e3b3;font-size:16px}
+.winter-newyear-preview span{position:relative;display:block;margin-top:4px;color:#d8e6d8;font-size:12px}
+.winter-newyear-points{display:grid;gap:8px;margin:14px 0}
+.winter-newyear-points div{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #ffffff1c;border-radius:12px;background:#ffffff0b;font-size:13px;color:#f2f0df}
+.winter-newyear-toggle{width:100%;padding:13px 15px;border:1px solid #f0d18b;border-radius:13px;background:linear-gradient(100deg,#f3d58e,#c99b4d);color:#2a2518;font-weight:800;font-size:14px}
+.winter-newyear-note{display:block;margin-top:10px;color:#b9cfc3;font-size:11px;line-height:1.45;text-align:center}
+body.winter-newyear-active{--gold:#c9a45b;--gold2:#f3d995}
+body.winter-newyear-active header{position:sticky;z-index:4}
+body.winter-newyear-active>main{position:relative;z-index:4}
+body.winter-newyear-active .hero:after{content:none!important}
+body.winter-newyear-active .brand h1{color:#f0d99e}
+body.winter-newyear-active .logo{box-shadow:0 0 0 1px #c9a45b66,0 5px 18px #c9a45b30}
+body.winter-newyear-active .hero{border-color:#c7a45b!important;box-shadow:0 10px 28px #173a3022,inset 0 1px #fff7d022}
+body.winter-newyear-active .product,body.winter-newyear-active .panel,body.winter-newyear-active .menu-card{border-color:#b8955145}
+body.winter-newyear-active .price,body.winter-newyear-active .bottom button.active{color:#e5c477}
+#winterNewYearDecor{position:fixed;inset:0;z-index:3;overflow:hidden;pointer-events:none;contain:layout paint}
+#winterNewYearDecor .ny-flake{position:absolute;top:-12vh;left:var(--x);width:var(--size);height:var(--size);border-radius:50%;background:#f5fbff;opacity:var(--opacity);box-shadow:0 0 7px #dff5ff88;animation:nySnowfall var(--duration) linear var(--delay) infinite;will-change:transform}
+#winterNewYearDecor .ny-glint{position:absolute;left:var(--x);top:var(--y);width:4px;height:4px;border-radius:50%;background:#f6d991;box-shadow:0 0 7px 2px #f6d99188;opacity:.25;animation:nyGlint var(--duration) ease-in-out var(--delay) infinite}
+#winterNewYearGarland{position:absolute;z-index:6;pointer-events:none;left:0;right:0;top:0;height:22px;opacity:.94;background:radial-gradient(circle at 7% 72%,#f5d88b 0 3px,transparent 4px),radial-gradient(circle at 19% 82%,#d66f5e 0 3px,transparent 4px),radial-gradient(circle at 31% 70%,#f5d88b 0 3px,transparent 4px),radial-gradient(circle at 43% 82%,#6fbd91 0 3px,transparent 4px),radial-gradient(circle at 55% 70%,#f5d88b 0 3px,transparent 4px),radial-gradient(circle at 67% 82%,#d66f5e 0 3px,transparent 4px),radial-gradient(circle at 79% 70%,#f5d88b 0 3px,transparent 4px),radial-gradient(circle at 91% 82%,#6fbd91 0 3px,transparent 4px)}
+#winterNewYearGarland:before{content:"";position:absolute;left:0;right:0;top:-8px;height:20px;border-bottom:1px solid #c5a45d;border-radius:0 0 50% 50%;opacity:.9}
+.winter-newyear-hero-gifts{position:absolute;right:10px;bottom:7px;z-index:1;display:flex;align-items:flex-end;gap:2px;pointer-events:none;filter:drop-shadow(0 3px 5px #061b1b55)}
+.winter-newyear-hero-gifts span:first-child{font-size:34px}
+.winter-newyear-hero-gifts span:last-child{font-size:23px;margin-bottom:3px}
+@keyframes nySnowfall{0%{transform:translate3d(0,-8vh,0);opacity:0}10%{opacity:var(--opacity)}90%{opacity:var(--opacity)}100%{transform:translate3d(var(--drift),112vh,0);opacity:.08}}
+@keyframes nyGlint{0%,100%{opacity:.12;transform:scale(.7)}50%{opacity:.75;transform:scale(1.25)}}
+@media(prefers-reduced-motion:reduce){#winterNewYearDecor .ny-flake,#winterNewYearDecor .ny-glint{animation:none!important;display:none!important}.season-settings-gear{transition:none}}
+@media(max-width:420px){.winter-newyear-dialog{padding:19px}.winter-newyear-preview{min-height:104px}}
+
 </style>
 </head>
 <body>
@@ -1878,7 +1920,7 @@ body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!i
   </div>
   <div class="panel" id="adminSeasonThemesPanel"><div class="sectionhead"><h3>🎨 Сезонное оформление</h3><span>Выберите тему для приложения</span></div><p class="muted">Осень оставлена без изменений. Выберите сезонную тему:</p><div class="season-theme-grid">
   <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small></button>
-  <button type="button" class="season-theme-card season-winter" data-season="winter" onclick="setSeasonTheme('winter')"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small></button>
+  <div class="season-theme-card season-winter" role="button" tabindex="0" aria-pressed="false" data-season="winter" onclick="setSeasonTheme('winter')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setSeasonTheme('winter')}"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings-gear" role="button" tabindex="0" aria-label="Настройки новогоднего оформления" title="Настройки зимнего оформления" onclick="event.stopPropagation();openWinterNewYearSettings()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openWinterNewYearSettings()}">⚙</span></div>
   <button type="button" class="season-theme-card season-spring" data-season="spring" onclick="setSeasonTheme('spring')"><span class="season-theme-art">🌷</span><b>Весна</b><small>Свежие пастельные тона</small></button>
   <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на этом устройстве.</p></div>
   <div class="panel" id="adminSystemControlsPanel">
@@ -6202,5 +6244,112 @@ async function loadAiReports(){
 
 
 </script>
+
+<div id="winterNewYearSettings" class="winter-newyear-overlay" aria-hidden="true" onclick="if(event.target===this)closeWinterNewYearSettings()">
+ <section class="winter-newyear-dialog" role="dialog" aria-modal="true" aria-labelledby="winterNewYearTitle">
+  <button type="button" class="winter-newyear-close" aria-label="Закрыть настройки" onclick="closeWinterNewYearSettings()">×</button>
+  <h3 id="winterNewYearTitle">🎄 Новогоднее оформление</h3>
+  <p>Праздничный слой поверх зимней темы: хвоя, тёплое золото, гирлянды, подарки и мягкий снег.</p>
+  <div class="winter-newyear-preview">
+   <strong>Тёплый Новый год</strong>
+   <span>Хвоя · золото · огоньки · снег</span>
+  </div>
+  <div class="winter-newyear-points">
+   <div><span>🌲</span> Хвойные акценты и изящная гирлянда</div>
+   <div><span>✨</span> Тёплые огоньки с мягким мерцанием</div>
+   <div><span>🎁</span> Подарки в главном приветственном блоке</div>
+   <div><span>❄️</span> Ненавязчивый многослойный снег</div>
+  </div>
+  <button id="winterNewYearToggle" type="button" class="winter-newyear-toggle" onclick="toggleWinterNewYear()">Включить Новый год 🎄</button>
+  <span class="winter-newyear-note">Работает только при выбранной зимней теме. Ваш выбор сохраняется на этом устройстве.</span>
+ </section>
+</div>
+<script>
+(function(){
+ const KEY='gift-winter-newyear-enabled';
+ const baseApplySeasonTheme=window.applySeasonTheme;
+ const baseToggleTheme=window.toggleTheme;
+ const baseUpdateThemeMeta=window.updateThemeMeta;
+ function winterSelected(){return document.body.classList.contains('season-winter')||document.body.classList.contains('winter-season')}
+ function preference(){try{return localStorage.getItem(KEY)==='1'}catch(e){return false}}
+ function createDecor(){
+  if(document.getElementById('winterNewYearDecor'))return;
+  const layer=document.createElement('div');layer.id='winterNewYearDecor';layer.setAttribute('aria-hidden','true');
+  for(let i=0;i<30;i++){
+   const flake=document.createElement('i');flake.className='ny-flake';
+   flake.style.setProperty('--x',(Math.random()*100).toFixed(2)+'%');
+   flake.style.setProperty('--size',(2+Math.random()*4).toFixed(1)+'px');
+   flake.style.setProperty('--opacity',(0.25+Math.random()*0.42).toFixed(2));
+   flake.style.setProperty('--duration',(13+Math.random()*13).toFixed(1)+'s');
+   flake.style.setProperty('--delay',(-Math.random()*24).toFixed(1)+'s');
+   flake.style.setProperty('--drift',(Math.random()*90-45).toFixed(0)+'px');
+   layer.appendChild(flake);
+  }
+  for(let i=0;i<7;i++){
+   const glint=document.createElement('i');glint.className='ny-glint';
+   glint.style.setProperty('--x',(8+Math.random()*84).toFixed(2)+'%');
+   glint.style.setProperty('--y',(12+Math.random()*72).toFixed(2)+'%');
+   glint.style.setProperty('--duration',(3.5+Math.random()*3).toFixed(1)+'s');
+   glint.style.setProperty('--delay',(-Math.random()*5).toFixed(1)+'s');
+   layer.appendChild(glint);
+  }
+  document.body.appendChild(layer);
+ }
+ function createGarland(){
+  const header=document.querySelector('body>header');
+  if(header&&!document.getElementById('winterNewYearGarland')){
+   const garland=document.createElement('div');garland.id='winterNewYearGarland';garland.setAttribute('aria-hidden','true');header.appendChild(garland);
+  }
+ }
+ function createHeroGifts(){
+  const hero=document.querySelector('body>main .hero');
+  if(hero&&!hero.querySelector('.winter-newyear-hero-gifts')){
+   const gifts=document.createElement('div');gifts.className='winter-newyear-hero-gifts';gifts.setAttribute('aria-hidden','true');
+   gifts.innerHTML='<span>🎁</span><span>🎁</span>';hero.appendChild(gifts);
+  }
+ }
+ function removeDecor(){
+  document.getElementById('winterNewYearDecor')?.remove();
+  document.getElementById('winterNewYearGarland')?.remove();
+  document.querySelectorAll('.winter-newyear-hero-gifts').forEach(el=>el.remove());
+ }
+ window.syncWinterNewYear= function(){
+  const active=preference()&&winterSelected();
+  document.body.classList.toggle('winter-newyear-active',active);
+  if(active){createDecor();createGarland();createHeroGifts()}
+  else removeDecor();
+  const toggle=document.getElementById('winterNewYearToggle');
+  if(toggle)toggle.textContent=preference()?'Выключить Новый год':'Включить Новый год 🎄';
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta&&active)meta.content=document.body.classList.contains('dark-theme')?'#102b2c':'#eaf5fb';
+  else if(meta&&typeof baseUpdateThemeMeta==='function')baseUpdateThemeMeta();
+ };
+ window.openWinterNewYearSettings=function(){
+  const modal=document.getElementById('winterNewYearSettings');if(!modal)return;
+  modal.classList.add('open');modal.setAttribute('aria-hidden','false');
+  window.syncWinterNewYear();
+  const close=modal.querySelector('.winter-newyear-close');if(close)close.focus();
+ };
+ window.closeWinterNewYearSettings=function(){
+  const modal=document.getElementById('winterNewYearSettings');if(!modal)return;
+  modal.classList.remove('open');modal.setAttribute('aria-hidden','true');
+ };
+ window.toggleWinterNewYear=function(){
+  if(!winterSelected()){if(typeof window.toast==='function')window.toast('Сначала выберите зимнюю тему.');return}
+  try{localStorage.setItem(KEY,preference()?'0':'1')}catch(e){}
+  window.syncWinterNewYear();
+  if(typeof window.toast==='function')window.toast(preference()?'Новогоднее оформление включено 🎄':'Новогоднее оформление выключено.');
+ };
+ if(typeof baseApplySeasonTheme==='function'){
+  window.applySeasonTheme=function(season){baseApplySeasonTheme(season);window.syncWinterNewYear()};
+ }
+ if(typeof baseToggleTheme==='function'){
+  window.toggleTheme=function(){baseToggleTheme();window.syncWinterNewYear()};
+ }
+ window.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeWinterNewYearSettings()});
+ window.syncWinterNewYear();
+})();
+</script>
+
 </body>
 </html>
