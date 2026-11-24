@@ -1637,7 +1637,9 @@ body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!i
 .winter-newyear-toggle{width:100%;padding:13px 15px;border:1px solid #f0d18b;border-radius:13px;background:linear-gradient(100deg,#f3d58e,#c99b4d);color:#2a2518;font-weight:800;font-size:14px}
 .winter-newyear-note{display:block;margin-top:10px;color:#b9cfc3;font-size:11px;line-height:1.45;text-align:center}
 body.winter-newyear-active{--gold:#c9a45b;--gold2:#f3d995}
-body.winter-newyear-active header{position:sticky}
+body.winter-newyear-active header{position:sticky;z-index:4}
+body.winter-newyear-active>main{position:relative;z-index:4}
+body.winter-newyear-active .hero:after{content:none!important}
 body.winter-newyear-active .brand h1{color:#f0d99e}
 body.winter-newyear-active .logo{box-shadow:0 0 0 1px #c9a45b66,0 5px 18px #c9a45b30}
 body.winter-newyear-active .hero{border-color:#c7a45b!important;box-shadow:0 10px 28px #173a3022,inset 0 1px #fff7d022}
