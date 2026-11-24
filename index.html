@@ -1557,6 +1557,61 @@ body.winter-season .owner-admin-pill:focus-visible{
 .seasonal-vip-overlay[data-season=summer] .seasonal-vip-panel{background:linear-gradient(155deg,#e8faff,#fff 58%,#fff0c8);color:#075273;border-color:#a9dff0}
 @media(prefers-reduced-motion:reduce){.seasonal-bottom-moment,.seasonal-bottom-moment .seasonal-moment-art,.seasonal-vip-panel,.seasonal-vip-crown,.seasonal-vip-sparkles{animation:none!important;transition:none!important}}
 
+
+/* NEW YEAR FINAL POLISH — quiet snowfall, elegant garland, rare fireworks. */
+body.dark-theme.event-newyear header{
+  position:sticky!important;
+  overflow:visible!important;
+  border-top:0!important;
+}
+body.dark-theme.event-newyear header::before{
+  content:""!important;
+  display:block!important;
+  position:absolute!important;
+  z-index:6!important;
+  pointer-events:none!important;
+  left:0!important;right:0!important;top:0!important;
+  height:24px!important;
+  background:
+    radial-gradient(ellipse at 7% 13px,#f7d98b 0 2px,transparent 3px),
+    radial-gradient(ellipse at 19% 9px,#d86b55 0 2px,transparent 3px),
+    radial-gradient(ellipse at 32% 13px,#72c9a7 0 2px,transparent 3px),
+    radial-gradient(ellipse at 45% 8px,#f7d98b 0 2px,transparent 3px),
+    radial-gradient(ellipse at 58% 13px,#d86b55 0 2px,transparent 3px),
+    radial-gradient(ellipse at 71% 8px,#72c9a7 0 2px,transparent 3px),
+    radial-gradient(ellipse at 84% 13px,#f7d98b 0 2px,transparent 3px),
+    radial-gradient(ellipse at 96% 9px,#d86b55 0 2px,transparent 3px),
+    radial-gradient(ellipse at 50% -14px,transparent 0 54%,#c9a85c 55% 57%,transparent 58%);
+  opacity:.92!important;
+  filter:drop-shadow(0 2px 5px #f3d58a66)!important;
+}
+body.dark-theme.event-newyear #seasonDecorations .festive-fall{
+  opacity:.52!important;
+  text-shadow:0 0 7px #d9f4ff88!important;
+}
+body.dark-theme.event-newyear #seasonDecorations .festive-bauble{
+  opacity:.58!important;
+}
+body.dark-theme.event-newyear #seasonDecorations .festive-firework{
+  top:var(--burst-y,30vh)!important;
+  bottom:auto!important;
+  animation:festiveRareBurst 26s ease-out infinite!important;
+  opacity:0!important;
+}
+@keyframes festiveRareBurst{
+  0%,100%{opacity:0;transform:scale(.08)}
+  3%{opacity:.95;transform:scale(.55)}
+  8%{opacity:.75;transform:scale(1)}
+  13%{opacity:0;transform:scale(1.18)}
+}
+@media(prefers-reduced-motion:reduce){
+  body.dark-theme.event-newyear #seasonDecorations .festive-fall,
+  body.dark-theme.event-newyear #seasonDecorations .festive-bauble,
+  body.dark-theme.event-newyear #seasonDecorations .festive-firework{
+    animation:none!important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -2699,10 +2754,10 @@ function renderSeasonDecorations(eventId){
   }
  };
  if(eventId==='newyear'){
-  make('festive-fall','❄',24,{durationMin:18,delay:24});
-  make('festive-fall','·',14,{durationMin:22,delay:24});
-  make('festive-bauble','',7,{durationMin:20,delay:22,size:13});
-  make('festive-firework','',4,{durationMin:3.8,delay:3,topRange:[15,54],leftRange:[12,88],size:5});
+  make('festive-fall','❄',16,{durationMin:20,delay:24});
+  // Убираем декоративную «пыль»: оставляем только отдельные снежинки.
+  make('festive-bauble','',5,{durationMin:24,delay:26,size:12});
+  make('festive-firework','',2,{durationMin:26,delay:32,topRange:[12,48],leftRange:[10,90],size:5});
  }
  if(eventId==='halloween'){
   make('festive-fall','🍂',16,{durationMin:20,delay:24});
