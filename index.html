@@ -1625,26 +1625,27 @@ body.event-newyear,body.event-halloween,body.event-easter{background:var(--bg)!i
 .winter-newyear-overlay{position:fixed;inset:0;z-index:10070;display:none;align-items:center;justify-content:center;padding:18px;background:#061725a8;backdrop-filter:blur(9px)}
 .winter-newyear-overlay.open{display:flex}
 .winter-newyear-dialog{position:relative;width:min(100%,430px);max-height:min(88dvh,680px);overflow:auto;padding:22px;border:1px solid #c9a85f;border-radius:24px;background:linear-gradient(155deg,#183d35,#102b2c 68%,#152b35);color:#fff8e9;box-shadow:0 24px 80px #020b12a8}
-.winter-newyear-dialog h3{margin:0 34px 7px 0;font-size:20px;color:#f6dfaa}
+.winter-newyear-dialog h3{margin:0 34px 7px 0;font-size:20px;color:var(--gold)}
 .winter-newyear-dialog p{margin:0;color:#d7e4d9;font-size:13px;line-height:1.5}
 .winter-newyear-close{position:absolute;top:13px;right:13px;width:34px;height:34px;border:1px solid #ffffff35;border-radius:11px;background:#ffffff12;color:#fff8e9;font-size:20px}
-.winter-newyear-preview{position:relative;overflow:hidden;min-height:112px;margin:16px 0;padding:17px;border:1px solid #c9a85f55;border-radius:17px;background:radial-gradient(circle at 80% 12%,#f2d48a22,transparent 30%),linear-gradient(120deg,#0c302b,#16433a 55%,#203c37)}
-.winter-newyear-preview:before{content:"";position:absolute;left:0;right:0;top:0;height:18px;background:radial-gradient(circle,#f5d58a 0 3px,transparent 4px) 0 0/31px 16px repeat-x;opacity:.9}
-.winter-newyear-preview strong{position:relative;display:block;margin-top:12px;color:#f7e3b3;font-size:16px}
+.winter-newyear-preview{position:relative;overflow:hidden;min-height:112px;margin:16px 0;padding:17px;border:1px solid color-mix(in srgb,var(--gold) 34%,transparent);border-radius:17px;background:radial-gradient(circle at 80% 12%,#f2d48a22,transparent 30%),linear-gradient(120deg,#0c302b,#16433a 55%,#203c37)}
+.winter-newyear-preview:before{content:"";position:absolute;left:0;right:0;top:0;height:18px;background:radial-gradient(circle,var(--gold2) 0 3px,transparent 4px) 0 0/31px 16px repeat-x;opacity:.9}
+.winter-newyear-preview strong{position:relative;display:block;margin-top:12px;color:var(--gold2);font-size:16px}
 .winter-newyear-preview span{position:relative;display:block;margin-top:4px;color:#d8e6d8;font-size:12px}
 .winter-newyear-points{display:grid;gap:8px;margin:14px 0}
 .winter-newyear-points div{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #ffffff1c;border-radius:12px;background:#ffffff0b;font-size:13px;color:#f2f0df}
-.winter-newyear-toggle{width:100%;padding:13px 15px;border:1px solid #f0d18b;border-radius:13px;background:linear-gradient(100deg,#f3d58e,#c99b4d);color:#2a2518;font-weight:800;font-size:14px}
+.winter-newyear-toggle{width:100%;padding:13px 15px;border:1px solid var(--gold);border-radius:13px;background:linear-gradient(100deg,var(--gold2),var(--gold));color:#2a2518;font-weight:800;font-size:14px}
 .winter-newyear-note{display:block;margin-top:10px;color:#b9cfc3;font-size:11px;line-height:1.45;text-align:center}
-body.winter-newyear-active{--gold:#c9a45b;--gold2:#f3d995}
 body.winter-newyear-active header{position:sticky;z-index:4}
 body.winter-newyear-active>main{position:relative;z-index:4}
 body.winter-newyear-active .hero:after{content:none!important}
-body.winter-newyear-active .brand h1{color:#f0d99e}
-body.winter-newyear-active .logo{box-shadow:0 0 0 1px #c9a45b66,0 5px 18px #c9a45b30}
-body.winter-newyear-active .hero{border-color:#c7a45b!important;box-shadow:0 10px 28px #173a3022,inset 0 1px #fff7d022}
-body.winter-newyear-active .product,body.winter-newyear-active .panel,body.winter-newyear-active .menu-card{border-color:#b8955145}
-body.winter-newyear-active .price,body.winter-newyear-active .bottom button.active{color:#e5c477}
+body.winter-newyear-active .brand h1{color:var(--gold);text-shadow:0 2px 12px color-mix(in srgb,var(--gold) 35%,transparent)}
+body.winter-newyear-active .logo{box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 40%,transparent),0 5px 18px color-mix(in srgb,var(--gold) 24%,transparent)}
+body.winter-newyear-active .hero{border-color:var(--gold)!important;box-shadow:0 10px 28px #173a3022,inset 0 1px #fff7d022}
+body.winter-newyear-active .product,body.winter-newyear-active .panel,body.winter-newyear-active .menu-card{border-color:color-mix(in srgb,var(--gold) 28%,transparent)}
+body.winter-newyear-active .price{color:var(--gold2)}
+body.winter-newyear-active .bottom button.active{color:var(--gold)}
+body.winter-newyear-active nav button.active{background:var(--gold);border-color:var(--gold);color:#21170c}
 #winterNewYearDecor{position:fixed;inset:0;z-index:3;overflow:hidden;pointer-events:none;contain:layout paint}
 #winterNewYearDecor .ny-flake{position:absolute;top:-12vh;left:var(--x);width:var(--size);height:var(--size);border-radius:50%;background:#f5fbff;opacity:var(--opacity);box-shadow:0 0 7px #dff5ff88;animation:nySnowfall var(--duration) linear var(--delay) infinite;will-change:transform}
 #winterNewYearDecor .ny-glint{position:absolute;left:var(--x);top:var(--y);width:4px;height:4px;border-radius:50%;background:#f6d991;box-shadow:0 0 7px 2px #f6d99188;opacity:.25;animation:nyGlint var(--duration) ease-in-out var(--delay) infinite}
