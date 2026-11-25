@@ -1078,17 +1078,18 @@ async function processCampaignBatch(env, limit = 15) {
     try {
       const replyMarkup = row.button_text && row.button_url
         ? { inline_keyboard: [[{ text: row.button_text, url: row.button_url }]] } : undefined;
+      let sentMessage;
       if (row.media_url) {
         const payload = { chat_id: String(row.telegram_id), photo: row.media_url, caption: row.body };
         if (replyMarkup) payload.reply_markup = replyMarkup;
-        await telegram(env, "sendPhoto", payload);
+        sentMessage = await telegram(env, "sendPhoto", payload);
       } else {
         const payload = { chat_id: String(row.telegram_id), text: row.body };
         if (replyMarkup) payload.reply_markup = replyMarkup;
-        await telegram(env, "sendMessage", payload);
+        sentMessage = await telegram(env, "sendMessage", payload);
       }
-      await env.DB.prepare("UPDATE campaign_recipients SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='sending'")
-        .bind(row.recipient_id).run();
+      await env.DB.prepare("UPDATE campaign_recipients SET status='sent',telegram_chat_id=?,telegram_message_id=?,sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='sending'")
+        .bind(String(sentMessage?.chat?.id || row.telegram_id),String(sentMessage?.message_id || ""),row.recipient_id).run();
     } catch (error) {
       const safeError = String(error?.message || error).replace(/bot\d+:[^\s]+/gi, "[скрыто]").slice(0, 300);
       await env.DB.prepare("UPDATE campaign_recipients SET status='failed',last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='sending'")
