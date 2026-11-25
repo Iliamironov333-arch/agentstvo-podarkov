@@ -2905,7 +2905,7 @@ if (path === "/api/admin/packs" && method === "GET") {
         }
         if (path === "/api/admin/campaign-preview" && method === "POST") {
           const body=await readJson(request), audienceType=["all","buyers","inactive","selected"].includes(body.audience_type)?body.audience_type:"";
-          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500):[];
+          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\d{1,24}$/.test(x)))].slice(0,500):[];
           if(!audienceType)return json({error:"Выберите аудиторию."},400,origin);
           if(audienceType==="selected"&&!ids.length)return json({error:"Укажите Telegram ID получателей."},400,origin);
           let sql="SELECT COUNT(*) AS total FROM users u",bind=[];
@@ -2921,7 +2921,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           const title=typeof body.title==="string"?body.title.trim().slice(0,100):"";
           const content=typeof body.body==="string"?body.body.trim().slice(0,4000):"";
           const audienceType=["all","buyers","inactive","selected"].includes(body.audience_type)?body.audience_type:"";
-          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500):[];
+          const ids=Array.isArray(body.audience_ids)?[...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\d{1,24}$/.test(x)))].slice(0,500):[];
           const mediaUrl=typeof body.media_url==="string"?body.media_url.trim().slice(0,1000):"";
           const buttonText=typeof body.button_text==="string"?body.button_text.trim().slice(0,40):"";
           const buttonUrl=typeof body.button_url==="string"?body.button_url.trim().slice(0,500):"";
@@ -2994,7 +2994,7 @@ if (path === "/api/admin/packs" && method === "GET") {
         if (path === "/api/admin/announcement-preview" && method === "POST") {
           const body = await readJson(request);
           const audienceType = body.audience_type === "selected" ? "selected" : "all";
-          const ids = Array.isArray(body.audience_ids) ? [...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\\d{1,24}$/.test(x)))].slice(0,500) : [];
+          const ids = Array.isArray(body.audience_ids) ? [...new Set(body.audience_ids.map(x=>String(x).trim()).filter(x=>/^\d{1,24}$/.test(x)))].slice(0,500) : [];
           const row = audienceType === "all"
             ? await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first()
             : await env.DB.prepare("SELECT COUNT(*) AS total FROM users WHERE telegram_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(ids)).first();
