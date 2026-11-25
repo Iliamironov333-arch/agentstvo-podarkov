@@ -1923,7 +1923,7 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
   <button type="button" class="season-theme-card season-autumn" data-season="autumn" onclick="setSeasonTheme('autumn')"><span class="season-theme-art">🍂</span><b>Осень</b><small>Тёплая золотая палитра</small></button>
   <div class="season-theme-card season-winter" role="button" tabindex="0" aria-pressed="false" data-season="winter" onclick="setSeasonTheme('winter')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setSeasonTheme('winter')}"><span class="season-theme-art">❄️</span><b>Зима</b><small>Голубой и белый</small><span class="season-settings-gear" role="button" tabindex="0" aria-label="Настройки новогоднего оформления" title="Настройки зимнего оформления" onclick="event.stopPropagation();openWinterNewYearSettings()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();openWinterNewYearSettings()}">⚙</span></div>
   <button type="button" class="season-theme-card season-spring" data-season="spring" onclick="setSeasonTheme('spring')"><span class="season-theme-art">🌷</span><b>Весна</b><small>Свежие пастельные тона</small></button>
-  <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на этом устройстве.</p></div>
+  <button type="button" class="season-theme-card season-summer" data-season="summer" onclick="setSeasonTheme('summer')"><span class="season-theme-art">☀️</span><b>Лето</b><small>Тёплая солнечная тема</small></button></div><p id="adminSeasonThemeStatus" class="notice">Выбранная тема сохраняется на сервере и применяется у всех покупателей.</p></div>
   <div class="panel" id="adminSystemControlsPanel">
    <h3>🚦 Экстренное управление</h3>
    <p class="muted">Остановка запрещает новые покупки и оформление заказов. Каталог остаётся доступным, уже оплаченные заказы не затрагиваются.</p>
@@ -2793,7 +2793,6 @@ function applySeasonTheme(season){
  if(!['autumn','winter','spring','summer'].includes(season))season='autumn';
  document.body.classList.remove('event-newyear','event-easter','event-halloween');
  document.getElementById('seasonDecorations')?.remove();
- try{localStorage.removeItem('gift-season-event');localStorage.setItem('gift-season-theme',season)}catch(e){}
  document.body.classList.remove('winter-season','spring-season','summer-season','season-autumn','season-winter','season-spring','season-summer');
  document.body.classList.add('season-'+season);
  if(season!=='autumn')document.body.classList.add(season+'-season');
@@ -2805,13 +2804,23 @@ function applySeasonTheme(season){
  const labels={autumn:'Осень',winter:'Зима',spring:'Весна',summer:'Лето'};
  updateSeasonalCopy();
  const status=document.getElementById('adminSeasonThemeStatus');
- if(status)status.textContent='Активная тема: '+labels[season]+'. Настройка сохранена.';
+ if(status)status.textContent='Активная тема: '+labels[season]+'.';
  updateThemeMeta();
 }
-function setSeasonTheme(season){applySeasonTheme(season);toast('Сезонная тема изменена.')}
-
-function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);try{localStorage.setItem('gift-theme',dark?'dark':'light')}catch(e){}const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonEvent();updateThemeMeta()}
-(function initTheme(){let dark=false,season='autumn';try{dark=localStorage.getItem('gift-theme')==='dark';season=localStorage.getItem('gift-season-theme')||'autumn'}catch(e){}document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';applySeasonEvent();applySeasonTheme(season)})();
+async function saveGlobalAppearance(patch){
+ const current=window.globalAppearance||{season:'autumn',winter_newyear:false};
+ const data=await apiFetch('/api/admin/appearance',{method:'POST',body:JSON.stringify({...current,...patch})});
+ window.globalAppearance=data.settings;
+ applySeasonTheme(data.settings.season);
+ window.syncWinterNewYear?.();
+ return data.settings;
+}
+async function setSeasonTheme(season){
+ try{await saveGlobalAppearance({season});toast('Общая тема изменена для всех покупателей.');}
+ catch(e){toast('Не удалось сохранить тему на сервере: '+(e.message||'ошибка'));}
+}
+function toggleTheme(){const dark=!document.body.classList.contains('dark-theme');document.body.classList.toggle('dark-theme',dark);document.body.classList.toggle('light-theme',!dark);const button=document.getElementById('themeToggle');if(button)button.textContent=dark?'☀️':'🌙';updateThemeMeta()}
+(function initTheme(){document.body.classList.remove('dark-theme');document.body.classList.add('light-theme');const button=document.getElementById('themeToggle');if(button)button.textContent='🌙';applySeasonEvent();applySeasonTheme('autumn')})();
 
 function toast(s) {
  const t = document.getElementById('toast');
@@ -6265,7 +6274,7 @@ async function loadAiReports(){
    <div><span>❄️</span> Ненавязчивый многослойный снег</div>
   </div>
   <button id="winterNewYearToggle" type="button" class="winter-newyear-toggle" onclick="toggleWinterNewYear()">Включить Новый год 🎄</button>
-  <span class="winter-newyear-note">Работает только при выбранной зимней теме. Ваш выбор сохраняется на этом устройстве.</span>
+  <span class="winter-newyear-note">Работает только при выбранной зимней теме. Настройка сохраняется на сервере и применяется у всех покупателей.</span>
  </section>
 </div>
 <script>
@@ -6275,7 +6284,7 @@ async function loadAiReports(){
  const baseToggleTheme=window.toggleTheme;
  const baseUpdateThemeMeta=window.updateThemeMeta;
  function winterSelected(){return document.body.classList.contains('season-winter')||document.body.classList.contains('winter-season')}
- function preference(){try{return localStorage.getItem(KEY)==='1'}catch(e){return false}}
+ function preference(){return window.globalAppearance?.winter_newyear===true}
  function createDecor(){
   if(document.getElementById('winterNewYearDecor'))return;
   const layer=document.createElement('div');layer.id='winterNewYearDecor';layer.setAttribute('aria-hidden','true');
@@ -6338,11 +6347,11 @@ async function loadAiReports(){
   const modal=document.getElementById('winterNewYearSettings');if(!modal)return;
   modal.classList.remove('open');modal.setAttribute('aria-hidden','true');
  };
- window.toggleWinterNewYear=function(){
+ window.toggleWinterNewYear=async function(){
   if(!winterSelected()){if(typeof window.toast==='function')window.toast('Сначала выберите зимнюю тему.');return}
-  try{localStorage.setItem(KEY,preference()?'0':'1')}catch(e){}
-  window.syncWinterNewYear();
-  if(typeof window.toast==='function')window.toast(preference()?'Новогоднее оформление включено 🎄':'Новогоднее оформление выключено.');
+  const enabled=!preference();
+  try{await window.saveGlobalAppearance({winter_newyear:enabled});window.syncWinterNewYear();if(typeof window.toast==='function')window.toast(enabled?'Новогоднее оформление включено для всех 🎄':'Новогоднее оформление выключено у всех.')}
+  catch(error){if(typeof window.toast==='function')window.toast('Не удалось сохранить оформление: '+(error.message||'ошибка'))}
  };
  if(typeof baseApplySeasonTheme==='function'){
   window.applySeasonTheme=function(season){baseApplySeasonTheme(season);window.syncWinterNewYear()};
@@ -6352,6 +6361,20 @@ async function loadAiReports(){
  }
  window.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeWinterNewYearSettings()});
  window.syncWinterNewYear();
+ window.loadGlobalAppearance=async function(){
+  if(!window.API_BASE||!window.initData)return;
+  try{
+   const response=await fetch(window.API_BASE+'/api/public/appearance');
+   if(!response.ok)throw new Error('HTTP '+response.status);
+   const data=await response.json();
+   window.globalAppearance=data.settings||{season:'autumn',winter_newyear:false};
+   window.applySeasonTheme(window.globalAppearance.season);
+   window.syncWinterNewYear();
+   const status=document.getElementById('adminSeasonThemeStatus');
+   if(status)status.textContent='✓ Общая тема загружена с сервера и действует у всех покупателей.';
+  }catch(error){console.warn('Global appearance load failed:',error)}
+ };
+ setTimeout(()=>window.loadGlobalAppearance?.(),0);
 })();
 </script>
 
