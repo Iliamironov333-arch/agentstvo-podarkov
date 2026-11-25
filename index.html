@@ -2626,7 +2626,7 @@ function resetUiMotionSettings(){
 }
 
 function updateSeasonalCopy(){
- const season=(()=>{try{return localStorage.getItem('gift-season-theme')||'autumn'}catch(e){return 'autumn'}})();
+ const season=window.globalAppearance?.season||(()=>{try{return localStorage.getItem('gift-season-theme')||'autumn'}catch(e){return 'autumn'}})();
  const copy={
   autumn:{name:'Осенняя',icon:'🍂',deal:'Осенняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Осенняя скидка 10% на всё.'},
   winter:{name:'Зимняя',icon:'❄️',deal:'Зимняя акция',intro:'Авторские поделки, рисунки и подарки с душой. Зимняя скидка 10% на всё.'},
@@ -6361,20 +6361,28 @@ async function loadAiReports(){
  }
  window.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeWinterNewYearSettings()});
  window.syncWinterNewYear();
+ let lastAppearanceSignature='';
  window.loadGlobalAppearance=async function(){
-  if(!API_BASE||!initData)return;
+  if(!API_BASE)return;
   try{
-   const response=await fetch(API_BASE+'/api/public/appearance');
+   const response=await fetch(API_BASE+'/api/public/appearance',{cache:'no-store'});
    if(!response.ok)throw new Error('HTTP '+response.status);
    const data=await response.json();
-   window.globalAppearance=data.settings||{season:'autumn',winter_newyear:false};
-   window.applySeasonTheme(window.globalAppearance.season);
-   window.syncWinterNewYear();
+   const next=data.settings||{season:'autumn',winter_newyear:false};
+   const signature=JSON.stringify({season:next.season,winter_newyear:next.winter_newyear===true});
+   if(signature!==lastAppearanceSignature){
+    lastAppearanceSignature=signature;
+    window.globalAppearance=next;
+    window.applySeasonTheme(next.season);
+    window.syncWinterNewYear();
+   }
    const status=document.getElementById('adminSeasonThemeStatus');
    if(status)status.textContent='✓ Общая тема загружена с сервера и действует у всех покупателей.';
   }catch(error){console.warn('Global appearance load failed:',error)}
  };
  setTimeout(()=>window.loadGlobalAppearance?.(),0);
+ // Обновляем общую тему у уже открытых мини-приложений без перезагрузки.
+ setInterval(()=>window.loadGlobalAppearance?.(),20000);
 })();
 </script>
 
