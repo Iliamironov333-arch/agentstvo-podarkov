@@ -6362,9 +6362,9 @@ async function loadAiReports(){
  window.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeWinterNewYearSettings()});
  window.syncWinterNewYear();
  window.loadGlobalAppearance=async function(){
-  if(!window.API_BASE||!window.initData)return;
+  if(!API_BASE||!initData)return;
   try{
-   const response=await fetch(window.API_BASE+'/api/public/appearance');
+   const response=await fetch(API_BASE+'/api/public/appearance');
    if(!response.ok)throw new Error('HTTP '+response.status);
    const data=await response.json();
    window.globalAppearance=data.settings||{season:'autumn',winter_newyear:false};
