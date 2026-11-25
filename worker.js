@@ -1189,7 +1189,7 @@ function adminPermissionForPath(path, method) {
   if (path.startsWith("/api/admin/backup")) return "backup_manage";
   if (path === "/api/admin/dashboard") return "dashboard_view";
   if (path === "/api/admin/error-log" || path === "/api/admin/error-resolve" ||
-      path === "/api/admin/feature-flags" || path === "/api/admin/ui-motion" || path === "/api/admin/system-controls" ||
+      path === "/api/admin/feature-flags" || path === "/api/admin/appearance" || path === "/api/admin/ui-motion" || path === "/api/admin/system-controls" ||
       path === "/api/admin/technical-status" || path === "/api/admin/server-diagnostics" ||
       path === "/api/admin/webhook-reconnect") return "system_manage";
   return "owner_only";
@@ -1295,6 +1295,13 @@ export default {
         const bytes = new Uint8Array(binary.length);
         for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
         return new Response(bytes, { status: 200, headers: { "Content-Type": image.mime_type, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff", ...corsHeaders(origin) } });
+      }
+
+      if (path === "/api/public/appearance" && method === "GET") {
+        const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='global_appearance'").first();
+        let stored={};try{stored=row?.value?JSON.parse(row.value):{};}catch{}
+        const season=["autumn","winter","spring","summer"].includes(stored.season)?stored.season:"autumn";
+        return json({ok:true,settings:{season,winter_newyear:stored.winter_newyear===true&&season==="winter"},updated_at:row?.updated_at||null},200,origin);
       }
 
       if (path === "/api/public/promos" && method === "GET") {
@@ -3104,6 +3111,21 @@ if (path === "/api/admin/packs" && method === "GET") {
             "0025_gift_certificates":tableChecks.gift_certificates&&tableChecks.gift_certificate_attempts
           };
           return json({ok:true,database:"connected",integrations:{telegram_bot:!!env.BOT_TOKEN,telegram_webhook:!!env.TELEGRAM_WEBHOOK_SECRET,workers_ai:!!env.AI},counts:{users:Number(users?.total||0),products:Number(products?.total||0),orders:Number(orders?.total||0),pending_payments:Number(pendingPayments?.total||0)},new_errors:errors?.total==null?null:Number(errors.total),tables:tableChecks,migrations,settings:settings.results||[],checked_at:new Date().toISOString()},200,origin);
+        }
+        if (path === "/api/admin/appearance" && method === "GET") {
+          const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='global_appearance'").first();
+          let stored={};try{stored=row?.value?JSON.parse(row.value):{};}catch{}
+          const season=["autumn","winter","spring","summer"].includes(stored.season)?stored.season:"autumn";
+          return json({ok:true,settings:{season,winter_newyear:stored.winter_newyear===true&&season==="winter"},updated_at:row?.updated_at||null},200,origin);
+        }
+        if (path === "/api/admin/appearance" && method === "POST") {
+          const body=await readJson(request);
+          const season=["autumn","winter","spring","summer"].includes(body.season)?body.season:null;
+          if(!season)return json({error:"Выберите корректную сезонную тему."},400,origin);
+          const settings={season,winter_newyear:season==="winter"&&body.winter_newyear===true};
+          await env.DB.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('global_appearance',?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(settings)).run();
+          if(await tableExists(env,"admin_action_log"))await env.DB.prepare("INSERT INTO admin_action_log (actor_telegram_id,action_type,details) VALUES (?,?,?)").bind(telegramId,"global_appearance_updated",JSON.stringify(settings)).run();
+          return json({ok:true,settings,updated_at:new Date().toISOString()},200,origin);
         }
         if (path === "/api/admin/ui-motion" && method === "GET") {
           const row=await env.DB.prepare("SELECT value,updated_at FROM app_settings WHERE key='ui_motion_config'").first();
