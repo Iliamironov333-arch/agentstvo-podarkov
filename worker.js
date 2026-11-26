@@ -1068,7 +1068,7 @@ async function processCampaignBatch(env, limit = 15) {
   if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return { processed: 0, skipped: true, migration_pending: true };
   await env.DB.prepare("UPDATE campaign_recipients SET status='uncertain',last_error='Неизвестно, успел ли Telegram доставить сообщение до сбоя. Проверьте историю чата перед повтором.',updated_at=CURRENT_TIMESTAMP WHERE status='sending' AND started_at < datetime('now','-10 minutes')").run();
   const rows = await env.DB.prepare(
-    "SELECT r.id AS recipient_id,r.telegram_id,r.attempts,c.id AS campaign_id,c.body,c.media_url,c.button_text,c.button_url FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='pending' AND c.status IN ('queued','sending') ORDER BY c.id,r.id LIMIT ?"
+    "SELECT r.id AS recipient_id,r.telegram_id,r.attempts,c.id AS campaign_id,c.body,c.media_url,c.button_text,c.button_url FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='pending' AND c.status IN ('queued','sending') AND (c.scheduled_at IS NULL OR c.scheduled_at<=CURRENT_TIMESTAMP) ORDER BY c.id,r.id LIMIT ?"
   ).bind(Math.min(25, Math.max(1, Number(limit) || 15))).all();
   let processed = 0;
   for (const row of rows.results || []) {
@@ -1098,7 +1098,7 @@ async function processCampaignBatch(env, limit = 15) {
     processed++;
   }
   await env.DB.prepare(
-    "UPDATE campaigns SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('pending','sending')) THEN 'sending' WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('failed','uncertain')) THEN 'partial' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued','sending')"
+    "UPDATE campaigns SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('pending','sending')) THEN 'sending' WHEN EXISTS(SELECT 1 FROM campaign_recipients WHERE campaign_id=campaigns.id AND status IN ('failed','uncertain')) THEN 'partial' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status IN ('queued','sending') AND (scheduled_at IS NULL OR scheduled_at<=CURRENT_TIMESTAMP)"
   ).run();
   return { processed };
 }
@@ -2907,7 +2907,7 @@ if (path === "/api/admin/packs" && method === "GET") {
 
         if (path === "/api/admin/campaigns" && method === "GET") {
           if (!(await tableExists(env,"campaigns")) || !(await tableExists(env,"campaign_recipients"))) return json({error:"Требуется миграция 0011_mass_mailing.sql."},503,origin);
-          const rows = await env.DB.prepare("SELECT c.id,c.title,c.body,c.audience_type,c.audience_ids,c.media_url,c.button_text,c.button_url,c.status,c.created_at,c.updated_at,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id) AS total,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent') AS sent,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed') AS failed,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('pending','sending')) AS pending,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='uncertain') AS uncertain FROM campaigns c ORDER BY c.id DESC LIMIT 100").all();
+          const rows = await env.DB.prepare("SELECT c.id,c.title,c.body,c.audience_type,c.audience_ids,c.media_url,c.button_text,c.button_url,c.scheduled_at,c.status,c.created_at,c.updated_at,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id) AS total,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent') AS sent,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed') AS failed,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('pending','sending')) AS pending,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='uncertain') AS uncertain FROM campaigns c ORDER BY c.id DESC LIMIT 100").all();
           return json({ok:true,campaigns:rows.results||[]},200,origin);
         }
         if (path === "/api/admin/campaign-preview" && method === "POST") {
@@ -2932,6 +2932,9 @@ if (path === "/api/admin/packs" && method === "GET") {
           const mediaUrl=typeof body.media_url==="string"?body.media_url.trim().slice(0,1000):"";
           const buttonText=typeof body.button_text==="string"?body.button_text.trim().slice(0,40):"";
           const buttonUrl=typeof body.button_url==="string"?body.button_url.trim().slice(0,500):"";
+          const scheduleInput=typeof body.scheduled_at==="string"?body.scheduled_at.trim():"";
+          let scheduledAt=null;
+          if(scheduleInput){const scheduledDate=new Date(scheduleInput);if(Number.isNaN(scheduledDate.getTime()))return json({error:"Укажите корректные дату и время отправки."},400,origin);if(scheduledDate.getTime()<=Date.now())return json({error:"Время запланированной отправки должно быть в будущем."},400,origin);if(scheduledDate.getTime()>Date.now()+366*24*60*60*1000)return json({error:"Нельзя запланировать рассылку более чем на год вперёд."},400,origin);scheduledAt=scheduledDate.toISOString().slice(0,19).replace("T"," ");}
           if(title.length<2||content.length<1)return json({error:"Заполните название и текст рассылки."},400,origin);
           if(!audienceType||(audienceType==="selected"&&!ids.length))return json({error:"Проверьте выбранную аудиторию и Telegram ID."},400,origin);
           if(mediaUrl){try{const u=new URL(mediaUrl);if(u.protocol!=="https:")throw new Error("protocol");}catch{return json({error:"Медиа должно быть доступно по HTTPS-ссылке."},400,origin);}}
@@ -2942,11 +2945,11 @@ if (path === "/api/admin/packs" && method === "GET") {
             const existing=await env.DB.prepare("SELECT id,status FROM campaigns WHERE id=?").bind(id).first();
             if(!existing)return json({error:"Черновик рассылки не найден."},404,origin);
             if(existing.status!=="draft")return json({error:"Изменять можно только черновик. Запущенную рассылку редактировать нельзя."},409,origin);
-            await env.DB.prepare("UPDATE campaigns SET title=?,body=?,audience_type=?,audience_ids=?,media_url=?,button_text=?,button_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'")
-              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,id).run();
+            await env.DB.prepare("UPDATE campaigns SET title=?,body=?,audience_type=?,audience_ids=?,media_url=?,button_text=?,button_url=?,scheduled_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'")
+              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,scheduledAt,id).run();
           }else{
-            const result=await env.DB.prepare("INSERT INTO campaigns (title,body,audience_type,audience_ids,media_url,button_text,button_url,status,created_by) VALUES (?,?,?,?,?,?,?,'draft',?)")
-              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,telegramId).run();
+            const result=await env.DB.prepare("INSERT INTO campaigns (title,body,audience_type,audience_ids,media_url,button_text,button_url,scheduled_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,'draft',?)")
+              .bind(title,content,audienceType,JSON.stringify(ids),mediaUrl||null,buttonText||null,buttonUrl||null,scheduledAt,telegramId).run();
             return json({ok:true,id:result.meta?.last_row_id||null},201,origin);
           }
           return json({ok:true,id},200,origin);
@@ -2956,7 +2959,7 @@ if (path === "/api/admin/packs" && method === "GET") {
           const body=await readJson(request),id=Number(body.id);
           if(body.confirm!==true)return json({error:"Требуется явное подтверждение запуска рассылки."},400,origin);
           if(!Number.isSafeInteger(id)||id<1)return json({error:"Укажите черновик рассылки."},400,origin);
-          const campaign=await env.DB.prepare("SELECT id,audience_type,audience_ids,status FROM campaigns WHERE id=?").bind(id).first();
+          const campaign=await env.DB.prepare("SELECT id,audience_type,audience_ids,scheduled_at,status FROM campaigns WHERE id=?").bind(id).first();
           if(!campaign)return json({error:"Рассылка не найдена."},404,origin);
           if(campaign.status!=="draft")return json({error:"Эту рассылку уже запускали или она не является черновиком."},409,origin);
           const insert="INSERT INTO campaign_recipients (campaign_id,telegram_id,status) SELECT ?,u.telegram_id,'pending' FROM users u ";
