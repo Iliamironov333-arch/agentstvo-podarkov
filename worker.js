@@ -2022,7 +2022,8 @@ if (path === "/api/admin/packs" && method === "GET") {
           const title = typeof body.title === "string" ? body.title.trim().slice(0,120) : "";
           const description = typeof body.description === "string" ? body.description.trim().slice(0,2000) : "";
           const imageUrl = typeof body.image_url === "string" ? body.image_url.trim().slice(0,1000) : "";
-          const category = typeof body.category === "string" ? body.category.trim().slice(0,60) : "";
+          const rawCategory = typeof body.category === "string" ? body.category.trim().slice(0,60) : "";
+          const category = /^art$/i.test(rawCategory) ? "art" : rawCategory;
           const price = Number(body.price_stars);
           const isActive = body.is_active === true || body.is_active === 1 ? 1 : 0;
           if (title.length < 2) return json({ error: "Название должно содержать минимум 2 символа." }, 400, origin);
