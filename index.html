@@ -136,6 +136,17 @@ body.light-theme .admin-metric{background:linear-gradient(145deg,#fff,#fff5e6)}
 .admin-detail-title{font-weight:800;color:var(--gold2);margin-bottom:8px}
 .admin-product-actions,.admin-product-row-actions{display:flex;gap:8px;flex-wrap:wrap}
 .admin-product-actions>*{flex:1;min-width:120px}
+
+.admin-product-category-picker{display:grid;gap:9px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.admin-product-category-title{font-size:13px;font-weight:750;color:var(--text)}
+.admin-product-category-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.admin-product-category-choice{display:flex!important;grid-template-columns:20px minmax(0,1fr)!important;align-items:center;gap:8px!important;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text)!important;font-size:13px!important;cursor:pointer}
+.admin-product-category-choice input{width:18px!important;height:18px;min-width:18px!important;margin:0!important;accent-color:var(--gold)}
+.admin-product-category-choice.selected{border-color:var(--gold);box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 35%,transparent)}
+.admin-product-category-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.admin-product-category-add button{white-space:nowrap}
+@media(max-width:390px){.admin-product-category-add{grid-template-columns:1fr}.admin-product-category-add button{width:100%}}
+
 #adminProductEditor{display:grid;gap:10px;margin-top:12px}
 #adminProductEditor label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
 #adminProductEditor input,#adminProductEditor textarea,#adminProductEditor select{width:100%;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font:inherit}
@@ -1852,8 +1863,13 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
     <label>Название<input id="adminProductTitle" maxlength="120" placeholder="Название работы"></label>
     <label>Описание<textarea id="adminProductDescription" rows="3" maxlength="2000" placeholder="Расскажите о работе"></textarea></label>
     <input type="hidden" id="adminProductImageUrl"><label>Фотография работы<input id="adminProductImage" type="file" accept="image/*" onchange="previewAdminProductImage(this)"><small class="muted">Выберите фото прямо с устройства. Изображение автоматически сожмётся перед загрузкой. Новое фото заменит текущее.</small></label><div id="adminProductImagePreviewBox" class="admin-product-image-preview hidden"><img id="adminProductImagePreview" alt="Предпросмотр фотографии"><div><small id="adminProductImageStatus" class="muted">Фотография не выбрана</small><button class="secondary" type="button" onclick="clearAdminProductImage()">Убрать фотографию</button></div></div>
-    <label>Категория<input id="adminProductCategory" list="adminProductCategories" maxlength="60" placeholder="Например: handmade"></label>
-    <datalist id="adminProductCategories"></datalist>
+    <input type="hidden" id="adminProductCategory">
+    <div class="admin-product-category-picker">
+     <span class="admin-product-category-title">Категория товара</span>
+     <div id="adminProductCategoryChoices" class="admin-product-category-choices" aria-label="Выберите категорию"></div>
+     <div class="admin-product-category-add"><input id="adminProductNewCategory" maxlength="60" placeholder="Название новой категории"><button class="secondary" type="button" onclick="addAdminProductCategory()">＋ Добавить</button></div>
+     <small class="muted">Отметьте одну категорию галочкой. Новая категория появится в списке после сохранения товара.</small>
+    </div>
     <label>Цена в Telegram Stars<input id="adminProductPrice" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Цена"></label>
     <label>Публикация<select id="adminProductActive"><option value="0">Черновик — не виден покупателям</option><option value="1">Опубликован в каталоге</option></select></label>
     
@@ -4523,8 +4539,8 @@ async function loadAdminProducts() {
   const data=await apiFetch('/api/admin/products');
   const products=Array.isArray(data.products)?data.products:[];
   adminProductsCache=products;
-  const datalist=document.getElementById('adminProductCategories');datalist?.replaceChildren();
-  (data.categories||[]).forEach(category=>{const option=document.createElement('option');option.value=category;datalist?.append(option);});
+  window.adminProductCategoryOptions=Array.from(new Set((data.categories||[]).map(value=>String(value||'').trim()).filter(Boolean).map(value=>/^art$/i.test(value)?'art':value))).sort((a,b)=>a.localeCompare(b,'ru'));
+  renderAdminProductCategoryChoices(document.getElementById('adminProductCategory')?.value||'');
   status.textContent='Товаров в каталоге: '+products.length+' · Перемещайте кнопками ↑ ↓ или перетаскиванием';
   if(!products.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Пока нет товаров.';root.append(empty);return;}
   let saving=false,savePending=false;
@@ -4960,6 +4976,33 @@ async function purchaseSurprisePack(packId,button){
   await loadSurprisePacks();await loadMe();showPackReveal(result);toast('Пак успешно открыт!');
  }catch(error){toast(error.message||'Не удалось открыть пак.');if(button)button.disabled=false;}
 }
+function renderAdminProductCategoryChoices(selected=''){
+ const root=document.getElementById('adminProductCategoryChoices');if(!root)return;
+ const hidden=document.getElementById('adminProductCategory');
+ const current=String(selected||hidden?.value||'').trim();
+ const options=Array.from(new Set([...(window.adminProductCategoryOptions||[]),...(current?[current]:[])])).sort((a,b)=>a.localeCompare(b,'ru'));
+ root.replaceChildren();
+ options.forEach(category=>{
+  const label=document.createElement('label');label.className='admin-product-category-choice'+(category===current?' selected':'');
+  const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=category===current;checkbox.setAttribute('aria-label','Выбрать категорию '+category);
+  checkbox.addEventListener('change',()=>{
+   if(checkbox.checked){if(hidden)hidden.value=category;renderAdminProductCategoryChoices(category);}
+   else if(hidden?.value===category){hidden.value='';renderAdminProductCategoryChoices('');}
+  });
+  const name=document.createElement('span');name.textContent=category;
+  label.append(checkbox,name);root.append(label);
+ });
+}
+function addAdminProductCategory(){
+ const input=document.getElementById('adminProductNewCategory');const value=String(input?.value||'').trim().slice(0,60);
+ if(!value){toast('Введите название новой категории.');return;}
+ const category=/^art$/i.test(value)?'art':value;
+ window.adminProductCategoryOptions=Array.from(new Set([...(window.adminProductCategoryOptions||[]),category]));
+ const hidden=document.getElementById('adminProductCategory');if(hidden)hidden.value=category;
+ if(input)input.value='';
+ renderAdminProductCategoryChoices(category);
+ toast('Категория добавлена. Она сохранится вместе с товаром.');
+}
 function newAdminProduct(){
  const editor=document.getElementById('adminProductEditor');if(!editor)return;
  document.getElementById('adminProductEditorTitle').textContent='Новый товар';
@@ -4968,6 +5011,8 @@ function newAdminProduct(){
  document.getElementById('adminProductDescription').value='';
  resetAdminProductImage('');
  document.getElementById('adminProductCategory').value='';
+ renderAdminProductCategoryChoices('');
+ document.getElementById('adminProductNewCategory').value='';
  document.getElementById('adminProductPrice').value='';
  document.getElementById('adminProductActive').value='0';
  editor.classList.remove('hidden');editor.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -4979,7 +5024,9 @@ function editAdminProduct(product){
  document.getElementById('adminProductTitle').value=product.title||'';
  document.getElementById('adminProductDescription').value=product.description||'';
  resetAdminProductImage(product.image_url||'');
- document.getElementById('adminProductCategory').value=product.category||'';
+ document.getElementById('adminProductCategory').value=/^art$/i.test(String(product.category||''))?'art':(product.category||'');
+ renderAdminProductCategoryChoices(document.getElementById('adminProductCategory').value);
+ document.getElementById('adminProductNewCategory').value='';
  document.getElementById('adminProductPrice').value=String(product.price_stars??0);
  document.getElementById('adminProductActive').value=Number(product.is_active)===1?'1':'0';
 
