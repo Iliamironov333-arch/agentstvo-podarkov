@@ -952,7 +952,7 @@ async function aiHandleTelegramUpdateInner(update, env) {
     await aiLog(env,{chat_id:chatId,actor:user.id,type:"members_joined",details:{count:message.new_chat_members.length}});
     return true;
   }
-  let text=aiText(message);
+  let text=aiText(message) || (message.photo || message.document && /^image\//i.test(message.document.mime_type || "") ? "Участник прислал изображение. Внимательно посмотрите на него и естественно отреагируйте на работу." : "");
   if(settings.media_checks && (message.voice||message.audio)){
     try{
       const transcript=await aiTranscribeAudio(env,message);
@@ -1079,8 +1079,8 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const orderIntentAlreadyExpressed=orderHistory.some(item=>item.role==="user"&&/(хочу|нужн|надо|заказать|закаж|сделать|сделайте|создать|изготовить|нарисовать|нарисуйте|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
     const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
     const adminAccount=isOwner || !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(String(user.id)).first());
-    const recentImage=await env.DB.prepare("SELECT id FROM ai_group_messages WHERE chat_id=? AND telegram_id=? AND role='user' AND content LIKE '[Изображение работы%' ORDER BY id DESC LIMIT 1").bind(String(chatId),String(user.id)).first();
-    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || gratitudeReply || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
+    const recentImage=await env.DB.prepare(const socialSignal=aiIsThanks(text) || /интересн(?:о|ая|енько)|отличн(?:о|ая)|замечательн(?:о|ая)|молодец|классн(?:о|ая)|здорово|красиво|прекрасно|супер|великолепно/i.test(text);
+    const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || gratitudeReply || socialSignal || !!message.photo || !!(message.document && /^image\//i.test(message.document.mime_type || "")) || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
     if(settings.ai_answers && relevant && (!settings.night_mode || !aiNightNow(settings) || aiAgencyIntent(text) || gratitudeReply)) {
