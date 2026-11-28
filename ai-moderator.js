@@ -633,7 +633,7 @@ async function aiReplyToGroup(env,chatId,user,text,settings,replyToMessageId=nul
   let answer=raw,needsOwner=false,ignore=false;
   try{const match=raw.match(/\{[\s\S]*\}/);if(match){const parsed=JSON.parse(match[0]);answer=String(parsed.answer||"").trim()||"Я пока не могу достоверно подтвердить эту информацию.";needsOwner=parsed.needs_owner===true;ignore=parsed.ignore===true;}}catch{}
   const feedbackLocationQuestion=/(?:где|куда|как).{0,45}(?:отзыв|отзывы|оценк)|(?:оставить|написать|отправить).{0,35}(?:отзыв|отзывы|оценк)/i.test(String(text||""));
-  if(feedbackLocationQuestion){answer="Отзыв можно оставить прямо здесь, в группе «Агентство подарков» — напишите, что Вам понравилось или что стоит улучшить. Отдельной формы отзывов пока нет. Спасибо, что помогаете нам становиться лучше! 💛";ignore=false;needsOwner=false;}
+  if(feedbackLocationQuestion){answer="Оставить отзыв можно в мини-приложении «Агентство подарков» — откройте приложение и отправьте отзыв через раздел Agent. Спасибо, что помогаете нам становиться лучше! 💛";ignore=false;needsOwner=false;}
   if(ignore){await aiLog(env,{chat_id:chatId,actor:"ai_moderator",target:user.id,type:"ai_unrelated_ignored"});return;}
   if(/не знаю|не могу достоверно подтвердить|нужно уточнить у владельца|не хватает данных/i.test(answer))needsOwner=true;
   // Жёсткая страховка от рекламного призыва оформить заказ в обычном ответе.
