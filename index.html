@@ -1670,7 +1670,36 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
 @media(prefers-reduced-motion:reduce){#winterNewYearDecor .ny-flake,#winterNewYearDecor .ny-glint{animation:none!important;display:none!important}.season-settings-gear{transition:none}}
 @media(max-width:420px){.winter-newyear-dialog{padding:19px}.winter-newyear-preview{min-height:104px}}
 
-.campaign-picker-head{display:grid;gap:8px;margin:10px 0}.campaign-picker-actions{display:flex;gap:8px;flex-wrap:wrap}.campaign-picker-actions button{flex:1;min-width:130px}.campaign-user-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding:4px;border:1px solid var(--line);border-radius:14px}.campaign-user-row{display:flex!important;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);cursor:pointer}.campaign-user-row input{width:20px!important;height:20px;flex:0 0 20px;margin:0;accent-color:#e4aa24}.campaign-user-info{display:grid;gap:3px;min-width:0}.campaign-user-info strong{font-size:14px}.campaign-user-info small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}</style>
+.campaign-picker-head{display:grid;gap:8px;margin:10px 0}.campaign-picker-actions{display:flex;gap:8px;flex-wrap:wrap}.campaign-picker-actions button{flex:1;min-width:130px}.campaign-user-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding:4px;border:1px solid var(--line);border-radius:14px}.campaign-user-row{display:flex!important;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);cursor:pointer}.campaign-user-row input{width:20px!important;height:20px;flex:0 0 20px;margin:0;accent-color:#e4aa24}.campaign-user-info{display:grid;gap:3px;min-width:0}.campaign-user-info strong{font-size:14px}.campaign-user-info small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* Remove the brief grey press overlay while keeping focus visibility and motion. */
+html button,html a,html [role="button"],html input,html select,html textarea{
+ -webkit-tap-highlight-color:transparent;
+}
+html.motion-enabled button:active:not(:disabled){
+ box-shadow:none!important;
+}
+#supportResult.agent-thinking{
+ display:flex;
+ align-items:center;
+ gap:5px;
+ color:var(--gold);
+ font-weight:650;
+}
+#supportResult.agent-thinking::after{
+ content:"•••";
+ display:inline-block;
+ letter-spacing:2px;
+ animation:agent-thinking-pulse 1s ease-in-out infinite;
+}
+@keyframes agent-thinking-pulse{
+ 0%,100%{opacity:.28;transform:translateY(0)}
+ 50%{opacity:1;transform:translateY(-2px)}
+}
+@media(prefers-reduced-motion:reduce){
+ #supportResult.agent-thinking::after{animation:none;opacity:1}
+}
+
+</style>
 </head>
 <body>
 <header>
@@ -1707,7 +1736,7 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
   <button class="menu-card" onclick="showView('ordersView')"><strong>📦 Мои заказы</strong><span>Статусы и история</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>⭐ Мой баланс</strong><span>Баллы и история операций</span></button>
   <button class="menu-card" onclick="showView('balanceView')"><strong>💳 Пополнить баланс</strong><span>Оплата Stars с зачислением на серверный баланс</span></button>
-  <button class="menu-card" onclick="showView('supportView')"><strong>🤖 ИИ помощник</strong><span>Вопросы, заказы и авторские работы в одном месте</span></button>
+  <button class="menu-card" onclick="showView('supportView')"><strong>🤖 Agent</strong><span>Вопросы, заказы и авторские работы в одном месте</span></button>
   <button class="menu-card" onclick="showView('aboutView')"><strong>ℹ️ О проекте</strong><span>Правила, контакты и информация</span></button>
   <button class="menu-card" onclick="showView('leaderboardView')"><strong>🏆 Таблица лидеров</strong><span>Репутация за текущий месяц</span></button>
   <button class="menu-card" id="dealsCard" onclick="showView('dealsView')"><strong id="dealsCardTitle">🍂 Скидки и акции</strong><span id="dealsCardSubtitle">Осенняя скидка 10%</span></button>
@@ -2158,7 +2187,7 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
  <div class="panel"><p class="muted">Если подписка уже активна, повторная покупка заблокирована до её окончания. Автоматического списания Stars нет.</p></div>
 </section>
 <section id="supportView" class="hidden">
- <div class="sectionhead"><h2 id="supportMainHeading">🤖 ИИ помощник</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
+ <div class="sectionhead"><h2 id="supportMainHeading">🤖 Agent</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
  <div class="panel">
   <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
   <p class="muted">🎟️ Для активации подарочного сертификата напишите в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
@@ -2174,9 +2203,9 @@ body.winter-newyear-active nav button.active{background:var(--gold);border-color
   </div>
  </div>
  <div class="panel" id="supportMainChatPanel">
-  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 ИИ помощник</span></div>
+  <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 Agent</span></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
-  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напишите сообщение ИИ помощнику..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
+  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напишите сообщение Agent..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
   <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
   <p class="notice" id="supportResult" aria-live="polite"></p>
   <button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button>
@@ -5380,6 +5409,8 @@ async function openSupportDestination(action) {
  if (allowed.includes(action.view)) showView(action.view);
 }
 
+function supportAssistantName(){return activeSupportAssistant === 'vip' ? 'Agent Pro' : 'Agent';}
+
 function renderSupportMessages(messages, actions = []) {
  supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
@@ -5387,14 +5418,14 @@ function renderSupportMessages(messages, actions = []) {
  root.replaceChildren();
  if (!messages.length) {
   const empty = document.createElement('p'); empty.className = 'muted';
-  empty.textContent = 'Привет! Я ИИ помощник Агентства подарков. Чем могу помочь?';
+  empty.textContent = 'Привет! Я Agent Агентства подарков. Чем могу помочь?';
   root.appendChild(empty);
  } else {
   for (const item of messages) {
    const bubble = document.createElement('div');
    bubble.style.cssText = 'max-width:92%;align-self:' + (item.role === 'user' ? 'flex-end' : 'flex-start') + ';padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:' + (item.role === 'user' ? 'var(--panel2)' : 'var(--panel)') + ';white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45';
    const label = document.createElement('b');
-   label.textContent = item.role === 'user' ? 'Вы' : 'ИИ помощник';
+   label.textContent = item.role === 'user' ? 'Вы' : supportAssistantName();
    label.style.display = 'block'; label.style.marginBottom = '4px';
    const content = document.createElement('span'); content.textContent = item.content;
    bubble.append(label,content); root.appendChild(bubble);
@@ -5436,7 +5467,7 @@ function renderSupportConversations() {
     const button=document.createElement('button');button.type='button';button.className='secondary';button.style.cssText='flex:1;min-width:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px';
     if(chat.id===activeSupportConversationId)button.style.borderColor='var(--gold)';
     const label=document.createElement('span');label.textContent=chat.title||'Новый диалог';label.style.cssText='overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    const tag=document.createElement('small');tag.textContent=chat.closed?'🔒 Только просмотр':(chat.assistant_type==='vip'?'Расширенный режим':'ИИ помощник');tag.style.cssText='color:var(--muted);flex-shrink:0';
+    const tag=document.createElement('small');tag.textContent=chat.closed?'🔒 Только просмотр':(chat.assistant_type==='vip'?'Agent Pro':'Agent');tag.style.cssText='color:var(--muted);flex-shrink:0';
     button.append(label,tag);button.addEventListener('click',()=>openSupportConversation(chat.id));
     const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Удалить';remove.style.cssText='flex-shrink:0;padding:10px 12px;color:var(--muted)';remove.setAttribute('aria-label','Удалить диалог '+(chat.title||'Новый диалог'));remove.addEventListener('click',()=>deleteSupportConversation(chat.id));
     row.append(button,remove);list.append(row);
@@ -5476,9 +5507,11 @@ function updateSupportAssistantUi() {
  const info = document.getElementById('supportAssistantInfo');
  const title = document.getElementById('supportActiveChatTitle');
  const label = document.getElementById('supportActiveAssistantLabel');
+ const mainHeading = document.getElementById('supportMainHeading');
  const current = supportConversations.find(x => x.id === activeSupportConversationId);
  if (title) title.textContent = (current?.title || 'Новый диалог')+(activeSupportConversationClosed?' · только просмотр':'');
- if (label) label.textContent = activeSupportAssistant === 'vip' ? '🤖 Расширенный режим' : '🤖 ИИ помощник';
+ if (label) label.textContent = '🤖 ' + supportAssistantName();
+ if (mainHeading) mainHeading.textContent = '🤖 ' + supportAssistantName();
  if (info) info.textContent = activeSupportConversationClosed
   ? '🔒 Диалог закрыт после трёх дней без активности. История доступна только для чтения. Нажмите «Новый диалог», чтобы продолжить общение.'
   : (activeSupportAssistant === 'vip'
@@ -5567,7 +5600,7 @@ async function sendSupport() {
  if (!message) { result.textContent = 'Напишите сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
- button.disabled = true; result.textContent = 'ИИ помощник готовит ответ…';
+ button.disabled = true; result.textContent = 'Agent думает'; result.classList.add('agent-thinking');
  try {
   if (!activeSupportConversationId) {
    await createSupportConversation();
@@ -5577,9 +5610,9 @@ async function sendSupport() {
   input.value = '';
   await loadSupportHistory(activeSupportConversationId,data.actions||[]);
   if(!data.handoff){}
-  result.textContent = data.handoff ? 'Сообщение передано владельцу.' : 'Ответ ИИ помощника готов.';
+  result.textContent = data.handoff ? 'Сообщение передано владельцу.' : 'Agent ответил.';
  } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
- finally { button.disabled = false; }
+ finally { button.disabled = false; result.classList.remove('agent-thinking'); }
 }
 
 function setVipUi(v,verified=true){vipActive=!!v;vipStatusVerified=!!verified;const s=document.getElementById('vipStatus');if(s)s.textContent=v?'VIP-подписка активна. Расширенный режим ИИ помощника включается автоматически.':'Активной VIP-подписки пока нет. ИИ помощник работает в стандартном режиме.';updateDeliveryMethodUI();}
