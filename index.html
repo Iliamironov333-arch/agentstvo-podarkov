@@ -1678,25 +1678,45 @@ html button,html a,html [role="button"],html input,html select,html textarea{
 html.motion-enabled button:active:not(:disabled){
  box-shadow:none!important;
 }
-#supportResult.agent-thinking{
+.agent-thinking-bubble{
+ align-self:flex-start;
  display:flex;
  align-items:center;
- gap:5px;
- color:var(--gold);
- font-weight:650;
+ gap:9px;
+ max-width:92%;
+ padding:11px 13px;
+ border:1px solid var(--line);
+ border-radius:14px;
+ background:var(--panel);
+ color:var(--text);
+ font-size:13px;
+ line-height:1.45;
+ opacity:0;
+ transform:translateY(9px);
+ animation:agent-thinking-enter .48s cubic-bezier(.2,.75,.25,1) forwards;
+ transition:opacity .22s ease,transform .22s ease;
 }
-#supportResult.agent-thinking::after{
- content:"•••";
- display:inline-block;
- letter-spacing:2px;
- animation:agent-thinking-pulse 1s ease-in-out infinite;
+.agent-thinking-bubble.is-leaving{opacity:0;transform:translateY(-5px)}
+.agent-thinking-bubble strong{font-weight:650}
+.agent-thinking-dots{display:inline-flex;gap:3px;align-items:center}
+.agent-thinking-dots i{
+ width:5px;height:5px;border-radius:50%;
+ background:var(--gold);
+ opacity:.3;
+ animation:agent-thinking-dot 1.05s ease-in-out infinite;
 }
-@keyframes agent-thinking-pulse{
- 0%,100%{opacity:.28;transform:translateY(0)}
- 50%{opacity:1;transform:translateY(-2px)}
+.agent-thinking-dots i:nth-child(2){animation-delay:.16s}
+.agent-thinking-dots i:nth-child(3){animation-delay:.32s}
+@keyframes agent-thinking-enter{
+ to{opacity:1;transform:translateY(0)}
+}
+@keyframes agent-thinking-dot{
+ 0%,65%,100%{opacity:.28;transform:translateY(0)}
+ 32%{opacity:1;transform:translateY(-3px)}
 }
 @media(prefers-reduced-motion:reduce){
- #supportResult.agent-thinking::after{animation:none;opacity:1}
+ .agent-thinking-bubble{animation:none;opacity:1;transform:none;transition:none}
+ .agent-thinking-dots i{animation:none;opacity:.8}
 }
 
 </style>
@@ -2188,11 +2208,6 @@ html.motion-enabled button:active:not(:disabled){
 </section>
 <section id="supportView" class="hidden">
  <div class="sectionhead"><h2 id="supportMainHeading">🤖 Agent</h2><div style="display:flex;align-items:center;gap:8px"><span id="supportChatCounter">0 / 3 диалога</span><button class="secondary hidden" id="supportBackToInboxButton" type="button" onclick="exitOrderChat()">← Все диалоги</button><button class="secondary" id="supportRefreshButton" type="button" onclick="refreshOrderChat()" hidden>↻</button></div></div>
- <div class="panel">
-  <p class="notice" id="supportAssistantInfo">Режим помощника выбирается автоматически по активной VIP-подписке. Переключать его вручную не нужно.</p>
-  <p class="muted">🎟️ Для активации подарочного сертификата напишите в чат: «Активируй сертификат КОД». Баллы зачисляются на баланс только после серверной проверки.</p>
-  <p class="muted" style="margin-top:8px">Можно задать вопрос, подобрать подарок или обсудить индивидуальную авторскую работу — всё в одном чате. Помощник сам поймёт, чем помочь.</p>
- </div>
  <div class="panel" id="supportConversationPanel">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
    <h3 style="margin:0">Мои диалоги</h3>
@@ -5411,6 +5426,32 @@ async function openSupportDestination(action) {
 
 function supportAssistantName(){return activeSupportAssistant === 'vip' ? 'Agent Pro' : 'Agent';}
 
+function showSupportThinkingBubble(){
+ const root=document.getElementById('supportChatLog');
+ if(!root)return;
+ const bubble=document.createElement('div');
+ bubble.className='agent-thinking-bubble';
+ bubble.setAttribute('role','status');
+ bubble.setAttribute('aria-label',supportAssistantName()+' думает');
+ const label=document.createElement('strong');
+ label.textContent=supportAssistantName()+' думает';
+ const dots=document.createElement('span');
+ dots.className='agent-thinking-dots';
+ dots.setAttribute('aria-hidden','true');
+ for(let i=0;i<3;i++)dots.append(document.createElement('i'));
+ bubble.append(label,dots);
+ root.append(bubble);
+ root.scrollTop=root.scrollHeight;
+}
+async function hideSupportThinkingBubble(){
+ const root=document.getElementById('supportChatLog');
+ const bubble=root?.querySelector('.agent-thinking-bubble');
+ if(!bubble)return;
+ bubble.classList.add('is-leaving');
+ await new Promise(resolve=>setTimeout(resolve,230));
+ bubble.remove();
+}
+
 function renderSupportMessages(messages, actions = []) {
  supportPendingActions = Array.isArray(actions) ? actions : [];
  const root = document.getElementById('supportChatLog');
@@ -5600,19 +5641,24 @@ async function sendSupport() {
  if (!message) { result.textContent = 'Напишите сообщение перед отправкой.'; return; }
  if(activeOrderChatId){await sendOrderChatMessage();return;}
  if(craftModeActive){await sendCraftMessage();return;}
- button.disabled = true; result.textContent = 'Agent думает'; result.classList.add('agent-thinking');
+ button.disabled = true; result.textContent = '';
  try {
   if (!activeSupportConversationId) {
    await createSupportConversation();
    if (!activeSupportConversationId) throw new Error(result.textContent || 'Не удалось открыть диалог. Попробуй ещё раз.');
   }
+  result.textContent = '';
+  showSupportThinkingBubble();
   const data = await apiFetch('/api/support/chat',{method:'POST',body:JSON.stringify({message,conversation_id:activeSupportConversationId})});
   input.value = '';
+  await hideSupportThinkingBubble();
   await loadSupportHistory(activeSupportConversationId,data.actions||[]);
   if(!data.handoff){}
-  result.textContent = data.handoff ? 'Сообщение передано владельцу.' : 'Agent ответил.';
- } catch(e) { result.textContent = e.message || 'Не удалось получить ответ.'; }
- finally { button.disabled = false; result.classList.remove('agent-thinking'); }
+  result.textContent = data.handoff ? 'Сообщение передано владельцу.' : '';
+ } catch(e) {
+  await hideSupportThinkingBubble();
+  result.textContent = e.message || 'Не удалось получить ответ.';
+ } finally { button.disabled = false; }
 }
 
 function setVipUi(v,verified=true){vipActive=!!v;vipStatusVerified=!!verified;const s=document.getElementById('vipStatus');if(s)s.textContent=v?'VIP-подписка активна. Расширенный режим ИИ помощника включается автоматически.':'Активной VIP-подписки пока нет. ИИ помощник работает в стандартном режиме.';updateDeliveryMethodUI();}
