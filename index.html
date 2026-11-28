@@ -1714,18 +1714,11 @@ html.motion-enabled button:active:not(:disabled){
  0%,65%,100%{opacity:.28;transform:translateY(0)}
  32%{opacity:1;transform:translateY(-3px)}
 }
-.support-composer{display:flex;align-items:flex-end;gap:9px;margin-top:8px;width:100%}
-#supportMessage{flex:1 1 auto;min-width:0;min-height:48px;max-height:132px;resize:vertical;overflow-y:auto;border-radius:26px!important;padding:13px 17px!important;background:var(--panel2)!important;color:var(--text)!important;border:1px solid var(--line)!important;outline:none;font:inherit;line-height:1.4;transition:border-color .2s ease,box-shadow .2s ease}
-#supportMessage::placeholder{color:var(--muted);opacity:.9}
-#supportMessage:focus{border-color:var(--gold)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 16%,transparent)}
-#supportSendBtn{width:48px!important;height:48px!important;min-width:48px!important;max-width:48px!important;flex:0 0 48px;padding:0!important;margin:0!important;border-radius:50%!important;display:grid;place-items:center;font-size:0!important;line-height:1;box-shadow:0 3px 10px #00000018;transition:transform .18s ease,filter .18s ease}
-#supportSendBtn::after{content:"↑";font-size:27px;font-weight:600;line-height:1;transform:translateY(-1px)}
-#supportSendBtn:active:not(:disabled){transform:scale(.94)}
 @media(prefers-reduced-motion:reduce){
- #supportMessage,#supportSendBtn{transition:none}
  .agent-thinking-bubble{animation:none;opacity:1;transform:none;transition:none}
  .agent-thinking-dots i{animation:none;opacity:.8}
 }
+
 </style>
 </head>
 <body>
@@ -2227,10 +2220,8 @@ html.motion-enabled button:active:not(:disabled){
  <div class="panel" id="supportMainChatPanel">
   <div class="sectionhead" style="margin-top:0"><h3 id="supportActiveChatTitle">Новый диалог</h3><span id="supportActiveAssistantLabel">🤖 Agent</span></div>
   <div id="supportChatLog" aria-live="polite" style="display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow:auto;padding:4px 0 12px"><p class="muted">История диалога загрузится после входа через Telegram.</p></div>
-  <div class="support-composer">
-   <textarea id="supportMessage" rows="1" maxlength="2000" placeholder="Напишите сообщение Agent..." aria-label="Сообщение для Agent" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
-   <button class="primary" id="supportSendBtn" type="button" aria-label="Отправить сообщение" title="Отправить сообщение" onclick="sendSupport()">Отправить</button>
-  </div>
+  <textarea id="supportMessage" rows="3" maxlength="2000" placeholder="Напишите сообщение Agent..." style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);color:var(--text);font:inherit"></textarea>
+  <button class="primary" id="supportSendBtn" onclick="sendSupport()">Отправить</button>
   <p class="notice" id="supportResult" aria-live="polite"></p>
   <button class="secondary owner-contact-btn" type="button" onclick="openOwnerChat()">✉️ Написать владельцу</button>
  </div>
