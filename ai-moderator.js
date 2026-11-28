@@ -1079,7 +1079,8 @@ async function aiHandleTelegramUpdateInner(update, env) {
     const orderIntentAlreadyExpressed=orderHistory.some(item=>item.role==="user"&&/(хочу|нужн|надо|заказать|закаж|сделать|сделайте|создать|изготовить|нарисовать|нарисуйте|мне бы|можно ли сделать)/i.test(String(item.content||""))&&/(картин|подар|открытк|поделк|издел|авторск|работ|рисунок|портрет|макет)/i.test(String(item.content||"")));
     const pendingGroupOrderConsultation=orderTopicsAsked.size>=2&&orderIntentAlreadyExpressed;
     const adminAccount=isOwner || !!(await env.DB.prepare("SELECT 1 AS active FROM admin_staff WHERE telegram_id=? AND status='active' LIMIT 1").bind(String(user.id)).first());
-    const recentImage=await env.DB.prepare(const socialSignal=aiIsThanks(text) || /интересн(?:о|ая|енько)|отличн(?:о|ая)|замечательн(?:о|ая)|молодец|классн(?:о|ая)|здорово|красиво|прекрасно|супер|великолепно/i.test(text);
+    const recentImage=!!message.photo || !!(message.document && /^image\//i.test(message.document.mime_type || ""));
+    const socialSignal=aiIsThanks(text) || /интересн(?:о|ая|енько)|отличн(?:о|ая)|замечательн(?:о|ая)|молодец|классн(?:о|ая)|здорово|красиво|прекрасно|супер|великолепно/i.test(text);
     const relevant=aiAgencyIntent(text) || replied || mentionedBot || !!activeGroupOrder || pendingGroupOrderConsultation || gratitudeReply || socialSignal || !!message.photo || !!(message.document && /^image\//i.test(message.document.mime_type || "")) || (isOwner && /\b(?:ии|бот|помощник)\b/i.test(text)) || (!!recentImage && (/[?？]/.test(text) || /\b(?:она|он|это|этот|эта|из чего|какой материал|материал)\b/i.test(text)));
     // В группе ИИ только консультирует. Черновики заказов создаются исключительно
     // через Mini App: «Магазин» для готовых работ и «Создать своё» для индивидуального запроса.
